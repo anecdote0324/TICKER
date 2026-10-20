@@ -1,0 +1,34 @@
+# Terminal
+
+블룸버그 터미널을 닮은 **개인용 데스크톱 시세 터미널**이에요.
+
+> 지금은 **설계 단계**라 앱 코드는 아직 없어요. 결정된 내용은 모두 [`docs/design/`](docs/design/)에 정리돼 있어요.
+
+## 한눈에 보기
+
+- 검정 배경에 주황 포인트를 쓰는 촘촘한 멀티 패널 화면, 키보드 중심의 커맨드 라인
+- 국내·미국 주식(한국투자증권 Open API), 코인(Binance USDT 현물), 환율
+- Windows 우선이고 macOS(Apple Silicon)도 지원하는 Electron 데스크톱 앱
+- 나 혼자 쓰는 개인용 (시세를 다른 사람에게 재배포하지 않음)
+
+## 설계 문서
+
+| 문서 | 내용 |
+|---|---|
+| [01 개요와 결정 사항](docs/design/01-overview.md) | 목표, 확정된 결정, 전체 구조, 실행·종료 방식, Windows/Mac 지원 |
+| [02 화면 디자인](docs/design/02-ui.md) | 디자인 컨셉, 색과 글꼴, 패널 구조, 화면 배치, 인터랙션 |
+| [03 기능 코드와 단계별 범위](docs/design/03-functions.md) | MON, GP 같은 기능 코드 목록, v0.1~v0.3 범위 |
+| [04 데이터 소스](docs/design/04-data-sources.md) | 한국투자증권, Binance, 환율, 공시·뉴스, 제약과 대응 |
+| [05 커맨드 라인과 자동완성](docs/design/05-command-line.md) | 입력 문법, Tab·Enter 규칙, 한글 입력 처리, 겹치는 이름 처리 |
+| [06 설정 화면](docs/design/06-settings.md) | 설정 창 구성, 자동완성 도움 수준 바꾸기 |
+| [07 미정 사항과 확인할 것](docs/design/07-open-questions.md) | 아직 정하지 않은 것, 개발 전에 실제로 확인해야 할 것 |
+
+## 화면 목업
+
+claude.ai 목업 (비공개, 소유자만 열람 가능): https://claude.ai/artifact/1AE6PgM1jVf4bTsRT85xoV
+
+- **모니터 1 · Market Pulse**: 패널 7개로 구성한 메인 화면
+- **커맨드 라인 자동완성**: 입력 흐름 8단계
+- **설정 · 커맨드 라인**: 눌러 볼 수 있는 설정 화면
+
+화면의 숫자와 뉴스는 모두 모의 데이터예요.
