@@ -42,7 +42,7 @@
 | v0.7 | 채권 | YAS DES(채권) SRCH FIPX FACT TDH NIM NIA(근사) FIW FIHZ FIHG FIRV WBF DDIS KCB CRPR(근사) RATC(근사) RATD WBIX(근사) BVAL(근사) |
 | v0.8 | 포트폴리오·리스크 | PORT 탭(성과·특성·리스크·시나리오·귀속(근사)·최적화·통화 기여·세후 손익) PRTU PMEN PREP BETA TRA MARS(근사) |
 | v0.9 | 스크리닝·밸류에이션·백테스트 | EQS RV RVC MRR(근사) EA GF WACC DDM AZS DRSK(근사) EQRP(근사) BDVD(근사) MA DSCO EQBT BTST BQL DAPI WEIS, HMAP 매트릭스 보기, FA 지수 집계 탭(근사) |
-| v0.10 | 파생·옵션·변동성 | OMON OMST OVDV HVG HIVG GV VCA VOLC OVME OSA OVML FXFM(근사) KELS DLIB(근사). 결정되면 코인 선물 탭 |
+| v0.10 | 파생·옵션·변동성 | OMON OMST OVDV HVG HIVG GV VCA VOLC OVME OSA OVML FXFM(근사) KELS DLIB(근사), 코인 선물 탭(CRYP). Binance 옵션 공개 시세가 확인되면 OMON·OVDV 크립토 탭 |
 | v0.11 | 원자재 | GLCO CTM CCRV FHG 연속 월물 SEAG CMSP COT FDM CRR FMV UNTC MTL BOIL(근사) BGAS(근사), ECO 원자재 보기 |
 | 후순위 | 나머지 | IVAT BQNT OV OAS1 ICVS SWPM CDSW SDRV BOOM NGAS OPEC WETR CMCX CPFC ECFC SPLC PPC BRC FSRC BGCI BMAP HS, 엑셀 실시간 연결 |
 
@@ -79,10 +79,10 @@ v0.3까지의 기본 순서예요(자동완성 목록에 나오는 순서).
 
 | 구분 | 내용 |
 |---|---|
-| 앱 기반 | Electron 앱, Modern Terminal 테마, 창 관리, 워크스페이스 저장·복원, 멀티 모니터(창 떼어내기) |
+| 앱 기반 | Electron 앱, Modern Terminal 테마(등락 색 기본 한국식), 창 관리, 창마다 화면 탭, 워크스페이스 저장·복원, 멀티 모니터(창 떼어내기), **데이터 신선도 배지**(실시간이 아닌 값 표시, [02](02-ui.md)) |
 | 커맨드 라인 | 자동완성(네 가지 도움 수준 포함), 한글 이름·초성 검색, 한/영 실수 교정. 뒤 단계의 자산군·티커 문법 자리 예약 |
 | 설정 | 설정 창. 자동완성 도움 수준, Enter 동작(v0.1은 "지금 기능 유지" 하나, 선택지는 v0.2부터), 입력 도우미 |
-| 데이터 | 한국투자증권(국내·미국·지수), Binance(코인), 환율 소스. **한국투자증권 요청 예산 관리자**(실시간 구독 슬롯과 호출 한도를 기능끼리 나눠 쓰는 장치) |
+| 데이터 | 한국투자증권(국내·미국·지수), Binance(코인), 환율 소스. **한국투자증권 요청 예산 관리자**(실시간 구독 슬롯과 호출 한도를 기능끼리 나눠 쓰는 장치). 모든 값에 신선도 정보(받는 방식·기준 시각)를 붙여요 |
 | 기능 | MON, GP, GIP, WEI, FXC, CRYP |
 
 ### v0.2: 정보 확장
@@ -91,6 +91,7 @@ v0.3까지의 기본 순서예요(자동완성 목록에 나오는 순서).
 - 공용 업종 분류 표(KRX 업종, 국내 산업분류, 미국 SIC)
 - 뉴스 아카이브 쌓기 시작 (v0.4 뉴스 검색용)
 - "종목만 입력하고 Enter"의 블룸버그식 기능 메뉴 선택지
+- 6자리 종목코드를 치면 바로 여는 HTS 방식 설정(기본 꺼짐), 명령 기록 검색(Ctrl+R)
 - 자동완성 설명 창에 간단 시세 표시
 
 ### v0.3: 분석과 개인화
@@ -107,7 +108,7 @@ v0.3까지의 기본 순서예요(자동완성 목록에 나오는 순서).
 
 - AI 기능 (뉴스 요약, 자연어 명령)
 - 자동 업데이트
-- Classic 테마 (넣을지 미정, [07](07-open-questions.md))
+- Classic 테마 (선택 사항. 기본은 Modern)
 
 ## 뺀 기능
 
