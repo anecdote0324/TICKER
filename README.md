@@ -42,7 +42,18 @@ pnpm --filter @bt/desktop start   # 개발용으로 Electron 창 띄우기
 pnpm dist             # 지금 OS용 설치 파일(apps/desktop/release)
 ```
 
-버전 태그(`v0.1.0` 등)를 올리면 GitHub Actions가 Windows 설치 파일(.exe)과 Mac(Apple Silicon) .dmg를 만들어 초안 릴리스에 올려요. 개인용이라 코드 서명은 하지 않아서, 처음 실행할 때 경고가 떠요([01](docs/design/01-overview.md) 설치 파일과 서명).
+### 새 버전 내기
+
+```
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+- GitHub Actions가 Windows 설치 파일(.exe, 설치형·휴대용)과 Mac(Apple Silicon) .dmg를 만들어 **초안 릴리스**에 올려요. GitHub의 Releases 화면에서 공개를 누르면 다운로드할 수 있어요.
+- 앱 버전 번호는 태그에서 가져와요. package.json의 version은 고치지 않아도 돼요.
+- 번호는 고치는 판이면 끝자리(`v0.1.1`), 다음 단계 기능이 다 들어가면 가운데(`v0.2.0`)를 올려요. `-`가 붙은 태그(`v0.2.0-beta.1`)는 미리 보기 릴리스예요.
+- 자동 업데이트는 없어요. 새 버전 설치 파일을 받아 덮어 설치하면 설정·키·화면 배치는 그대로 남아요.
+- 개인용이라 코드 서명은 하지 않아서, 새 버전을 처음 실행할 때 경고가 떠요([01](docs/design/01-overview.md) 설치 파일과 서명).
 
 ## 저장소 구성
 

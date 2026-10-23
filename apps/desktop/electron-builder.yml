@@ -10,6 +10,8 @@ extraResources:
   - from: web
     to: web
 asar: true
+# 자동 업데이트는 넣지 않아요(01). 업데이트 정보 파일(app-update.yml, latest.yml)도 만들지 않아요
+publish: null
 win:
   target:
     - target: nsis

@@ -57,7 +57,7 @@
 | 영역 | 내용 | 상태 |
 |---|---|---|
 | 데스크톱 앱 | Electron 45, 내장 서버를 앱 안에서 실행, 단일 실행, 메인 창을 닫으면 종료, Windows 메뉴 막대 없음(Ctrl+R·Ctrl+W 제거), Mac은 App·Edit·Window 메뉴만 | 확인 필요(Windows·Mac 실기기) |
-| 설치 파일 | GitHub Actions: 버전 태그를 올리면 Windows .exe(설치형·휴대용), Mac Apple Silicon .dmg | 확인 필요(아직 태그로 만들어 보지 않음) |
+| 설치 파일 | GitHub Actions: 버전 태그를 올리면 Windows .exe(설치형·휴대용), Mac Apple Silicon .dmg. 앱 버전 번호는 태그에서 가져와요 | 확인 필요(아직 태그로 만들어 보지 않음) |
 | 개발 실행 | `start.bat`, `start.command`, `pnpm dev` | 완료 |
 | 보안 | 127.0.0.1에서만 열기, 실행마다 새 토큰, Host·Origin 검사, CORS 없음, contextIsolation·sandbox, 화면에 외부 스크립트 없음 | 완료 |
 | 화면 | Modern Terminal 테마, v0.1 기본 배치, 패널 끌어 옮기기·크기 조절·창 안 탭·최대화, 화면 탭 추가·이름 바꾸기·닫기(되돌리기) | 완료 |
@@ -264,8 +264,8 @@
 
 상태: 예정. 가치가 낮거나 소스가 불확실해요.
 
-BQNT 스크립트 콘솔, IVAT 시간대별 거래량, BRC* 리포트 원문, SPLC* 공급망, PPC* 제품 기준 동종사, FSRC 펀드 검색, ICVS* IRS 커브 구축, SWPM* 스왑 가격 계산, SDRV 스왑 저장소 거래량, OAS1 옵션부 채권 OAS, CDSW* CDS 계산기, BOOM* 머니마켓 오퍼, ECFC* 경제 전망 비교, OV OTC 옵션 계산, NGAS·OPEC 가스 통계·OPEC 산유량, WETR 날씨, CMCX* BCOM 지수, CPFC* 원자재 전망, BMAP·AHOY·LINE* 자산·선박·무역 흐름, BGCI* 크립토 지수, HS 과거 스프레드(COMP 별칭), DAPI 엑셀 실시간 연결, Classic 테마, AI 기능, 자동 업데이트.
+BQNT 스크립트 콘솔, IVAT 시간대별 거래량, BRC* 리포트 원문, SPLC* 공급망, PPC* 제품 기준 동종사, FSRC 펀드 검색, ICVS* IRS 커브 구축, SWPM* 스왑 가격 계산, SDRV 스왑 저장소 거래량, OAS1 옵션부 채권 OAS, CDSW* CDS 계산기, BOOM* 머니마켓 오퍼, ECFC* 경제 전망 비교, OV OTC 옵션 계산, NGAS·OPEC 가스 통계·OPEC 산유량, WETR 날씨, CMCX* BCOM 지수, CPFC* 원자재 전망, BMAP·AHOY·LINE* 자산·선박·무역 흐름, BGCI* 크립토 지수, HS 과거 스프레드(COMP 별칭), DAPI 엑셀 실시간 연결, Classic 테마, AI 기능.
 
 ## 넣지 않는 것
 
-매매(주문) 기능 전부, 유료 데이터가 있어야 하는 기능(CME 실시간, 미국 개별주 옵션 체인, 미국 애널리스트 추정치), 개인에게 의미 없는 속도의 데이터가 필요한 기능(전 종목 틱, 딜러 실시간 호가 등), Upbit·김치 프리미엄, Deribit. 목록과 이유는 [08](design/08-bloomberg-coverage.md) §5에 있어요.
+매매(주문) 기능 전부, 유료 데이터가 있어야 하는 기능(CME 실시간, 미국 개별주 옵션 체인, 미국 애널리스트 추정치), 개인에게 의미 없는 속도의 데이터가 필요한 기능(전 종목 틱, 딜러 실시간 호가 등), Upbit·김치 프리미엄, Deribit, 자동 업데이트. 목록과 이유는 [08](design/08-bloomberg-coverage.md) §5에 있어요.

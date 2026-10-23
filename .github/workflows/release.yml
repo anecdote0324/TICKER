@@ -1,7 +1,8 @@
 name: Release
 
 # 버전 태그(v0.1.0 등)를 올리면 Windows·Mac(Apple Silicon) 설치 파일을 만들어요(01 설치 파일과 서명).
-# 개인용이라 코드 서명은 하지 않아요.
+# 앱 버전 번호는 태그에서 가져와요(v0.1.0 → 0.1.0). -가 붙은 태그(v0.2.0-beta.1)는 미리 보기 릴리스예요.
+# 개인용이라 코드 서명은 하지 않고, 자동 업데이트도 넣지 않아요.
 on:
   push:
     tags: ['v*']
@@ -19,6 +20,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # 태그 형식이 틀리면 여기서 바로 멈춰요. 태그가 아닌 수동 실행은 apps/desktop/package.json의 값을 써요
+      - name: 버전 번호 정하기
+        id: ver
+        run: node scripts/release-version.mjs
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -27,7 +32,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build
-      - run: pnpm --filter @bt/desktop exec electron-builder --publish never
+      # Windows의 PowerShell은 -c.extraMetadata.version 같은 인자를 점에서 나눌 수 있어서 bash로 실행해요
+      - run: pnpm --filter @bt/desktop exec electron-builder --publish never "-c.extraMetadata.version=${{ steps.ver.outputs.version }}"
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
@@ -40,7 +47,9 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          name: v${{ steps.ver.outputs.version }}
           draft: true
+          prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
           files: |
             apps/desktop/release/*.exe
             apps/desktop/release/*.dmg
