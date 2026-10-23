@@ -4,6 +4,7 @@
 
 import {
   INDICES,
+  usesRealtimeSlot,
   type Bar,
   type BarInterval,
   type BarSeries,
@@ -252,7 +253,7 @@ export class KisAdapter implements Adapter {
   }
 
   private wsKey(inst: Instrument): [string, string] | undefined {
-    if (inst.assetClass !== 'EQUITY') return undefined;
+    if (!usesRealtimeSlot(inst)) return undefined;
     if (inst.market === 'US') return ['HDFSCNT0', `D${inst.feedSymbol ?? `${inst.exchange ?? 'NAS'}${inst.code}`}`];
     return ['H0STCNT0', inst.code];
   }
@@ -642,6 +643,7 @@ export class KisAdapter implements Adapter {
       message: this.message,
       wsUsed: this.slots.used,
       wsLimit: WS_LIMIT,
+      wsOverflow: this.slots.overflow,
       updatedAt: Date.now(),
     };
   }

@@ -49,6 +49,8 @@ export interface SourceStatus {
   /** KIS 실시간 구독 사용량 */
   wsUsed?: number;
   wsLimit?: number;
+  /** 슬롯이 모자라 주기 조회로 받는 종목 수 */
+  wsOverflow?: number;
   /** 주기 조회 간격(환율 등) */
   intervalMs?: number;
   updatedAt: number;

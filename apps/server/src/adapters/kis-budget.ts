@@ -97,4 +97,9 @@ export class SlotAllocator {
   get used() {
     return Math.min(this.order.length, this.limit);
   }
+
+  /** 한도를 넘어 조회로 받는 키 수 */
+  get overflow() {
+    return Math.max(0, this.order.length - this.limit);
+  }
 }

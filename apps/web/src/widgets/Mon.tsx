@@ -7,6 +7,7 @@ import { useQuotes } from '../stores/feed';
 import { indexState } from '../stores/instruments';
 import { getInstrument, index } from '../stores/instruments';
 import { setPanelSecurity, type PanelState } from '../stores/panels';
+import { checkSlots } from '../stores/slots';
 import { appState, updateState } from '../stores/state';
 import { useStore } from '../stores/store';
 import { QuoteRow, TitleBar } from './common';
@@ -26,6 +27,7 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
   const pick = (id: string) => {
     setSel(id);
     setPanelSecurity(panel.id, id);
+    checkSlots();
   };
 
   const remove = (gid: string, id: string) => updateState('watchlists', (ws) => ws.map((g) => (g.id === gid ? { ...g, ids: g.ids.filter((x) => x !== id) } : g)));

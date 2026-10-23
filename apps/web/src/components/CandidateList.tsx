@@ -4,6 +4,9 @@ import { createPortal } from 'react-dom';
 import type { Analysis, Range, Row } from '@bt/command';
 import { ASSET_LABEL, FUNCTIONS, MARKET_LABEL, versionLabel, type AssistLevel } from '@bt/shared';
 import { shortcutLabel } from '../keys';
+import { feedStatus } from '../stores/feed';
+import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
+import { useStore } from '../stores/store';
 import { getInstrument } from '../stores/instruments';
 
 interface Props {
@@ -136,6 +139,18 @@ export function CandidateList(p: Props) {
   );
 }
 
+/** 기능을 열 때 필요한 실시간 슬롯(08 §4.1) */
+function SlotLine({ cost }: { cost: string }) {
+  const s = kisSlots(useStore(feedStatus, (f) => f.sources));
+  return (
+    <div>
+      <span className="k">실시간 슬롯 </span>
+      {cost}
+      <span className="k">{s ? ` · 지금 ${s.used}/${s.limit} 사용${s.overflow ? `, ${s.overflow}개는 조회` : ''}` : ' · 한국투자증권을 연결하면 써요'}</span>
+    </div>
+  );
+}
+
 export function DescCard({ row }: { row: Row }) {
   if (row.kind === 'security' && row.instrumentId) {
     const inst = getInstrument(row.instrumentId);
@@ -196,6 +211,7 @@ export function DescCard({ row }: { row: Row }) {
           <span className="k">데이터 속도 </span>
           {fn.speed}
         </div>
+        {fn.implemented && FUNCTION_SLOT_COST[fn.code] && <SlotLine cost={FUNCTION_SLOT_COST[fn.code]} />}
         {!fn.implemented && (
           <div>
             <span className="k">제공 </span>

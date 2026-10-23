@@ -15,11 +15,13 @@ import {
   type AssistLevel,
   type CredentialStatus,
   type ShortcutId,
+  type SourceStatus,
 } from '@bt/shared';
 import { api, isMac } from '../api';
 import { keyCapture } from '../keys';
 import { engine } from '../stores/instruments';
 import { settings, updateSettings } from '../stores/settings';
+import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
 import { updateState } from '../stores/state';
 import { useStore } from '../stores/store';
 import { showToast, ui } from '../stores/ui';
@@ -543,7 +545,8 @@ function Data() {
         )}
       </div>
       {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.message}</p>}
-      <p className="note">실시간 구독은 약 40개, 조회는 초당 약 20건까지예요. 화면에 보이는 종목부터 실시간으로 받고, 넘치는 종목은 몇 초 간격으로 조회해요. 사용량은 상태 표시줄에 보여요.</p>
+      <p className="note">실시간 구독은 약 40개, 조회는 초당 약 20건까지예요. 화면에 보이는 종목부터 실시간으로 받고, 넘치는 종목은 몇 초 간격으로 조회해요.</p>
+      <KisUsage />
 
       <h3>Binance</h3>
       <p className="note">키가 필요 없어요. USDT 현물 공개 시세만 써요. 일반 주소가 막히면 시세 전용 주소(data-api·data-stream.binance.vision)로 바꿔 연결해요.</p>
@@ -555,6 +558,56 @@ function Data() {
 
       <h3>앞으로 추가될 키</h3>
       <p className="note">DART(v0.2), BOK ECOS·FRED·KOSIS·SEC EDGAR 연락처(v0.3), 네이버·KRX Open API(v0.4), 공공데이터포털(v0.7), EIA(v0.11). 소스마다 출처 표시 문구와 이용 조건 링크를 함께 보여 줄 거예요.</p>
+    </>
+  );
+}
+
+/** 실시간 슬롯·호출 예산 사용량(06 데이터 연결, 08 §4.1). 열려 있는 동안 2초마다 새로 읽어요 */
+function KisUsage() {
+  const [u, setU] = useState<{ sources: SourceStatus[]; kisBudget?: { lastSecond: number; queued: number; perSecond: number } } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const tick = () =>
+      api.get<typeof u>('/api/status').then(
+        (r) => alive && setU(r),
+        () => undefined,
+      );
+    void tick();
+    const t = window.setInterval(tick, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+  const slots = u ? kisSlots(u.sources) : undefined;
+  return (
+    <>
+      <table className="cmp" style={{ marginTop: 6 }}>
+        <tbody>
+          <tr>
+            <td style={{ width: 200 }}>실시간 슬롯</td>
+            <td className="mono">{slots ? `${slots.used} / ${slots.limit} 사용${slots.overflow ? ` · ${slots.overflow}개는 주기 조회` : ''}` : '— (키를 넣으면 보여요)'}</td>
+          </tr>
+          <tr>
+            <td>조회 호출</td>
+            <td className="mono">{u?.kisBudget ? `지난 1초 ${u.kisBudget.lastSecond} / 초당 ${u.kisBudget.perSecond}건 · 대기 ${u.kisBudget.queued}건` : '—'}</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>기능별 실시간 슬롯</h3>
+      <table className="cmp">
+        <tbody>
+          {Object.entries(FUNCTION_SLOT_COST).map(([code, cost]) => (
+            <tr key={code}>
+              <td className="mono" style={{ width: 200 }}>
+                {code}
+              </td>
+              <td>{cost}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="note">국내·미국 주식의 체결만 슬롯을 써요. 기능을 열 때 슬롯이 모자라면 몇 초 간격 조회로 바뀐다고 알려 줘요. 기능 설명 창(F1)에도 슬롯 수가 보여요.</p>
     </>
   );
 }

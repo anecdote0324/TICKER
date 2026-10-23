@@ -9,6 +9,7 @@ import { isShortcut } from '../keys';
 import { engine, getInstrument, index, indexState, supports } from '../stores/instruments';
 import { applyExecution, panelCanonical, panels, type PanelState } from '../stores/panels';
 import { settings, updateSettings } from '../stores/settings';
+import { checkSlots } from '../stores/slots';
 import { appState, updateState, usageScore } from '../stores/state';
 import { useStore } from '../stores/store';
 import { openSettings, showToast, ui } from '../stores/ui';
@@ -177,6 +178,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
         showToast(`${exec.asset === 'EQUITY' ? '주식' : '종목'}은 코드나 이름으로 찾아요. 예: 005930, 삼성, AAPL`);
       } else {
         applyExecution(panelId, exec);
+        checkSlots();
       }
       // 기억된 선택(↺)과 겹침 기본값(05 §7.4)
       if (via?.row && via.query) {

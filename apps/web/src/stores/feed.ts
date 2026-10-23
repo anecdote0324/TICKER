@@ -129,6 +129,15 @@ function listen(id: string, fn: () => void) {
   };
 }
 
+/** 지금 구독 중인지(실시간 슬롯 확인용, 08 §4.1) */
+export function isSubscribed(id: string): boolean {
+  return refs.has(id);
+}
+
+export function subscribedIds(): string[] {
+  return [...refs.keys()];
+}
+
 export function getQuote(id: string): Quote | undefined {
   return quotes.get(id);
 }
