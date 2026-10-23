@@ -1,7 +1,7 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import type { BarInterval, BarSeries, Instrument, Quote, ServerMessage, SourceStatus } from '@bt/shared';
+import { staticInstruments, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
@@ -37,13 +37,27 @@ export class Hub implements AdapterHost {
   /** 메모리에 잠시 둔 봉(같은 요청이 몰리지 않게) */
   private barCache = new Map<string, { at: number; series: Promise<BarSeries> }>();
 
-  constructor(public log: Logger) {}
+  constructor(public log: Logger) {
+    // 정해 둔 지수·환율은 마스터를 받기 전에도 알아요(켜자마자 WEI·환율 차트가 뜨게)
+    for (const i of staticInstruments()) this.instruments.set(i.id, i);
+  }
 
   private ready = false;
+  private readyWaiters: Array<() => void> = [];
+
+  /** 종목 목록이 준비될 때까지(최대 30초) 기다려요 */
+  private whenReady(): Promise<void> {
+    if (this.ready) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.readyWaiters.push(resolve);
+      setTimeout(resolve, 30_000).unref?.();
+    });
+  }
 
   setInstruments(list: Instrument[]) {
     this.instruments = new Map(list.map((i) => [i.id, i]));
     this.ready = true;
+    for (const f of this.readyWaiters.splice(0)) f();
     // 목록이 준비되기 전에 들어온 구독을 이제 처리해요
     for (const c of this.clients) {
       if (c.pending?.size) {
@@ -199,7 +213,12 @@ export class Hub implements AdapterHost {
   }
 
   async bars(id: string, interval: BarInterval): Promise<BarSeries> {
-    const inst = this.instruments.get(id);
+    let inst = this.instruments.get(id);
+    // 켜자마자 들어온 요청: 종목 목록(마스터)을 받는 동안 기다려요
+    if (!inst && !this.ready) {
+      await this.whenReady();
+      inst = this.instruments.get(id);
+    }
     if (!inst) throw new Error(`종목 ${id}를 찾을 수 없어요`);
     const key = `${id}|${interval}`;
     const ttl = interval === '1m' || interval === '5m' ? 30_000 : 10 * 60_000;

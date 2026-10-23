@@ -74,3 +74,17 @@ describe('시세 중계', () => {
     expect(sent.some((m) => m.type === 'quotes')).toBe(false);
   });
 });
+
+describe('켜자마자 들어온 봉 요청', () => {
+  it('정해 둔 지수·환율은 목록 전에도 알고, 다른 종목은 목록이 올 때까지 기다려요', async () => {
+    const hub = new Hub(consoleLogger('test', true));
+    const bars = async (inst: Instrument) => ({ id: inst.id, interval: '1d' as const, bars: [], fresh: { source: 'DEMO' as const, mode: 'demo' as const, asOf: 0, receivedAt: 0 } });
+    hub.binance = { source: 'BINANCE', bars } as never;
+    hub.ecb = { source: 'ECB', bars } as never;
+    hub.demo = { source: 'DEMO', bars } as never;
+    await expect(hub.bars('IDX:KOSPI', '1d')).resolves.toMatchObject({ id: 'IDX:KOSPI' });
+    const later = hub.bars('EQ:KS:005930', '1d');
+    hub.setInstruments([sam]);
+    await expect(later).resolves.toMatchObject({ id: 'EQ:KS:005930' });
+  });
+});

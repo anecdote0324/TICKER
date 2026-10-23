@@ -32,8 +32,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build
-      # 첫 실행 때 인터넷이 없어도 종목 검색이 되게 종목 목록 사본을 넣어요(05 §6.1). 저장소에는 올리지 않아요
+      # 첫 실행 때 인터넷이 없어도 종목 검색이 되게 종목 목록 사본을 넣어요(05 §6.1). 저장소에는 올리지 않아요.
+      # 빌드 서버에서 마스터 서버에 닿지 않아도 릴리스는 막지 않아요(사본 없이도 앱은 동작해요)
       - run: pnpm snapshot
+        continue-on-error: true
       # Windows의 PowerShell은 -c.extraMetadata.version 같은 인자를 점에서 나눌 수 있어서 bash로 실행해요
       - run: pnpm --filter @bt/desktop exec electron-builder --publish never "-c.extraMetadata.version=${{ steps.ver.outputs.version }}"
         shell: bash
@@ -50,7 +52,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           name: v${{ steps.ver.outputs.version }}
-          draft: true
+          # 미리 보기(-가 붙은 태그)는 바로 공개하고, 정식 버전은 초안으로 올려 확인한 뒤 공개해요
+          draft: ${{ steps.ver.outputs.prerelease != 'true' }}
           prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
           files: |
             apps/desktop/release/*.exe
