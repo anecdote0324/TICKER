@@ -47,6 +47,8 @@ export interface Instrument {
   feedSymbol?: string;
   /** 우선주라면 보통주 id. 목록에서 보통주 바로 아래에 둬요 */
   commonId?: string;
+  /** 마스터 파일의 기준가(전일 종가). 데모 시세의 출발점이에요 */
+  refPrice?: number;
 }
 
 export function instrumentId(assetClass: AssetClass, code: string, market?: Market): string {

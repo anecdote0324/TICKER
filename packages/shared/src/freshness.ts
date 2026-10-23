@@ -3,12 +3,12 @@
 
 import { formatBadgeDate, formatBadgeTime } from './time';
 
-export type SourceId = 'KIS' | 'BINANCE' | 'FX' | 'DEMO';
+export type SourceId = 'KIS' | 'BINANCE' | 'ECB' | 'DEMO';
 
 export const SOURCE_LABEL: Record<SourceId, string> = {
   KIS: '한국투자증권',
   BINANCE: 'Binance',
-  FX: '환율 (ExchangeRate-API)',
+  ECB: 'ECB 기준환율 (Frankfurter)',
   DEMO: '데모 데이터',
 };
 

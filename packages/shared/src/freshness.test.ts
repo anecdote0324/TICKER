@@ -45,17 +45,17 @@ describe('신선도 배지', () => {
   });
 
   it('일별은 원천 기준일', () => {
-    const f: Freshness = { source: 'FX', mode: 'daily', asOf: NOW, receivedAt: NOW, asOfDate: '2026-10-21' };
+    const f: Freshness = { source: 'ECB', mode: 'daily', asOf: NOW, receivedAt: NOW, asOfDate: '2026-10-21' };
     expect(computeBadge(f, { now: NOW })).toMatchObject({ long: '일별 10/21', short: '일별' });
   });
 
   it('발표 주기', () => {
-    const f: Freshness = { source: 'FX', mode: 'release', asOf: NOW, receivedAt: NOW, asOfDate: '2026-09', period: 'M' };
+    const f: Freshness = { source: 'ECB', mode: 'release', asOf: NOW, receivedAt: NOW, asOfDate: '2026-09', period: 'M' };
     expect(computeBadge(f, { now: NOW })).toMatchObject({ long: '기준 2026-09', short: '월간' });
   });
 
   it('계산한 값은 가장 늦은 입력을 따라가요', () => {
-    const fx30: Freshness = { source: 'FX', mode: 'poll', asOf: NOW, receivedAt: NOW, intervalMs: 30_000 };
+    const fx30: Freshness = { source: 'ECB', mode: 'poll', asOf: NOW, receivedAt: NOW, intervalMs: 30_000 };
     expect(slowestFreshness([rt, fx30])).toBe(fx30);
   });
 });
