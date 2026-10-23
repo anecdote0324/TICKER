@@ -241,8 +241,12 @@ button {
   background: #555;
 }
 .statusbar .dot.ok {
+  /* 연결됨은 초록 점(02 색). 끊김·연결 중은 빈 회색 테두리 + ⚠ */
+  background: #3fd08a;
+}
+.statusbar .dot.ok.demo {
+  /* 데모는 실제 연결이 아니라서 회색 */
   background: #8c8c8c;
-  box-shadow: 0 0 0 1px #bdbdbd inset;
 }
 .statusbar .dot.bad {
   background: transparent;

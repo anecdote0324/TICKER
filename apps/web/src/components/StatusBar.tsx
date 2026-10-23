@@ -21,7 +21,7 @@ function SourceItem({ s }: { s: SourceStatus }) {
   return (
     <span className="src" title={`${SOURCE_LABEL[s.source]}: ${s.message ?? s.state}`}>
       {!ok && s.source !== 'DEMO' && <span className="warn">⚠</span>}
-      <span className={`dot ${ok ? 'ok' : 'bad'}`} />
+      <span className={`dot ${ok ? 'ok' : 'bad'} ${s.source === 'DEMO' ? 'demo' : ''}`} />
       <span className={ok ? '' : 'warn'}>
         {name}
         {extra}
