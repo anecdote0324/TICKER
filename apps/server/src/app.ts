@@ -177,6 +177,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // ── 화면 파일(배포판) ──
+  // 화면에는 외부 스크립트를 넣지 않아요. 뉴스 원문 같은 외부 HTML도 앱 화면에 바로 넣지 않아요(01 보안)
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (String(reply.getHeader('content-type') ?? '').startsWith('text/html')) {
+      reply.header(
+        'content-security-policy',
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-ancestors 'none'; base-uri 'none'",
+      );
+      reply.header('x-content-type-options', 'nosniff');
+    }
+    return payload;
+  });
   if (deps.webDir && existsSync(join(deps.webDir, 'index.html'))) {
     await app.register(fastifyStatic, { root: deps.webDir, prefix: '/', index: ['index.html'] });
     app.setNotFoundHandler((req, reply) => {
