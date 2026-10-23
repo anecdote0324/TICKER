@@ -15,3 +15,8 @@
 - pnpm 모노레포예요: `apps/desktop`(Electron), `apps/web`(화면), `apps/server`(내장 서버), `packages/shared`(공통 형식), `packages/command`(커맨드 라인 해석기·완성기).
 - 커밋 전에 `pnpm typecheck`와 `pnpm test`를 통과시켜요.
 - 커맨드 라인 동작을 바꾸면 [05](docs/design/05-command-line.md)의 걸어 보기 예시를 테스트로 남겨요.
+
+# 릴리스
+
+- Release 실행(Actions → Release → Run workflow)은 사용자가 직접 눌러요(사용자 결정). 앱이 바뀌는 작업을 마치면, 새 미리 보기를 낼 만한지와 고를 종류(미리 보기·정식·다음 단계)를 알려 줘요. 문서만 바뀐 작업이면 알리지 않아요.
+- 사용자가 시킬 때만 Claude가 직접 Release를 실행해요.
