@@ -48,13 +48,29 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.dmg
           if-no-files-found: error
+
+  # 두 OS의 설치 파일을 모아 릴리스 하나로 올려요(각 빌드가 따로 올리면 초안이 둘로 나뉠 수 있어요)
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 버전 번호 정하기
+        id: ver
+        run: node scripts/release-version.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
       - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           name: v${{ steps.ver.outputs.version }}
           # 미리 보기(-가 붙은 태그)는 바로 공개하고, 정식 버전은 초안으로 올려 확인한 뒤 공개해요
           draft: ${{ steps.ver.outputs.prerelease != 'true' }}
           prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
+          fail_on_unmatched_files: true
           files: |
-            apps/desktop/release/*.exe
-            apps/desktop/release/*.dmg
+            dist/*.exe
+            dist/*.dmg
