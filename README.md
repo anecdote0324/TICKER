@@ -3,6 +3,8 @@
 블룸버그 터미널을 닮은 **개인용 데스크톱 시세 터미널**이에요.
 
 > 지금은 **v0.1 미리 보기**예요. v0.1에 넣기로 한 기능은 모두 만들었고, 실제 Windows·Mac과 한국투자증권 계정으로 확인하는 중이에요. 설계는 [`docs/design/`](docs/design/)에 있고, 코드는 그 설계를 따라요. 버전마다 들어가는 기능과 진행 상황은 [버전별 기능](docs/versions.md)에 있어요.
+>
+> 설치부터 모든 기능·명령어·단축키까지의 쓰는 법은 **[사용설명서](docs/manual/README.md)** 에 있어요.
 
 ## 설치하고 처음 열기
 
@@ -102,6 +104,7 @@ GitHub의 **Actions → Release → Run workflow**에서 종류만 고르고 실
 | `packages/shared` | 공통 형식: 종목·시세, 신선도 정보와 배지 계산, 기능 목록, 설정 |
 | `packages/command` | 커맨드 라인 해석기·완성기(한글 처리, 색인, Enter 규칙) |
 | `docs/design` | 설계 문서 |
+| `docs/manual` | 사용설명서 |
 
 검사: `pnpm typecheck`, `pnpm test`.
 
@@ -109,6 +112,7 @@ GitHub의 **Actions → Release → Run workflow**에서 종류만 고르고 실
 
 | 문서 | 내용 |
 |---|---|
+| [사용설명서](docs/manual/README.md) | 설치하고 처음 열기(Windows·Mac 주의사항), 모든 기능·명령어·단축키·설정, 문제 해결 |
 | [버전별 기능](docs/versions.md) | v0.1~v0.11과 후순위에 들어가는 기능, 지금까지 만든 것과 남은 일 |
 | [01 개요와 결정 사항](docs/design/01-overview.md) | 목표, 확정된 결정, 전체 구조, 실행·종료 방식, Windows/Mac 지원 |
 | [02 화면 디자인](docs/design/02-ui.md) | 디자인 컨셉, 색과 글꼴, 패널 구조, 화면 배치, 데이터 신선도 표시 |
