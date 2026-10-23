@@ -31,7 +31,7 @@ export function TopBar(props: {
     <header className="topbar">
       <div className="logo">
         <i />
-        <b>TERMINAL</b>
+        <b>TICKER</b>
       </div>
       <nav className="screen-tabs" aria-label="화면 탭">
         {props.screens.map((s) =>

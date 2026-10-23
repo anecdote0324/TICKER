@@ -85,6 +85,6 @@ export function logIme(e: AnyEvent | null, note?: string) {
 
 /** 복사해서 보낼 글: 환경 정보 + 기록(JSON 한 줄씩) */
 export function exportImeLog(): string {
-  const head = { app: 'Terminal', userAgent: navigator.userAgent, platform: navigator.platform, language: navigator.language, at: new Date().toISOString(), count: imeLog.entries.length };
+  const head = { app: 'TICKER', userAgent: navigator.userAgent, platform: navigator.platform, language: navigator.language, at: new Date().toISOString(), count: imeLog.entries.length };
   return [JSON.stringify(head), ...imeLog.entries.map((x) => JSON.stringify(x))].join('\n');
 }

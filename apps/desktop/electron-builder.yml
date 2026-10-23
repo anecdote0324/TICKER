@@ -1,5 +1,6 @@
-appId: local.personal.terminal
-productName: Terminal
+# 앱 이름은 TICKER(사용자 결정). appId를 바꿔서 예전 이름(Terminal)으로 설치된 앱과는 따로 설치돼요
+appId: local.personal.ticker
+productName: TICKER
 copyright: 개인용
 directories:
   output: release
@@ -24,6 +25,8 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # 예전 버전 제거가 막혀도 덮어 설치(build/installer.nsh)
+  include: build/installer.nsh
 mac:
   target:
     - target: dmg

@@ -3,13 +3,14 @@
 // - 메인 창을 닫으면 떼어낸 창까지 포함해 앱 전체가 종료돼요. 트레이 상주는 없어요.
 // - 앱 아이콘을 또 누르면 두 번째 실행 대신 이미 켜진 창을 앞으로 가져와요.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, safeStorage, screen, shell, type MenuItemConstructorOptions, type Rectangle } from 'electron';
 import { startServer, type RunningServer, type SecretBox } from '@bt/server';
 
-// 데이터 폴더 이름을 개발판과 배포판에서 같게(Windows %APPDATA%\Terminal, Mac ~/Library/Application Support/Terminal)
-app.setName('Terminal');
+// 데이터 폴더 이름을 개발판과 배포판에서 같게(Windows %APPDATA%\TICKER, Mac ~/Library/Application Support/TICKER)
+app.setName('TICKER');
+migrateOldUserData();
 const isDev = !app.isPackaged;
 let server: RunningServer | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -37,6 +38,26 @@ async function osSecretBox(): Promise<SecretBox | undefined> {
       return (await safeStorage.decryptStringAsync(Buffer.from(cipher, 'base64'))).result;
     },
   };
+}
+
+/**
+ * 앱 이름을 Terminal에서 TICKER로 바꾸면서(사용자 결정) 예전 데이터 폴더의 설정·키·화면 배치·분봉 이력을 한 번만 옮겨요.
+ * Chromium이 새 폴더를 쓰기 전(ready 전)에 해야 해서 맨 처음에 불러요. 'Local State'에는 앱키 암호화 키가 들어 있어요(Windows).
+ * Mac은 키체인 항목 이름이 앱 이름을 따라가서 한국투자증권 키를 다시 넣어야 해요. 예전 폴더는 지우지 않아요.
+ */
+function migrateOldUserData() {
+  try {
+    const newDir = app.getPath('userData');
+    const oldDir = join(app.getPath('appData'), 'Terminal');
+    if (existsSync(join(newDir, 'data')) || !existsSync(join(oldDir, 'data'))) return;
+    mkdirSync(newDir, { recursive: true });
+    cpSync(join(oldDir, 'data'), join(newDir, 'data'), { recursive: true });
+    for (const f of ['window-state.json', 'Local State']) {
+      if (existsSync(join(oldDir, f))) cpSync(join(oldDir, f), join(newDir, f));
+    }
+  } catch {
+    // 옮기지 못하면 새로 시작해요
+  }
 }
 
 // ── 창 위치 기억 ──
@@ -118,7 +139,7 @@ function hardenNavigation(win: BrowserWindow, origin: string) {
         overrideBrowserWindowOptions: {
           backgroundColor: '#000000',
           autoHideMenuBar: true,
-          title: 'Terminal',
+          title: 'TICKER',
           webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
         },
       };
@@ -142,7 +163,7 @@ async function createMainWindow() {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#000000',
-    title: 'Terminal',
+    title: 'TICKER',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
