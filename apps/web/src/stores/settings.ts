@@ -15,7 +15,21 @@ export function applyTheme(s: Settings, doc: Document = document) {
   root.style.setProperty('--up-bg', korean ? 'rgba(255,95,87,0.28)' : 'rgba(63,208,138,0.24)');
   root.style.setProperty('--down-bg', korean ? 'rgba(76,154,255,0.28)' : 'rgba(255,95,87,0.26)');
   root.style.setProperty('--accent', s.display.accent);
-  root.style.setProperty('--scale', String(s.display.fontScale));
+  applyZoom(s.display.fontScale, doc);
+}
+
+/**
+ * 글자 크기(06): 화면 전체를 같은 배율로 키워요(표·차트·커맨드 라인·떼어낸 창 모두).
+ * 데스크톱 앱은 Electron 확대 배율을 모든 창에 걸고, 브라우저(개발용)에서는 CSS zoom으로 대신해요.
+ */
+function applyZoom(scale: number, doc: Document) {
+  const f = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  if (window.btBridge?.setZoom) {
+    window.btBridge.setZoom(f);
+    doc.documentElement.style.removeProperty('zoom');
+  } else {
+    doc.documentElement.style.setProperty('zoom', f === 1 ? '' : String(f));
+  }
 }
 
 export async function loadSettings() {

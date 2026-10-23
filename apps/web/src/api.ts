@@ -7,6 +7,8 @@ declare global {
       platform: string;
       version: string;
       openExternal(url: string): void;
+      /** 화면 전체 배율(글자 크기 설정, 06). 모든 창에 적용돼요 */
+      setZoom?(factor: number): void;
     };
   }
 }

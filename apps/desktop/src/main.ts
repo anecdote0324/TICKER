@@ -128,6 +128,7 @@ function hardenNavigation(win: BrowserWindow, origin: string) {
   });
   win.webContents.on('did-create-window', (child) => {
     child.setMenu(null);
+    child.webContents.setZoomFactor(zoomFactor);
     child.setBounds(visibleBounds(child.getBounds()));
     attachDevKeys(child);
   });
@@ -180,6 +181,15 @@ ipcMain.on('bt:init', (event) => {
   const url = event.senderFrame?.url ?? '';
   const ok = !!server && url.startsWith(server.url);
   event.returnValue = { token: ok ? server!.token : '', version: app.getVersion(), platform: process.platform };
+});
+
+// 글자 크기 설정(06): 모든 창(떼어낸 창 포함)에 같은 확대 배율
+let zoomFactor = 1;
+ipcMain.on('bt:zoom', (event, factor: unknown) => {
+  if (!server || !(event.senderFrame?.url ?? '').startsWith(server.url)) return;
+  if (typeof factor !== 'number' || !Number.isFinite(factor) || factor < 0.5 || factor > 2) return;
+  zoomFactor = factor;
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.setZoomFactor(factor);
 });
 
 ipcMain.on('bt:open-external', (_e, url: unknown) => {

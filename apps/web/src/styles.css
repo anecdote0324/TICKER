@@ -20,7 +20,6 @@
   --down: #ff5f57;
   --up-bg: rgba(63, 208, 138, 0.24);
   --down-bg: rgba(255, 95, 87, 0.26);
-  --scale: 1;
   --mono: 'IBM Plex Mono', 'D2Coding', ui-monospace, monospace;
   --sans: 'IBM Plex Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
   --cmd: 'D2Coding', 'IBM Plex Mono', 'IBM Plex Sans KR', monospace;
@@ -39,7 +38,7 @@ body,
   background: var(--bg);
   color: var(--value);
   font-family: var(--sans);
-  font-size: calc(12px * var(--scale));
+  font-size: 12px;
   overflow: hidden;
 }
 

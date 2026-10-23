@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('btBridge', {
   platform: init.platform,
   version: init.version,
   openExternal: (url: string) => ipcRenderer.send('bt:open-external', url),
+  setZoom: (factor: number) => ipcRenderer.send('bt:zoom', factor),
 });

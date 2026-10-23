@@ -149,13 +149,14 @@ function Display() {
       <div className="field">
         <label>배율</label>
         <div className="seg">
-          {[0.9, 1, 1.1, 1.2].map((f) => (
+          {[0.9, 1, 1.1, 1.2, 1.35].map((f) => (
             <button key={f} className={s.display.fontScale === f ? 'on' : ''} onClick={() => void updateSettings({ display: { fontScale: f } })}>
               {Math.round(f * 100)}%
             </button>
           ))}
         </div>
       </div>
+      <p className="note">표·차트·커맨드 라인·떼어낸 창까지 화면 전체를 같은 배율로 키워요.</p>
       <h3>데이터 신선도 배지</h3>
       <p className="note">실시간이 아닌 값에는 늘 회색 배지(`5초 주기`, `15분 지연`, `일별 10/21`, `마감`, `⚠ 멈춤`)가 붙어요. 늦은 값을 실시간으로 착각하지 않게 하려는 거라 끌 수 없어요.</p>
     </>
@@ -678,6 +679,8 @@ function About() {
       <p className="note">
         한국투자증권 Open API · Binance 공개 시세 · ECB 기준환율(Frankfurter) · KIS 종목 마스터 파일. 블룸버그와 관련이 없는 개인 프로젝트예요.
       </p>
+      <h3>글꼴</h3>
+      <p className="note">IBM Plex Mono · IBM Plex Sans KR(© IBM Corp.), D2Coding(© NAVER Corp.). 모두 SIL Open Font License 1.1이에요.</p>
     </>
   );
 }
