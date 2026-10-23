@@ -1,0 +1,25 @@
+{
+  "name": "bloomberg-terminal",
+  "private": true,
+  "version": "0.1.0",
+  "description": "개인용 블룸버그 터미널 스타일 시세 앱",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "pnpm --filter @bt/server dev",
+    "dev:web": "pnpm --filter @bt/web dev",
+    "build": "pnpm --filter @bt/web build && pnpm --filter @bt/desktop build",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "dist": "pnpm build && pnpm --filter @bt/desktop dist"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

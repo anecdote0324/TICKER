@@ -1,0 +1,11 @@
+node_modules/
+dist/
+out/
+release/
+*.log
+.DS_Store
+# 실행 중 만들어지는 데이터와 비밀 정보
+data/
+.env
+.env.*
+*.key
