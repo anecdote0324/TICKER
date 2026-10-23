@@ -57,7 +57,8 @@ function PanelView(props: IDockviewPanelProps<{ panelId: string }>) {
       onKeyDown={(e) => {
         // 본문에서 영문·숫자 키를 치면 커맨드 라인으로 돌아가 그 글자부터 입력돼요(05 §10.1)
         if (!bodyFocus) return;
-        if (e.key === 'Escape' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l')) {
+        // Mod+L(활성 패널의 커맨드 라인으로)은 앱 단축키가 처리해요
+        if (e.key === 'Escape') {
           e.preventDefault();
           focusRegistry.command.get(id)?.('');
         } else if (/^[a-zA-Z0-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target as HTMLElement).closest('input')) {

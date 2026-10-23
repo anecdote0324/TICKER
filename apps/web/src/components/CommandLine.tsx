@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis, ChosenToken, EngineContext, Execution, Row } from '@bt/command';
 import { FUNCTIONS, type AssetClass } from '@bt/shared';
-import { isMac } from '../api';
+import { isShortcut } from '../keys';
 import { engine, getInstrument, index, indexState, supports } from '../stores/instruments';
 import { applyExecution, panelCanonical, panels, type PanelState } from '../stores/panels';
 import { settings, updateSettings } from '../stores/settings';
@@ -30,8 +30,13 @@ interface Intent {
   used: boolean;
 }
 
-/** 키보드에서 눌린 자리로 알아봐요(한글 모드에서도 같게, 05 §2) */
-const ASSET_KEYS: Record<string, AssetClass> = { KeyE: 'EQUITY', KeyC: 'CRYPTO', KeyX: 'CURNCY', KeyI: 'INDEX' };
+/** 자산군 단축키(눌린 자리로 알아봐서 한글 모드에서도 같아요, 05 §2) */
+const ASSET_SHORTCUTS = [
+  ['assetEquity', 'EQUITY'],
+  ['assetCrypto', 'CRYPTO'],
+  ['assetCurncy', 'CURNCY'],
+  ['assetIndex', 'INDEX'],
+] as const satisfies ReadonlyArray<readonly [string, AssetClass]>;
 
 export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onEscapeEmpty }: Props) {
   const panel = useStore(panels, (all) => all[panelId]) as PanelState | undefined;
@@ -335,7 +340,6 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     const isComposingKey = ne.isComposing || ne.keyCode === 229 || composingRef.current;
     const key = e.key;
     const code = e.code;
-    const mod = isMac ? e.metaKey : e.ctrlKey;
 
     // 조합 중: 의도만 기록하고 음절이 끝난 뒤 한 번만 실행(K3)
     if (isComposingKey) {
@@ -370,14 +374,34 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       return;
     }
 
-    // 자산군 단축키 Mod+Shift+E/C/X/I(05 §10.2)
-    if (mod && e.shiftKey && ASSET_KEYS[code]) {
+    // 자산군 단축키 Mod+Shift+E/C/X/I(05 §10.2). 설정에서 바꿀 수 있어요
+    const asset = ASSET_SHORTCUTS.find(([id]) => isShortcut(ne, id))?.[1];
+    if (asset) {
       e.preventDefault();
-      const word = ASSET_KEYS[code];
       const t = text.trimEnd();
-      const next = t ? `${t} ${word} ` : `${word} `;
+      const next = t ? `${t} ${asset} ` : `${asset} `;
       writeInput(next, next.length);
       setListOpen(true);
+      return;
+    }
+    // 지금 칸 목록 열기(Alt+↓, Windows Ctrl+Space)
+    if (isShortcut(ne, 'openList')) {
+      e.preventDefault();
+      setListOpen(true);
+      setDismissed(false);
+      return;
+    }
+    if (isShortcut(ne, 'descCard')) {
+      e.preventDefault();
+      setDesc((d) => (d === 'card' ? 'syntax' : 'card'));
+      setListOpen(true);
+      return;
+    }
+    // 패널 본문으로(Windows Ctrl+↓, 05 §10.1)
+    if (isShortcut(ne, 'bodyFocus') && variant === 'panel') {
+      e.preventDefault();
+      setListOpen(false);
+      onEscapeEmpty?.();
       return;
     }
 
@@ -417,7 +441,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       }
       case 'ArrowDown': {
         e.preventDefault();
-        if (e.altKey || !showList) {
+        if (!showList) {
           setListOpen(true);
           setDismissed(false);
           return;
@@ -499,12 +523,6 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
         else onEscapeEmpty?.();
         return;
       }
-      case 'F1': {
-        e.preventDefault();
-        setDesc((d) => (d === 'card' ? 'syntax' : 'card'));
-        setListOpen(true);
-        return;
-      }
       case 'Delete': {
         const row = analysis.rows[highlight];
         if (e.shiftKey && row?.remembered) {
@@ -520,17 +538,6 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       }
       default:
         break;
-    }
-    if ((e.ctrlKey || e.metaKey) && (key === '/' || code === 'Slash')) {
-      e.preventDefault();
-      setDesc((d) => (d === 'card' ? 'syntax' : 'card'));
-      setListOpen(true);
-      return;
-    }
-    if (e.ctrlKey && code === 'Space') {
-      e.preventDefault();
-      setListOpen(true);
-      setDismissed(false);
     }
     // 영문 글자를 치면 [한] 배지를 꺼요(K10)
     if (/^Key[A-Z]$/.test(code) && /^[a-zA-Z]$/.test(key)) setHan('off');

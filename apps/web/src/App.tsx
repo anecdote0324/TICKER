@@ -8,14 +8,17 @@ import { StatusBar } from './components/StatusBar';
 import { TickerTape } from './components/TickerTape';
 import { TopBar, type Screen } from './components/TopBar';
 import { addPanel, dockApis, Workspace, type ScreenLayout } from './components/Workspace';
+import { WorkspaceMenu } from './components/WorkspaceMenu';
 import { attachGlobalKeys } from './keys';
 import { panels, type PanelState } from './stores/panels';
 import { settings } from './stores/settings';
-import { appState, updateState } from './stores/state';
+import { appState, updateState, type NamedWorkspace } from './stores/state';
 import { useStore } from './stores/store';
 import { showToast, ui } from './stores/ui';
 
-interface SavedWorkspace {
+export interface SavedWorkspace {
+  /** 불러온(또는 마지막으로 저장한) 이름 붙인 워크스페이스 */
+  name?: string;
   screens: Screen[];
   active: string;
   layouts: Record<string, ScreenLayout>;
@@ -28,21 +31,36 @@ function loadSaved(): SavedWorkspace | null {
   return w;
 }
 
+const DEFAULT_WORKSPACE: SavedWorkspace = { screens: [{ id: 'main', name: 'Market Pulse' }], active: 'main', layouts: {}, panels: {} };
+
 export function App() {
   const saved = useRef<SavedWorkspace | null>(null);
   if (saved.current === null) {
-    saved.current = loadSaved() ?? { screens: [{ id: 'main', name: 'Market Pulse' }], active: 'main', layouts: {}, panels: {} };
+    saved.current = loadSaved() ?? DEFAULT_WORKSPACE;
     if (Object.keys(saved.current.panels).length) panels.set(saved.current.panels);
   }
   const [screens, setScreens] = useState<Screen[]>(saved.current.screens);
   const [active, setActive] = useState(saved.current.active);
+  const [wsName, setWsName] = useState(saved.current.name);
+  // 워크스페이스를 불러오면 모든 화면 탭의 배치를 새로 만들어요
+  const [generation, setGeneration] = useState(0);
   const layouts = useRef<Record<string, ScreenLayout>>(saved.current.layouts);
   const u = useStore(ui);
+  const named = useStore(appState, (s) => s.workspaces);
 
   // 워크스페이스 저장: 모든 화면 탭의 배치와 패널 상태를 하나로 묶어요
+  const snapshot = useCallback((): SavedWorkspace => {
+    const next = { ...layouts.current };
+    for (const s of screens) {
+      const api = dockApis.get(s.id);
+      if (api) next[s.id] = { dock: api.toJSON() };
+    }
+    layouts.current = next;
+    return { name: wsName, screens, active, layouts: next, panels: panels.get() };
+  }, [screens, active, wsName]);
   const save = useCallback(() => {
-    updateState('workspace', () => ({ screens, active, layouts: layouts.current, panels: panels.get() }) satisfies SavedWorkspace);
-  }, [screens, active]);
+    updateState('workspace', () => snapshot());
+  }, [snapshot]);
   const saveTimer = useRef(0);
   const scheduleSave = useCallback(() => {
     window.clearTimeout(saveTimer.current);
@@ -50,6 +68,46 @@ export function App() {
   }, [save]);
   useEffect(() => panels.subscribe(scheduleSave), [scheduleSave]);
   useEffect(scheduleSave, [screens, active, scheduleSave]);
+
+  const applyWorkspace = (w: SavedWorkspace) => {
+    const copy = structuredClone(w);
+    panels.set(copy.panels);
+    layouts.current = copy.layouts;
+    setScreens(copy.screens.length ? copy.screens : DEFAULT_WORKSPACE.screens);
+    setActive(copy.screens.some((s) => s.id === copy.active) ? copy.active : (copy.screens[0]?.id ?? 'main'));
+    setWsName(copy.name);
+    setGeneration((g) => g + 1);
+  };
+  /** 바꾸기 전 배치로 돌아가는 되돌리기 */
+  const undoTo = (before: SavedWorkspace) => ({ label: '되돌리기', run: () => applyWorkspace(before) });
+
+  const saveNamed = (name: string) => {
+    const data = { ...snapshot(), name };
+    updateState('workspaces', (list) => [...list.filter((w) => w.name !== name), { name, savedAt: Date.now(), data }].sort((a, b) => a.name.localeCompare(b.name, 'ko')));
+    setWsName(name);
+    showToast(`'${name}' 워크스페이스를 저장했어요`);
+  };
+  const loadNamed = (w: NamedWorkspace) => {
+    const before = snapshot();
+    applyWorkspace({ ...(w.data as SavedWorkspace), name: w.name });
+    showToast(`'${w.name}' 워크스페이스를 불러왔어요`, undoTo(before));
+  };
+  const deleteNamed = (name: string) => {
+    const removed = appState.get().workspaces.find((w) => w.name === name);
+    updateState('workspaces', (list) => list.filter((w) => w.name !== name));
+    if (wsName === name) setWsName(undefined);
+    if (removed) {
+      showToast(`'${name}' 워크스페이스를 지웠어요`, {
+        label: '되돌리기',
+        run: () => updateState('workspaces', (list) => [...list.filter((w) => w.name !== name), removed].sort((a, b) => a.name.localeCompare(b.name, 'ko'))),
+      });
+    }
+  };
+  const resetWorkspace = () => {
+    const before = snapshot();
+    applyWorkspace(DEFAULT_WORKSPACE);
+    showToast('기본 배치로 새로 시작했어요', undoTo(before));
+  };
 
   /** 화면 탭 닫기: 그 화면의 패널(떼어낸 창 포함)도 함께 닫고, 알림에서 되돌릴 수 있어요 */
   const closeScreen = (id: string) => {
@@ -113,10 +171,11 @@ export function App() {
           const api = dockApis.get(active);
           if (api) addPanel(api);
         }}
+        workspaceMenu={<WorkspaceMenu current={wsName} list={named} onSave={saveNamed} onLoad={loadNamed} onDelete={deleteNamed} onReset={resetWorkspace} />}
       />
       {screens.map((s) => (
         <Workspace
-          key={s.id}
+          key={`${generation}:${s.id}`}
           screenId={s.id}
           visible={s.id === active}
           initial={layouts.current[s.id] ?? null}

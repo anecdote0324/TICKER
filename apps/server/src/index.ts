@@ -2,12 +2,14 @@
 
 import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { InstrumentsResponse } from '@bt/shared';
 import { BinanceAdapter } from './adapters/binance';
 import { DemoAdapter } from './adapters/demo';
 import { EcbAdapter } from './adapters/ecb';
 import { KisAdapter, type KisCredentials, type KisTokenStore } from './adapters/kis';
 import { buildApp } from './app';
+import { History } from './history';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
 import { fileSecretBox, Store, type SecretBox } from './store';
@@ -41,6 +43,11 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   await store.load();
 
   const hub = new Hub(log);
+  try {
+    hub.history = new History(join(opts.dataDir, 'history.db'));
+  } catch (e) {
+    log.warn(`분봉·이력 저장을 쓸 수 없어요: ${(e as Error).message}`);
+  }
   hub.binance = new BinanceAdapter(hub);
   hub.ecb = new EcbAdapter(hub);
   hub.demo = new DemoAdapter(hub);
@@ -108,6 +115,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       hub.demo.stop();
       hub.kis?.stop();
       await app.close();
+      // 실시간 구독을 끊은 뒤 남은 분봉을 저장해요(01 종료할 때)
+      hub.history?.close();
     },
   };
 }

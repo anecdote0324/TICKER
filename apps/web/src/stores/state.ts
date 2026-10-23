@@ -11,6 +11,13 @@ export interface WatchGroup {
   ids: string[];
 }
 
+/** 이름을 붙여 저장한 워크스페이스(data는 App의 SavedWorkspace) */
+export interface NamedWorkspace {
+  name: string;
+  savedAt: number;
+  data: unknown;
+}
+
 export interface AppState {
   /** 명령 기록(표준형, 최신순) */
   history: Array<{ cmd: string; panel: string; at: number }>;
@@ -24,6 +31,7 @@ export interface AppState {
   defaults: { chosen: Record<string, string>; picks: Record<string, Record<string, number>> };
   watchlists: WatchGroup[];
   workspace: unknown;
+  workspaces: NamedWorkspace[];
   tips: { counts: Record<string, number>; directRuns: number; standardAsked: boolean; hidden: string[] };
 }
 
@@ -42,12 +50,13 @@ const DEFAULT: AppState = {
   defaults: { chosen: {}, picks: {} },
   watchlists: DEFAULT_WATCHLISTS,
   workspace: null,
+  workspaces: [],
   tips: { counts: {}, directRuns: 0, standardAsked: false, hidden: [] },
 };
 
 export const appState = createStore<AppState>(DEFAULT);
 
-const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'tips'];
+const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips'];
 
 export async function loadAppState() {
   const next: AppState = { ...DEFAULT };

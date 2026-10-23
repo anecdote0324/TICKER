@@ -1232,3 +1232,145 @@ button {
   font: 12px var(--cmd);
   padding: 0 6px;
 }
+
+/* 워크스페이스 메뉴(02 화면 탭과 워크스페이스) */
+.wsmenu {
+  position: relative;
+}
+.topbar .wsmenu-btn {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wsmenu-pop {
+  position: absolute;
+  top: 26px;
+  left: 0;
+  z-index: 900;
+  width: 340px;
+  background: #121212;
+  border: 1px solid #333;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+  padding: 6px 0;
+}
+.wsmenu-head {
+  padding: 4px 12px 6px;
+  color: var(--label);
+  font-size: 11px;
+}
+.wsmenu-empty {
+  padding: 6px 12px 10px;
+  color: var(--dim);
+}
+.wsmenu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 12px;
+  height: 26px;
+}
+.wsmenu-row:hover {
+  background: #1a1a1a;
+}
+.wsmenu-row.on .wsmenu-name {
+  color: var(--accent);
+}
+.wsmenu-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--value-hi);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+}
+.wsmenu-act {
+  background: transparent;
+  border: 0;
+  color: var(--label);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+.wsmenu-act:hover {
+  color: var(--value-hi);
+  background: #262626;
+}
+.wsmenu-save {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid #222;
+  margin-top: 6px;
+}
+.wsmenu-save input {
+  flex: 1;
+  min-width: 0;
+  background: #151515;
+  border: 1px solid #333;
+  color: var(--value-hi);
+  height: 26px;
+  padding: 0 8px;
+  font: inherit;
+}
+.wsmenu-reset {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--label);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.wsmenu-reset:hover {
+  color: var(--value-hi);
+  background: #1a1a1a;
+}
+
+/* 단축키 설정(06) */
+.keycap {
+  height: 22px;
+  min-width: 28px;
+  margin: 2px 6px 2px 0;
+  padding: 0 8px;
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-bottom-width: 2px;
+  color: var(--value-hi);
+  font: 11.5px var(--mono);
+  cursor: pointer;
+}
+.keycap:hover {
+  border-color: #5a5a5a;
+}
+.keycap.add {
+  color: var(--label);
+  border-style: dashed;
+  border-bottom-width: 1px;
+}
+.keycap.capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.statusbar .link-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  padding: 0 2px;
+  color: var(--value);
+}
+.statusbar .link-group i {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+}

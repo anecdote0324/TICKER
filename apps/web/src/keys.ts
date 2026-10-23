@@ -1,10 +1,26 @@
 // 앱 전체 단축키(05 §10). Windows는 메뉴 막대가 없어서 화면 쪽에서 처리해요.
-// 떼어낸 창에도 같은 처리기를 붙여요.
+// 떼어낸 창에도 같은 처리기를 붙여요. 키는 설정에서 바꿀 수 있어요(06 단축키).
 
+import { bindingsFor, formatBinding, matchesShortcut, type KeyLike, type ShortcutId } from '@bt/shared';
 import { isMac } from './api';
 import { focusRegistry } from './components/focus';
 import { activePanelId, navigate, panels } from './stores/panels';
+import { settings } from './stores/settings';
 import { openSettings, ui } from './stores/ui';
+
+/** 설정에서 바꾼 키를 반영한 단축키 판정 */
+export function isShortcut(e: KeyLike, id: ShortcutId): boolean {
+  return matchesShortcut(e, id, settings.get().keys, isMac);
+}
+
+/** 안내 문구에 쓰는 단축키 이름(바꾼 키 반영). 없으면 빈 문자열 */
+export function shortcutLabel(id: ShortcutId): string {
+  const b = bindingsFor(id, settings.get().keys, isMac)[0];
+  return b ? formatBinding(b, isMac) : '';
+}
+
+/** 단축키를 받는 중(설정 창)에는 앱 단축키를 멈춰요 */
+export const keyCapture = { active: false };
 
 function focusPanel(id: string) {
   activePanelId.set(id);
@@ -12,24 +28,25 @@ function focusPanel(id: string) {
 }
 
 export function onGlobalKey(e: KeyboardEvent) {
+  if (keyCapture.active) return;
   const mod = isMac ? e.metaKey : e.ctrlKey;
   const active = activePanelId.get();
-  if (mod && !e.shiftKey && (e.key === 'k' || e.code === 'KeyK')) {
+  if (isShortcut(e, 'palette')) {
     e.preventDefault();
     ui.set((s) => ({ ...s, palette: !s.palette }));
     return;
   }
-  if (mod && (e.key === ',' || e.code === 'Comma')) {
+  if (isShortcut(e, 'settings')) {
     e.preventDefault();
     openSettings();
     return;
   }
-  if (mod && !e.shiftKey && (e.key === 'l' || e.code === 'KeyL')) {
+  if (isShortcut(e, 'focusCommand')) {
     e.preventDefault();
     if (active) focusPanel(active);
     return;
   }
-  if (e.key === 'F6') {
+  if (isShortcut(e, 'toggleFocus')) {
     e.preventDefault();
     if (!active) return;
     const inCmd = (e.target as HTMLElement | null)?.closest?.('.cmd');
@@ -37,18 +54,20 @@ export function onGlobalKey(e: KeyboardEvent) {
     else focusPanel(active);
     return;
   }
-  const back = isMac ? e.metaKey && e.key === '[' : e.altKey && e.key === 'ArrowLeft';
-  const fwd = isMac ? e.metaKey && e.key === ']' : e.altKey && e.key === 'ArrowRight';
+  const back = isShortcut(e, 'back');
+  const fwd = !back && isShortcut(e, 'forward');
   if ((back || fwd) && active) {
     e.preventDefault();
     navigate(active, back ? 'back' : 'fwd');
     return;
   }
   const list = Object.values(panels.get()).sort((a, b) => a.num - b.num);
-  if (e.ctrlKey && e.key === 'Tab' && list.length) {
+  const nextPanel = isShortcut(e, 'nextPanel');
+  const prevPanel = !nextPanel && isShortcut(e, 'prevPanel');
+  if ((nextPanel || prevPanel) && list.length) {
     e.preventDefault();
     const i = list.findIndex((p) => p.id === active);
-    const next = list[(i + (e.shiftKey ? -1 : 1) + list.length) % list.length];
+    const next = list[(i + (prevPanel ? -1 : 1) + list.length) % list.length];
     focusPanel(next.id);
     return;
   }

@@ -2,8 +2,22 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { Analysis } from '@bt/command';
-import { ACCENT_CHOICES, ASSIST_LABEL, type AssistLevel, type CredentialStatus } from '@bt/shared';
+import {
+  ACCENT_CHOICES,
+  ASSIST_LABEL,
+  bindingFromEvent,
+  bindingsFor,
+  findConflict,
+  FIXED_SHORTCUTS,
+  formatBinding,
+  isReservedBinding,
+  SHORTCUTS,
+  type AssistLevel,
+  type CredentialStatus,
+  type ShortcutId,
+} from '@bt/shared';
 import { api, isMac } from '../api';
+import { keyCapture } from '../keys';
 import { engine } from '../stores/instruments';
 import { settings, updateSettings } from '../stores/settings';
 import { updateState } from '../stores/state';
@@ -291,38 +305,138 @@ function Command() {
 }
 
 function Keys() {
-  const m = isMac ? '⌘' : 'Ctrl+';
-  const rows: Array<[string, string]> = [
-    ['Tab / Shift+Tab', '채우기 / 이전 토큰 다시 고르기'],
-    ['Enter', '실행. 애매하면 첫 Enter는 선택만'],
-    ['↓ ↑', '목록에서 고르기. 빈 줄의 ↑는 이전 명령'],
-    ['→ / End', '흐린 글씨 받아들이기'],
-    ['Esc', '목록 닫기 → 줄 지우기 → 패널 본문으로'],
-    ['F1 / ' + m + '/', '설명 창 / 문법 요약'],
-    [`${m}Shift+E / C / X / I`, '자산군 EQUITY / CRYPTO / CURNCY / INDEX'],
-    [`${m}K`, '명령 팔레트'],
-    [`${m}L`, '활성 패널의 커맨드 라인으로'],
-    ['F6', '커맨드 라인 ↔ 패널 본문'],
-    [`${m},`, '설정'],
-    [isMac ? '⌘[ / ⌘]' : 'Alt+← / Alt+→', '패널 화면 뒤로 / 앞으로'],
-    ['Ctrl+Tab, ' + m + '1…9', '패널 전환'],
-  ];
+  const keys = useStore(settings, (s) => s.keys);
+  const [capturing, setCapturing] = useState<{ id: ShortcutId; index: number } | null>(null);
+  const [warn, setWarn] = useState<string | null>(null);
+
+  const setKeys = (id: ShortcutId, list: string[] | undefined) => {
+    const next = { ...keys };
+    if (list === undefined) delete next[id];
+    else next[id] = list;
+    void updateSettings({ keys: next });
+  };
+
+  // 새 키 받기: 다음에 누른 조합을 그 자리에 넣어요. Esc는 취소, Backspace는 그 키 빼기
+  useEffect(() => {
+    if (!capturing) return;
+    keyCapture.active = true;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const cur = bindingsFor(capturing.id, keys, isMac);
+      if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        setCapturing(null);
+        return;
+      }
+      if (e.key === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        setKeys(capturing.id, cur.filter((_, i) => i !== capturing.index));
+        setCapturing(null);
+        return;
+      }
+      const b = bindingFromEvent(e, isMac);
+      if (!b) return;
+      if (isReservedBinding(b, isMac)) {
+        setWarn(`${formatBinding(b, isMac)}는 입력이나 고정 키라서 쓸 수 없어요`);
+        return;
+      }
+      const other = findConflict(b, capturing.id, keys, isMac);
+      if (other) {
+        setWarn(`${formatBinding(b, isMac)}는 '${other.label}'에서 쓰고 있어요. 그쪽을 먼저 바꿔 주세요`);
+        return;
+      }
+      const next = [...cur];
+      next[capturing.index] = b;
+      setKeys(capturing.id, [...new Set(next)]);
+      setWarn(null);
+      setCapturing(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      keyCapture.active = false;
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [capturing, keys]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const changed = Object.keys(keys).length > 0;
   return (
     <>
       <h3>단축키</h3>
+      <p className="note">키를 눌러 바꿔요. 새 키를 누르면 바로 적용돼요(Esc 취소, Backspace 그 키 빼기). Windows 언어 전환 단축키(Ctrl+Shift, Ctrl+Space 등)와 겹치면 여기서 다른 키로 바꿔요.</p>
+      {warn && <p className="note" style={{ color: 'var(--error)' }}>{warn}</p>}
+      <table className="cmp keys-table">
+        <tbody>
+          {SHORTCUTS.map((sc) => {
+            const list = bindingsFor(sc.id, keys, isMac);
+            const custom = keys[sc.id] !== undefined;
+            return (
+              <tr key={sc.id}>
+                <td style={{ width: 230 }}>
+                  {sc.label}
+                  <span className="label" style={{ marginLeft: 6, fontSize: 10.5 }}>
+                    {sc.scope}
+                  </span>
+                </td>
+                <td>
+                  {list.map((b, i) => (
+                    <button
+                      key={`${b}${i}`}
+                      className={`keycap ${capturing?.id === sc.id && capturing.index === i ? 'capturing' : ''}`}
+                      title="눌러서 바꾸기"
+                      onClick={() => {
+                        setWarn(null);
+                        setCapturing({ id: sc.id, index: i });
+                      }}
+                    >
+                      {capturing?.id === sc.id && capturing.index === i ? '새 키를 누르세요…' : formatBinding(b, isMac)}
+                    </button>
+                  ))}
+                  {capturing?.id === sc.id && capturing.index === list.length ? (
+                    <button className="keycap capturing">새 키를 누르세요…</button>
+                  ) : (
+                    <button
+                      className="keycap add"
+                      title="키 추가"
+                      aria-label={`${sc.label} 키 추가`}
+                      onClick={() => {
+                        setWarn(null);
+                        setCapturing({ id: sc.id, index: list.length });
+                      }}
+                    >
+                      +
+                    </button>
+                  )}
+                  {list.length === 0 && <span className="label">없음</span>}
+                </td>
+                <td style={{ width: 80, textAlign: 'right' }}>
+                  {custom && (
+                    <button className="btn" style={{ height: 22, fontSize: 11 }} onClick={() => setKeys(sc.id, undefined)}>
+                      기본값
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="field" style={{ marginTop: 12 }}>
+        <button className="btn" disabled={!changed} onClick={() => void updateSettings({ keys: {} })}>
+          모두 기본값으로
+        </button>
+      </div>
+      <h3>바꿀 수 없는 키</h3>
       <table className="cmp">
         <tbody>
-          {rows.map(([k, v]) => (
-            <tr key={k}>
-              <td className="mono" style={{ width: 220 }}>
-                {k}
+          {FIXED_SHORTCUTS.map((f) => (
+            <tr key={f.keys}>
+              <td className="mono" style={{ width: 230 }}>
+                {f.keys.replace('Mod+', isMac ? '⌘' : 'Ctrl+').replace('Alt+', isMac ? '⌥' : 'Alt+')}
               </td>
-              <td>{v}</td>
+              <td>{f.label}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="note">단축키 바꾸기는 다음 버전에서 추가해요. Windows 언어 전환 단축키(Ctrl+Shift)와 겹치면 그때 다시 지정할 수 있게 해요.</p>
     </>
   );
 }

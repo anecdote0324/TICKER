@@ -1,5 +1,7 @@
 // 설정(06 설정 화면). 바꾸면 바로 적용되고, 모든 패널과 떼어낸 창에 함께 적용돼요.
 
+import type { ShortcutMap } from './shortcuts';
+
 export type AssistLevel = 'beginner' | 'standard' | 'expert' | 'off';
 
 export const ASSIST_LABEL: Record<AssistLevel, string> = {
@@ -35,6 +37,8 @@ export interface Settings {
     /** 환율 갱신 주기(초) */
     fxIntervalSec: number;
   };
+  /** 사용자가 바꾼 단축키만(06 단축키). 없는 것은 기본값 */
+  keys: ShortcutMap;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
     tips: true,
   },
   data: { fxIntervalSec: 60 },
+  keys: {},
 };
 
 /** 비밀 정보 입력 상태. 값 자체는 화면으로 돌려보내지 않아요 */

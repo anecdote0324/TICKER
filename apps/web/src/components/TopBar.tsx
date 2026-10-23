@@ -1,6 +1,6 @@
 // 맨 위 줄: 로고, 화면 탭(Market Pulse, +), 날짜, 서울·도쿄·런던·뉴욕 시계와 장 상태(02).
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { EXCHANGES, SESSION_LABEL, sessionState, zonedParts } from '@bt/shared';
 import { useNow } from '../hooks/useNow';
 
@@ -20,6 +20,7 @@ export function TopBar(props: {
   onRename: (id: string, name: string) => void;
   onClose: (id: string) => void;
   onAddPanel: () => void;
+  workspaceMenu?: ReactNode;
 }) {
   // 화면 탭이 하나뿐이면 닫을 수 없어요
   const closable = props.screens.length > 1;
@@ -70,6 +71,7 @@ export function TopBar(props: {
       <button className="btn" style={{ height: 20, padding: '0 8px', fontSize: 11 }} onClick={props.onAddPanel} title="활성 패널 옆에 새 패널">
         패널 추가
       </button>
+      {props.workspaceMenu}
       <div className="clocks">
         <span className="label">
           {seoul.year}.{pad(seoul.month)}.{pad(seoul.day)} ({DAYS[seoul.weekday]})

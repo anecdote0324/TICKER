@@ -7,6 +7,7 @@ import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
 import type { KisAdapter } from './adapters/kis';
 import type { Adapter, AdapterHost } from './adapters/types';
+import { mergeBars, type History } from './history';
 import type { Logger } from './util';
 
 export interface Client {
@@ -31,6 +32,8 @@ export class Hub implements AdapterHost {
   ecb!: EcbAdapter;
   demo!: DemoAdapter;
   kis: KisAdapter | undefined;
+  /** 분봉·이력 저장(없으면 저장하지 않아요. 테스트용) */
+  history: History | undefined;
   /** 메모리에 잠시 둔 봉(같은 요청이 몰리지 않게) */
   private barCache = new Map<string, { at: number; series: Promise<BarSeries> }>();
 
@@ -158,6 +161,7 @@ export class Hub implements AdapterHost {
     // 구독이 끝난 종목의 늦게 온 값은 버려요
     if (!this.refs.has(q.id)) return;
     this.quotes.set(q.id, q);
+    this.history?.onQuote(q);
     this.pending.add(q.id);
     if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(), FLUSH_MS);
   }
@@ -196,9 +200,39 @@ export class Hub implements AdapterHost {
     const ttl = interval === '1m' || interval === '5m' ? 30_000 : 10 * 60_000;
     const hit = this.barCache.get(key);
     if (hit && Date.now() - hit.at < ttl) return hit.series;
-    const series = this.route(inst).bars(inst, interval);
+    const series = this.fetchBars(inst, interval);
     this.barCache.set(key, { at: Date.now(), series });
     series.catch(() => this.barCache.delete(key));
+    return series;
+  }
+
+  /** 소스에서 받은 봉을 저장해 둔 봉과 합쳐요. 소스가 막히면 저장해 둔 봉을 멈춤 배지로 보여 줘요 */
+  private async fetchBars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
+    const adapter = this.route(inst);
+    const keep = adapter.source !== 'DEMO' && this.history;
+    let series: BarSeries;
+    try {
+      series = await adapter.bars(inst, interval);
+    } catch (e) {
+      const saved = keep ? this.history!.load(inst.id, interval) : undefined;
+      if (!saved?.bars.length) throw e;
+      this.log.warn(`${inst.id} 봉을 소스에서 받지 못해 저장해 둔 봉을 써요: ${(e as Error).message}`);
+      const at = saved.savedAt ?? saved.bars[saved.bars.length - 1].t * 1000;
+      return { id: inst.id, interval, bars: saved.bars, fresh: { source: adapter.source, mode: 'poll', asOf: at, receivedAt: at, intervalMs: 60_000 } };
+    }
+    if (!keep) return series;
+    try {
+      this.history!.save(inst.id, interval, series.bars);
+      // 분봉은 소스가 주는 범위(오늘·최근 몇 시간)보다 앞의 저장분과 지금 만들고 있는 봉까지 이어 붙여요
+      if (interval === '1m') {
+        const live = this.history!.liveBar(inst.id);
+        let bars = mergeBars(this.history!.load(inst.id, interval).bars, series.bars);
+        if (live && (bars.length === 0 || live.t > bars[bars.length - 1].t)) bars = [...bars, live];
+        series = { ...series, bars: bars.slice(-Math.max(series.bars.length, 2000)) };
+      }
+    } catch (e) {
+      this.log.warn(`봉 저장 실패: ${(e as Error).message}`);
+    }
     return series;
   }
 

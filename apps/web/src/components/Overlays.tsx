@@ -1,6 +1,6 @@
 // 도움말, 알림
 
-import { isMac } from '../api';
+import { shortcutLabel } from '../keys';
 import { useStore } from '../stores/store';
 import { ui } from '../stores/ui';
 import { SyntaxCard } from './CandidateList';
@@ -9,7 +9,6 @@ export function HelpOverlay() {
   const help = useStore(ui, (s) => s.help);
   if (!help) return null;
   const close = () => ui.set((s) => ({ ...s, help: null }));
-  const m = isMac ? '⌘' : 'Ctrl+';
   return (
     <div className="overlay" onMouseDown={close} onKeyDown={(e) => e.key === 'Escape' && close()} tabIndex={-1}>
       <div className="help" onMouseDown={(e) => e.stopPropagation()}>
@@ -27,7 +26,16 @@ export function HelpOverlay() {
               <b>데이터 신선도</b>: 배지가 없으면 실시간이에요. 실시간이 아닌 값에는 `5초 주기`, `15분 지연`, `일별 10/21`, `마감`, `⚠ 멈춤`, `데모` 같은 회색 배지가 붙어요. 배지에 마우스를 올리면 출처와 기준 시각을 보여 줘요.
             </p>
             <p className="label">
-              {m}K 명령 팔레트 · {m}L 커맨드 라인 · F6 본문 ↔ 커맨드 라인 · {m}, 설정 · Esc 닫기
+              {[
+                [shortcutLabel('palette'), '명령 팔레트'],
+                [shortcutLabel('focusCommand'), '커맨드 라인'],
+                [shortcutLabel('toggleFocus'), '본문 ↔ 커맨드 라인'],
+                [shortcutLabel('settings'), '설정'],
+                ['Esc', '닫기'],
+              ]
+                .filter(([k]) => k)
+                .map(([k, v]) => `${k} ${v}`)
+                .join(' · ')}
             </p>
           </>
         )}

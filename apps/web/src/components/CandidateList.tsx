@@ -3,6 +3,7 @@
 import { createPortal } from 'react-dom';
 import type { Analysis, Range, Row } from '@bt/command';
 import { ASSET_LABEL, FUNCTIONS, MARKET_LABEL, versionLabel, type AssistLevel } from '@bt/shared';
+import { shortcutLabel } from '../keys';
 import { getInstrument } from '../stores/instruments';
 
 interface Props {
@@ -127,7 +128,7 @@ export function CandidateList(p: Props) {
             {a.message && <span className="msg">{a.message}</span>}
           </div>
         )}
-        {assist === 'beginner' && <div className="ac-keys">Tab 자동완성 · ↑↓ 고르기 · ⏎ 실행 · Esc 닫기 · F1 설명</div>}
+        {assist === 'beginner' && <div className="ac-keys">Tab 자동완성 · ↑↓ 고르기 · ⏎ 실행 · Esc 닫기 · {shortcutLabel('descCard')} 설명</div>}
       </div>
       {showDescPane && (p.showDesc === 'syntax' ? <SyntaxCard /> : hl && <DescCard row={hl} />)}
     </div>,
@@ -254,7 +255,7 @@ BTC     –      CRYPTO   GP     ⏎  비트코인(USDT) 가격 차트
         <span className="k">시장 </span>KS 코스피 · KQ 코스닥 · US 미국
       </div>
       <div>
-        <span className="k">키 </span>Tab 자동완성 · ↑↓ 고르기 · ⏎ 실행 · Esc 닫기 · F1 설명 · ↑(빈 줄) 이전 명령
+        <span className="k">키 </span>Tab 자동완성 · ↑↓ 고르기 · ⏎ 실행 · Esc 닫기 · {shortcutLabel('descCard')} 설명 · ↑(빈 줄) 이전 명령
       </div>
       <div className="k">Tab으로 받아들이는 것은 접근성 가이드(APG)의 콤보박스 규칙과 일부러 다르게 정했어요.</div>
     </div>

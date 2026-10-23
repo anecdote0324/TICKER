@@ -2,10 +2,12 @@
 // 자동완성 도움 수준 빠른 전환, 명령 팔레트와 도움말 안내(02).
 
 import { useState } from 'react';
-import { ASSIST_LABEL, SOURCE_LABEL, formatInterval, type AssistLevel, type SourceStatus } from '@bt/shared';
+import { ASSIST_LABEL, SOURCE_LABEL, bindingsFor, displayName, formatBinding, formatInterval, type AssistLevel, type ShortcutId, type SourceStatus } from '@bt/shared';
 import { isMac } from '../api';
+import { focusRegistry } from './focus';
 import { feedStatus } from '../stores/feed';
-import { indexState } from '../stores/instruments';
+import { getInstrument, indexState } from '../stores/instruments';
+import { activePanelId, LINK_COLORS, panels, type LinkColor } from '../stores/panels';
 import { settings, updateSettings } from '../stores/settings';
 import { useStore } from '../stores/store';
 import { openSettings, ui } from '../stores/ui';
@@ -28,12 +30,47 @@ function SourceItem({ s }: { s: SourceStatus }) {
   );
 }
 
+/** 연동 그룹: 색마다 지금 함께 보고 있는 종목(02 상태 표시줄). 누르면 그 그룹의 첫 패널로 */
+function LinkGroups() {
+  const all = useStore(panels);
+  const list = Object.values(all).sort((a, b) => a.num - b.num);
+  return (
+    <>
+      {(Object.keys(LINK_COLORS) as LinkColor[]).map((c) => {
+        const ps = list.filter((p) => p.link === c);
+        if (ps.length === 0) return null;
+        const inst = getInstrument(ps.find((p) => p.securityId)?.securityId);
+        const code = inst ? (inst.market === 'US' ? `${inst.code} US` : inst.code) : '—';
+        return (
+          <button
+            key={c}
+            className="link-group"
+            title={`연동 그룹 ${LINK_COLORS[c].label}: 패널 ${ps.map((p) => p.num).join('·')}${inst ? ` · ${displayName(inst)}` : ''}`}
+            onClick={() => {
+              activePanelId.set(ps[0].id);
+              focusRegistry.command.get(ps[0].id)?.('');
+            }}
+          >
+            <i style={{ background: LINK_COLORS[c].color }} />
+            <span className="mono">{code}</span>
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function keyLabel(id: ShortcutId, keys: Parameters<typeof bindingsFor>[1]) {
+  const b = bindingsFor(id, keys, isMac)[0];
+  return b ? formatBinding(b, isMac) : '';
+}
+
 export function StatusBar() {
   const fs = useStore(feedStatus);
   const idx = useStore(indexState);
   const assist = useStore(settings, (s) => s.commandLine.assist);
+  const keys = useStore(settings, (s) => s.keys);
   const [menu, setMenu] = useState(false);
-  const mod = isMac ? '⌘' : 'Ctrl+';
   return (
     <footer className="statusbar">
       {!fs.connected && <span className="warn">⚠ 내장 서버 연결 끊김 · 다시 연결 중</span>}
@@ -47,6 +84,7 @@ export function StatusBar() {
       ))}
       <span className="label">{idx.loading ? '종목 목록 불러오는 중…' : `종목 ${idx.count.toLocaleString()}개`}</span>
       <span className="spacer" />
+      <LinkGroups />
       <span style={{ position: 'relative' }}>
         <button onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}>
           도움: {ASSIST_LABEL[assist]} ▾
@@ -71,8 +109,8 @@ export function StatusBar() {
           </div>
         )}
       </span>
-      <span>명령 팔레트 {mod}K</span>
-      <span>설정 {mod},</span>
+      {keyLabel('palette', keys) && <span>명령 팔레트 {keyLabel('palette', keys)}</span>}
+      {keyLabel('settings', keys) && <span>설정 {keyLabel('settings', keys)}</span>}
       <button onClick={() => ui.set((s) => ({ ...s, help: 'help' }))}>도움말 ?</button>
     </footer>
   );
