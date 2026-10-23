@@ -32,6 +32,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build
+      # 첫 실행 때 인터넷이 없어도 종목 검색이 되게 종목 목록 사본을 넣어요(05 §6.1). 저장소에는 올리지 않아요
+      - run: pnpm snapshot
       # Windows의 PowerShell은 -c.extraMetadata.version 같은 인자를 점에서 나눌 수 있어서 bash로 실행해요
       - run: pnpm --filter @bt/desktop exec electron-builder --publish never "-c.extraMetadata.version=${{ steps.ver.outputs.version }}"
         shell: bash

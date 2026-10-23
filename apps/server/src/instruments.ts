@@ -1,8 +1,10 @@
 // 종목 목록(05 §6.1): KIS 종목 마스터(국내·미국), Binance USDT 현물, 정해 둔 지수·환율 목록.
 // 마스터 파일은 키 없이 내려받을 수 있어요. 하루에 한 번 받아서 데이터 폴더에 캐시해요.
+// 받지 못했고 캐시도 없으면(첫 실행인데 인터넷이 없을 때) 설치 파일에 넣은 사본으로 대신해요.
 
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
 import {
   CRYPTO_EXCLUDED_BASES,
@@ -30,12 +32,46 @@ const cp949 = new TextDecoder('euc-kr');
 /** 국내 마스터에 넣을 그룹: 주식, ETF, ETN, 리츠, 예탁증서, 외국주권, 인프라·뮤추얼 펀드. ELW·신주인수권·수익증권은 빼요 */
 const KR_GROUPS = new Set(['ST', 'EF', 'EN', 'RT', 'DR', 'FS', 'IF', 'MF']);
 
-interface MasterSource {
-  name: string;
-  count: number;
-  asOf?: string;
-  error?: string;
+type MasterSource = InstrumentsResponse['sources'][number];
+
+/** 설치 파일에 넣는 종목 목록 사본(05 §6.1). 저장소에는 올리지 않고 설치 파일을 만들 때 내려받아 만들어요 */
+export interface InstrumentSnapshot {
+  builtAt: number;
+  instruments: Instrument[];
 }
+
+export async function readSnapshot(file: string | undefined): Promise<InstrumentSnapshot | undefined> {
+  if (!file) return undefined;
+  try {
+    const raw = await readFile(file);
+    return JSON.parse(gunzipSync(raw).toString('utf8')) as InstrumentSnapshot;
+  } catch {
+    return undefined;
+  }
+}
+
+export function encodeSnapshot(r: InstrumentsResponse): Buffer {
+  const fixed = new Set(staticInstruments().map((i) => i.id));
+  const snap: InstrumentSnapshot = { builtAt: r.builtAt, instruments: r.instruments.filter((i) => !fixed.has(i.id)) };
+  return gzipSync(JSON.stringify(snap), { level: 9 });
+}
+
+/** 받지 못한 소스를 사본에서 골라내는 조건 */
+const SNAPSHOT_PART: Record<string, (i: Instrument) => boolean> = {
+  kospi: (i) => i.market === 'KS',
+  kosdaq: (i) => i.market === 'KQ',
+  nas: (i) => i.market === 'US' && i.exchange === 'NAS',
+  nys: (i) => i.market === 'US' && i.exchange === 'NYS',
+  ams: (i) => i.market === 'US' && i.exchange === 'AMS',
+  binance: (i) => i.assetClass === 'CRYPTO',
+};
+
+function fromSnapshot(snap: InstrumentSnapshot | undefined, part: string): Instrument[] {
+  const f = SNAPSHOT_PART[part];
+  return snap && f ? snap.instruments.filter(f) : [];
+}
+
+const snapDate = (snap: InstrumentSnapshot) => new Date(snap.builtAt).toISOString().slice(0, 10);
 
 async function loadMaster(dataDir: string, file: string, log: Logger): Promise<{ bytes: Uint8Array; asOf: string } | { error: string }> {
   const dir = join(dataDir, 'masters');
@@ -205,18 +241,27 @@ export function cryptoFromTickers(tickers: Ticker24h[]): Instrument[] {
   return out;
 }
 
-export async function buildInstruments(dataDir: string, binance: BinanceAdapter, log: Logger): Promise<InstrumentsResponse> {
+export async function buildInstruments(dataDir: string, binance: BinanceAdapter, log: Logger, snapshotFile?: string): Promise<InstrumentsResponse> {
   const sources: MasterSource[] = [];
   const all: Instrument[] = [];
+  // 사본은 필요할 때만 읽어요
+  let snap: Promise<InstrumentSnapshot | undefined> | undefined;
+  const fallback = async (part: string, name: string, error: string, into: Instrument[]) => {
+    snap ??= readSnapshot(snapshotFile);
+    const s = await snap;
+    const list = fromSnapshot(s, part);
+    into.push(...list);
+    sources.push(list.length && s ? { name, count: list.length, asOf: snapDate(s), error, snapshot: true } : { name, count: 0, error });
+  };
 
   const kr: Instrument[] = [];
-  for (const [market, file] of [
-    ['KS', MASTERS.kospi],
-    ['KQ', MASTERS.kosdaq],
+  for (const [market, file, part] of [
+    ['KS', MASTERS.kospi, 'kospi'],
+    ['KQ', MASTERS.kosdaq, 'kosdaq'],
   ] as const) {
     const m = await loadMaster(dataDir, file, log);
     if ('error' in m) {
-      sources.push({ name: file, count: 0, error: m.error });
+      await fallback(part, file, m.error, kr);
       continue;
     }
     const list = parseKrMaster(m.bytes, market);
@@ -227,14 +272,14 @@ export async function buildInstruments(dataDir: string, binance: BinanceAdapter,
   all.push(...kr);
 
   const us: Instrument[] = [];
-  for (const [ex, file] of [
-    ['NAS', MASTERS.nas],
-    ['NYS', MASTERS.nys],
-    ['AMS', MASTERS.ams],
+  for (const [ex, file, part] of [
+    ['NAS', MASTERS.nas, 'nas'],
+    ['NYS', MASTERS.nys, 'nys'],
+    ['AMS', MASTERS.ams, 'ams'],
   ] as const) {
     const m = await loadMaster(dataDir, file, log);
     if ('error' in m) {
-      sources.push({ name: file, count: 0, error: m.error });
+      await fallback(part, file, m.error, us);
       continue;
     }
     const list = parseUsMaster(m.bytes, ex);
@@ -255,22 +300,26 @@ export async function buildInstruments(dataDir: string, binance: BinanceAdapter,
     sources.push({ name: 'Binance USDT', count: cry.length, asOf: new Date().toISOString().slice(0, 10) });
   } catch (e) {
     log.warn(`Binance 종목 목록을 받지 못했어요: ${(e as Error).message}`);
-    sources.push({ name: 'Binance USDT', count: 0, error: (e as Error).message });
-    // 목록을 못 받으면 주요 코인만이라도 넣어요
-    CRYPTO_KO.forEach(([code, nameKo], i) =>
-      all.push({
-        id: `CRY:${code}`,
-        assetClass: 'CRYPTO',
-        code,
-        nameKo,
-        nameEn: code,
-        aliases: [`${code}USDT`],
-        exchange: 'BINANCE',
-        currency: 'USDT',
-        feedSymbol: `${code}USDT`,
-        popularity: 1 - i / CRYPTO_KO.length,
-      }),
-    );
+    const cry: Instrument[] = [];
+    await fallback('binance', 'Binance USDT', (e as Error).message, cry);
+    all.push(...cry);
+    // 사본도 없으면 주요 코인만이라도 넣어요
+    if (cry.length === 0) {
+      CRYPTO_KO.forEach(([code, nameKo], i) =>
+        all.push({
+          id: `CRY:${code}`,
+          assetClass: 'CRYPTO',
+          code,
+          nameKo,
+          nameEn: code,
+          aliases: [`${code}USDT`],
+          exchange: 'BINANCE',
+          currency: 'USDT',
+          feedSymbol: `${code}USDT`,
+          popularity: 1 - i / CRYPTO_KO.length,
+        }),
+      );
+    }
   }
 
   const stat = staticInstruments();

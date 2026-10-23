@@ -78,7 +78,7 @@ export interface InstrumentsResponse {
   /** 색인을 만든 시각 */
   builtAt: number;
   /** 종목 마스터 상태 */
-  sources: Array<{ name: string; count: number; asOf?: string; error?: string }>;
+  sources: Array<{ name: string; count: number; asOf?: string; error?: string; /** 앱에 넣은 사본으로 대신했으면 true */ snapshot?: boolean }>;
 }
 
 export interface BarsResponse extends BarSeries {}

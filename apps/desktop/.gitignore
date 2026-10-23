@@ -1,3 +1,5 @@
 dist/
 web/
 release/
+# 종목 목록 사본(내려받은 데이터라 올리지 않아요)
+snapshot/

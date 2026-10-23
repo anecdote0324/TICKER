@@ -60,6 +60,13 @@ function LinkGroups() {
   );
 }
 
+/** 종목 목록 일부를 설치 파일에 넣은 사본으로 대신했을 때 설명(05 §6.1) */
+function snapshotNote(sources: Array<{ name: string; snapshot?: boolean; error?: string }>): string | undefined {
+  const s = sources.filter((x) => x.snapshot);
+  if (s.length === 0) return undefined;
+  return `받지 못한 종목 목록(${s.map((x) => x.name).join(', ')})을 앱에 넣은 사본으로 대신했어요. 인터넷이 연결되면 다음 실행 때 새로 받아요`;
+}
+
 function keyLabel(id: ShortcutId, keys: Parameters<typeof bindingsFor>[1]) {
   const b = bindingsFor(id, keys, isMac)[0];
   return b ? formatBinding(b, isMac) : '';
@@ -82,7 +89,10 @@ export function StatusBar() {
       {fs.sources.map((s) => (
         <SourceItem key={s.source} s={s} />
       ))}
-      <span className="label">{idx.loading ? '종목 목록 불러오는 중…' : `종목 ${idx.count.toLocaleString()}개`}</span>
+      <span className="label" title={snapshotNote(idx.sources)}>
+        {idx.loading ? '종목 목록 불러오는 중…' : `종목 ${idx.count.toLocaleString()}개`}
+        {!idx.loading && idx.sources.some((s) => s.snapshot) && ` · 사본 ${idx.sources.find((s) => s.snapshot)?.asOf ?? ''}`}
+      </span>
       <span className="spacer" />
       <LinkGroups />
       <span style={{ position: 'relative' }}>

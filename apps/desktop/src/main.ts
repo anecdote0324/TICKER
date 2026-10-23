@@ -190,7 +190,8 @@ app.whenReady().then(async () => {
   buildMenu();
   const dataDir = join(app.getPath('userData'), 'data');
   const webDir = isDev ? join(__dirname, '../../web/dist') : join(process.resourcesPath, 'web');
-  server = await startServer({ dataDir, port: 0, webDir, secretBox: await osSecretBox(), version: app.getVersion() });
+  const snapshotFile = isDev ? join(__dirname, '../snapshot/instruments.json.gz') : join(process.resourcesPath, 'snapshot', 'instruments.json.gz');
+  server = await startServer({ dataDir, port: 0, webDir, snapshotFile, secretBox: await osSecretBox(), version: app.getVersion() });
   await createMainWindow();
 });
 

@@ -9,6 +9,9 @@ files:
 extraResources:
   - from: web
     to: web
+  # 종목 목록 사본(pnpm snapshot으로 만들어요. 저장소에는 올리지 않아요)
+  - from: snapshot
+    to: snapshot
 asar: true
 # 자동 업데이트는 넣지 않아요(01). 업데이트 정보 파일(app-update.yml, latest.yml)도 만들지 않아요
 publish: null

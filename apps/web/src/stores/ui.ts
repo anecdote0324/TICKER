@@ -11,7 +11,7 @@ export interface Toast {
 export const ui = createStore<{
   settings: boolean;
   settingsSection?: string;
-  help: 'help' | 'syntax' | null;
+  help: 'help' | 'syntax' | 'collisions' | null;
   palette: boolean;
   toast: Toast | null;
 }>({ settings: false, help: null, palette: false, toast: null });

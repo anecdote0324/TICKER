@@ -39,7 +39,7 @@
 ```
 pnpm build            # 화면과 Electron 메인 프로세스 묶기
 pnpm --filter @bt/desktop start   # 개발용으로 Electron 창 띄우기
-pnpm dist             # 지금 OS용 설치 파일(apps/desktop/release)
+pnpm dist             # 지금 OS용 설치 파일(apps/desktop/release). 종목 목록 사본(pnpm snapshot)도 새로 받아 넣어요
 ```
 
 ### 새 버전 내기

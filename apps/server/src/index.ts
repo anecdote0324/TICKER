@@ -22,6 +22,8 @@ export interface ServerOptions {
   token?: string;
   /** 배포판 화면 파일 폴더 */
   webDir?: string;
+  /** 설치 파일에 넣은 종목 목록 사본(05 §6.1) */
+  snapshotFile?: string;
   /** 개발 서버(Vite)처럼 추가로 허용할 Origin */
   devOrigins?: string[];
   secretBox?: SecretBox;
@@ -64,13 +66,13 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const makeKis = (cred: KisCredentials) => new KisAdapter(hub, cred, tokenStore);
 
   // 종목 색인은 마스터를 받는 동안 기다리지 않고 시작해요. 목록 요청만 기다려요
-  let instruments: Promise<InstrumentsResponse> = buildInstruments(opts.dataDir, hub.binance, log).then((r) => {
+  let instruments: Promise<InstrumentsResponse> = buildInstruments(opts.dataDir, hub.binance, log, opts.snapshotFile).then((r) => {
     hub.setInstruments(r.instruments);
     return r;
   });
   // 하루에 한 번 다시 만들어요
   const rebuild = setInterval(() => {
-    instruments = buildInstruments(opts.dataDir, hub.binance, log).then((r) => {
+    instruments = buildInstruments(opts.dataDir, hub.binance, log, opts.snapshotFile).then((r) => {
       hub.setInstruments(r.instruments);
       return r;
     });

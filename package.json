@@ -15,7 +15,8 @@
     "build": "pnpm --filter @bt/web build && pnpm --filter @bt/desktop build",
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "vitest run",
-    "dist": "pnpm build && pnpm --filter @bt/desktop dist"
+    "dist": "pnpm build && pnpm snapshot && pnpm --filter @bt/desktop dist",
+    "snapshot": "pnpm --filter @bt/server snapshot ../desktop/snapshot/instruments.json.gz"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

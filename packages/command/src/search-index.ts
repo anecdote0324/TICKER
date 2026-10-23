@@ -58,7 +58,8 @@ export interface SecurityMatch {
   /** 짧은 입력 규칙 때문에 정확으로 치지 않은 정확 일치 */
   shortExact?: boolean;
   codeRanges?: Range[];
-  nameRanges?: Range[];
+  /** 이름 강조 범위를 만들 재료. 범위는 nameRangesOf로 보이는 줄에서만 계산해요 */
+  hl?: { kind: 'ko' | 'ko-full' | 'en'; start?: number; len?: number };
   /** 한/영 변환으로 찾았을 때 변환한 글자 */
   converted?: string;
 }
@@ -98,6 +99,81 @@ export function buildRecord(inst: Instrument): IndexRecord {
     cho: hasHangul(nameKoKey) ? toChosung(nameKoKey) : '',
     keys: hasHangul(nameKoKey) ? hangulToKeys(nameKoKey) : '',
   };
+}
+
+/**
+ * 색인을 화면과 다른 스레드(웹 워커)에서 만들 때 넘기는 압축 형태(05 §6.1, §14.2).
+ * 레코드 객체 수만 개를 넘기면 복사가 느려서, 칸마다 문자열 하나로 이어 붙여 넘겨요.
+ */
+export interface PackedRecords {
+  count: number;
+  codeKeys: string;
+  aliasKeys: string;
+  nameKoKey: string;
+  nameEnKey: string;
+  enStarts: string;
+  jamo: string;
+  cho: string;
+  keys: string;
+}
+
+const REC = '\u0001';
+const ITEM = '\u0002';
+
+export function packRecords(insts: Instrument[]): PackedRecords {
+  const cols = { codeKeys: [] as string[], aliasKeys: [] as string[], nameKoKey: [] as string[], nameEnKey: [] as string[], enStarts: [] as string[], jamo: [] as string[], cho: [] as string[], keys: [] as string[] };
+  for (const inst of insts) {
+    const r = buildRecord(inst);
+    cols.codeKeys.push(r.codeKeys.join(ITEM));
+    cols.aliasKeys.push(r.aliasKeys.join(ITEM));
+    cols.nameKoKey.push(r.nameKoKey);
+    cols.nameEnKey.push(r.nameEnKey);
+    cols.enStarts.push(r.enStarts.map((x) => x.key).join(ITEM));
+    cols.jamo.push(r.jamo);
+    cols.cho.push(r.cho);
+    cols.keys.push(r.keys);
+  }
+  return {
+    count: insts.length,
+    codeKeys: cols.codeKeys.join(REC),
+    aliasKeys: cols.aliasKeys.join(REC),
+    nameKoKey: cols.nameKoKey.join(REC),
+    nameEnKey: cols.nameEnKey.join(REC),
+    enStarts: cols.enStarts.join(REC),
+    jamo: cols.jamo.join(REC),
+    cho: cols.cho.join(REC),
+    keys: cols.keys.join(REC),
+  };
+}
+
+/** 압축 형태를 레코드로 되돌려요. 종목 순서는 packRecords에 넣은 순서와 같아야 해요 */
+export function unpackRecords(insts: Instrument[], p: PackedRecords): IndexRecord[] {
+  if (p.count !== insts.length) throw new Error('색인과 종목 수가 달라요');
+  const col = (s: string) => (p.count === 0 ? [] : s.split(REC));
+  const items = (s: string) => (s ? s.split(ITEM) : []);
+  const codeKeys = col(p.codeKeys);
+  const aliasKeys = col(p.aliasKeys);
+  const nameKoKey = col(p.nameKoKey);
+  const nameEnKey = col(p.nameEnKey);
+  const enStarts = col(p.enStarts);
+  const jamo = col(p.jamo);
+  const cho = col(p.cho);
+  const keys = col(p.keys);
+  const out: IndexRecord[] = new Array(insts.length);
+  for (let i = 0; i < insts.length; i++) {
+    out[i] = {
+      inst: insts[i],
+      codeKeys: items(codeKeys[i]),
+      aliasKeys: items(aliasKeys[i]),
+      nameKoKey: nameKoKey[i],
+      nameEnKey: nameEnKey[i],
+      enStarts: items(enStarts[i]).map((key, word) => ({ key, word })),
+      jamo: jamo[i],
+      cho: cho[i],
+      keys: keys[i],
+    };
+  }
+  return out;
 }
 
 /** 공백을 뺀 위치를 원래 문자열 위치로 바꿔요 */
@@ -173,15 +249,30 @@ export class SearchIndex {
   records: IndexRecord[] = [];
   private byId = new Map<string, IndexRecord>();
   private byCode = new Map<string, IndexRecord[]>();
+  /**
+   * 영문·숫자 검색어용 앞글자 목록: 코드·이름·영문 단어·자판 키의 첫 1글자, 첫 2글자 → 레코드.
+   * 영문·숫자로 찾는 모든 등급은 어떤 키가 검색어로 시작해야 해서, 이 목록 밖은 볼 필요가 없어요
+   */
+  private byFirst1 = new Map<string, IndexRecord[]>();
+  private byFirst2 = new Map<string, IndexRecord[]>();
 
   constructor(instruments: Instrument[] = []) {
     this.setInstruments(instruments);
   }
 
   setInstruments(instruments: Instrument[]) {
-    this.records = instruments.map(buildRecord);
+    this.setRecords(instruments.map(buildRecord));
+  }
+
+  /** 다른 스레드에서 만든 레코드로 바꿔요(packRecords → unpackRecords) */
+  setRecords(records: IndexRecord[]) {
+    this.records = records;
     this.byId.clear();
     this.byCode.clear();
+    this.byFirst1.clear();
+    this.byFirst2.clear();
+    const s1 = new Set<string>();
+    const s2 = new Set<string>();
     for (const r of this.records) {
       this.byId.set(r.inst.id, r);
       for (const k of r.codeKeys) {
@@ -189,7 +280,38 @@ export class SearchIndex {
         if (arr) arr.push(r);
         else this.byCode.set(k, [r]);
       }
+      s1.clear();
+      s2.clear();
+      const addKey = (k: string) => {
+        if (!k) return;
+        const low = k.toLowerCase();
+        s1.add(low[0]);
+        if (low.length >= 2) s2.add(low.slice(0, 2));
+      };
+      for (const k of r.codeKeys) addKey(k);
+      addKey(r.nameKoKey);
+      addKey(r.nameEnKey);
+      for (const e of r.enStarts) addKey(e.key);
+      addKey(r.keys);
+      // 앞자리 0이 빠진 국내 코드(5930 → 005930)
+      const inst = r.inst;
+      if ((inst.market === 'KS' || inst.market === 'KQ') && inst.code.length === 6) addKey(inst.code.replace(/^0+/, ''));
+      for (const k of s1) push(this.byFirst1, k, r);
+      for (const k of s2) push(this.byFirst2, k, r);
     }
+  }
+
+  /** 영문·숫자 검색어가 볼 레코드. 한글 검색어는 부분 일치(T7) 때문에 모두 봐요 */
+  private candidates(q: QueryInfo): IndexRecord[] {
+    if (q.hangul || !q.codeLike) return this.records;
+    const heads = new Set([q.lower, q.key.toLowerCase()].filter(Boolean));
+    const lists: IndexRecord[][] = [];
+    for (const h of heads) {
+      const list = h.length >= 2 ? this.byFirst2.get(h.slice(0, 2)) : this.byFirst1.get(h[0]);
+      if (list) lists.push(list);
+    }
+    if (lists.length <= 1) return lists[0] ?? [];
+    return [...new Set(lists.flat())];
   }
 
   get(id: string): IndexRecord | undefined {
@@ -208,6 +330,10 @@ export class SearchIndex {
     return this.records.filter((r) => r.nameKoKey === k || r.nameEnKey === k);
   }
 
+  /**
+   * 종목 찾기. 키를 누를 때마다 전체 레코드를 한 번 훑어요(05 §14.1 p95 ≤ 2ms).
+   * 레코드마다 객체·함수를 만들지 않고, 강조 범위는 보이는 줄에서만 계산해요(nameRangesOf).
+   */
   search(raw: string, opts: SearchOptions): SecurityMatch[] {
     const q = queryInfo(raw, opts.first);
     if (!q.raw) return [];
@@ -217,105 +343,135 @@ export class SearchIndex {
     const hanToEng = opts.hanEng !== false && q.hangul ? hangulToQwerty(noSpace(q.raw)) : '';
     const engLower = opts.hanEng !== false && q.codeLike && /^[a-zA-Z]{3,}$/.test(q.raw) ? q.raw.toLowerCase() : '';
     const digits = /^\d{1,5}$/.test(q.raw) ? q.raw : '';
+    const sylLen = [...q.lower].length;
+    const latin = !q.hangul && !!q.lower;
+    const jamoQuery = q.hangul && !q.chosung ? q.jamo : '';
+    const substr = q.hangul && !q.chosung;
+    const asset = opts.asset;
+    const market = opts.market;
 
-    for (const r of this.records) {
+    const records = this.candidates(q);
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
       const inst = r.inst;
-      if (opts.asset && inst.assetClass !== opts.asset) continue;
-      if (opts.market && inst.market !== opts.market) continue;
+      if (asset && inst.assetClass !== asset) continue;
+      if (market && inst.market !== market) continue;
 
-      const st: { best: SecurityMatch | null } = { best: null };
-      const consider = (m: SecurityMatch) => {
-        const b = st.best;
-        if (!b || m.tier < b.tier || (m.tier === b.tier && m.sub < b.sub)) st.best = m;
-      };
+      let best: SecurityMatch | null = null;
 
       // T0: 정확한 코드·심볼 별칭·한국어 키워드
       if (q.codeLike && r.codeKeys.includes(q.key)) {
-        if (q.short) consider({ rec: r, tier: 3, sub: -1, via: 'code', shortExact: true, codeRanges: [{ start: 0, end: inst.code.length }] });
-        else consider({ rec: r, tier: 0, sub: 0, via: 'code', codeRanges: [{ start: 0, end: inst.code.length }] });
+        best = q.short
+          ? { rec: r, tier: 3, sub: -1, via: 'code', shortExact: true, codeRanges: [{ start: 0, end: inst.code.length }] }
+          : { rec: r, tier: 0, sub: 0, via: 'code', codeRanges: [{ start: 0, end: inst.code.length }] };
       }
-      if (q.hangul && r.aliasKeys.includes(q.lower) && !q.short) {
-        consider({ rec: r, tier: 0, sub: 1, via: 'alias' });
+      if (q.hangul && !q.short && r.aliasKeys.length && r.aliasKeys.includes(q.lower)) {
+        best = pick(best, { rec: r, tier: 0, sub: 1, via: 'alias' });
       }
       // T1: 정확한 전체 이름
-      if (!st.best || st.best.tier > 1) {
+      if (!best || best.tier > 1) {
         if (r.nameKoKey && r.nameKoKey === q.lower) {
-          if (q.short) consider({ rec: r, tier: 3, sub: -1, via: 'nameKo', shortExact: true });
-          else consider({ rec: r, tier: 1, sub: 0, via: 'nameKo', nameRanges: [{ start: 0, end: (inst.nameKo ?? '').length }] });
+          best = pick(best, q.short ? { rec: r, tier: 3, sub: -1, via: 'nameKo', shortExact: true } : { rec: r, tier: 1, sub: 0, via: 'nameKo', hl: { kind: 'ko-full' } });
         } else if (r.nameEnKey && r.nameEnKey === q.lower) {
-          if (q.short) consider({ rec: r, tier: 3, sub: -1, via: 'nameEn', shortExact: true });
-          else consider({ rec: r, tier: 1, sub: 1, via: 'nameEn' });
+          best = pick(best, q.short ? { rec: r, tier: 3, sub: -1, via: 'nameEn', shortExact: true } : { rec: r, tier: 1, sub: 1, via: 'nameEn' });
         }
       }
-      if (st.best && st.best.tier <= 1) {
-        out.push(st.best);
+      if (best && best.tier <= 1) {
+        out.push(best);
         continue;
       }
       // T3: 코드 앞부분
       if (q.codeLike && q.key) {
-        for (const k of r.codeKeys) {
+        const keys = r.codeKeys;
+        for (let j = 0; j < keys.length; j++) {
+          const k = keys[j];
           if (k.length > q.key.length && k.startsWith(q.key)) {
-            consider({ rec: r, tier: 3, sub: k.length - q.key.length, via: 'code', codeRanges: k === codeKey(inst.code) ? [{ start: 0, end: q.raw.length }] : undefined });
+            best = pick(best, { rec: r, tier: 3, sub: k.length - q.key.length, via: 'code', codeRanges: j === 0 ? [{ start: 0, end: q.raw.length }] : undefined });
             break;
           }
         }
       }
       // T4: 이름 앞부분(한글은 음절, 영문은 단어 시작)
-      if (r.nameKoKey && r.nameKoKey.startsWith(q.lower) && r.nameKoKey !== q.lower) {
-        consider({ rec: r, tier: 4, sub: 0, via: 'nameKo', nameRanges: [mapNoSpaceRange(inst.nameKo ?? '', 0, [...q.lower].length)] });
+      const ko = r.nameKoKey;
+      const koPrefix = !!ko && ko !== q.lower && ko.startsWith(q.lower);
+      if (koPrefix) best = pick(best, { rec: r, tier: 4, sub: 0, via: 'nameKo', hl: { kind: 'ko', start: 0, len: sylLen } });
+      if (q.hangul && r.aliasKeys.length && r.aliasKeys.some((a) => a !== q.lower && a.startsWith(q.lower))) {
+        best = pick(best, { rec: r, tier: 4, sub: 1, via: 'alias' });
       }
-      if (r.aliasKeys.some((a) => a.startsWith(q.lower) && a !== q.lower) && q.hangul) {
-        consider({ rec: r, tier: 4, sub: 1, via: 'alias' });
-      }
-      if (!q.hangul && q.lower) {
-        for (const s of r.enStarts) {
-          if (s.key.startsWith(q.lower)) {
-            consider({ rec: r, tier: 4, sub: s.word === 0 ? 2 : 3, via: 'nameEn', nameRanges: [mapEnRange(inst.nameEn ?? '', s.word, q.lower.length)] });
+      if (latin && (!best || best.tier > 4)) {
+        const starts = r.enStarts;
+        for (let j = 0; j < starts.length; j++) {
+          if (starts[j].key.startsWith(q.lower)) {
+            best = pick(best, { rec: r, tier: 4, sub: starts[j].word === 0 ? 2 : 3, via: 'nameEn', hl: { kind: 'en', start: starts[j].word, len: q.lower.length } });
             break;
           }
         }
       }
+      if (best && best.tier <= 4 && !jamoQuery) {
+        out.push(best);
+        continue;
+      }
       // T5: 자모 앞부분(마지막 음절 미완성). 조합 중에는 T4와 같은 순위(K7)
-      if (q.hangul && !q.chosung && r.jamo && r.jamo.startsWith(q.jamo) && !r.nameKoKey.startsWith(q.lower)) {
-        const syl = [...q.lower].length;
-        consider({ rec: r, tier: opts.composing ? 4 : 5, sub: opts.composing ? 1 : 0, via: 'jamo', nameRanges: [mapNoSpaceRange(inst.nameKo ?? '', 0, syl)] });
+      if (jamoQuery && r.jamo && !koPrefix && r.jamo.startsWith(jamoQuery)) {
+        best = pick(best, { rec: r, tier: opts.composing ? 4 : 5, sub: opts.composing ? 1 : 0, via: 'jamo', hl: { kind: 'ko', start: 0, len: sylLen } });
       }
       // T6: 초성
-      if (chosungQuery && r.cho) {
-        if (r.cho === chosungQuery) consider({ rec: r, tier: 6, sub: 0, via: 'cho', nameRanges: [mapNoSpaceRange(inst.nameKo ?? '', 0, chosungQuery.length)] });
-        else if (r.cho.startsWith(chosungQuery)) consider({ rec: r, tier: 6, sub: 1, via: 'cho', nameRanges: [mapNoSpaceRange(inst.nameKo ?? '', 0, chosungQuery.length)] });
-      } else if (mixedCho && r.nameKoKey) {
-        if (matchMixedChosung(q.lower, r.nameKoKey)) {
-          consider({ rec: r, tier: 6, sub: 2, via: 'cho', nameRanges: [mapNoSpaceRange(inst.nameKo ?? '', 0, [...q.lower].length)] });
+      if (chosungQuery) {
+        if (r.cho && r.cho.startsWith(chosungQuery)) {
+          best = pick(best, { rec: r, tier: 6, sub: r.cho === chosungQuery ? 0 : 1, via: 'cho', hl: { kind: 'ko', start: 0, len: chosungQuery.length } });
         }
+      } else if (mixedCho && ko && matchMixedChosung(q.lower, ko)) {
+        best = pick(best, { rec: r, tier: 6, sub: 2, via: 'cho', hl: { kind: 'ko', start: 0, len: sylLen } });
       }
       // T7: 음절·단어 경계의 부분 일치, 앞자리 0이 빠진 코드
-      if (q.hangul && !q.chosung && r.nameKoKey) {
-        const idx = r.nameKoKey.indexOf(q.lower);
-        if (idx > 0) consider({ rec: r, tier: 7, sub: idx, via: 'substr', nameRanges: [mapNoSpaceRange(inst.nameKo ?? '', [...r.nameKoKey.slice(0, idx)].length, [...q.lower].length)] });
+      if (substr && ko && (!best || best.tier > 7)) {
+        const idx = ko.indexOf(q.lower);
+        if (idx > 0) best = pick(best, { rec: r, tier: 7, sub: idx, via: 'substr', hl: { kind: 'ko', start: [...ko.slice(0, idx)].length, len: sylLen } });
       }
-      if (digits && inst.market && (inst.market === 'KS' || inst.market === 'KQ') && inst.code.length === 6) {
-        if (inst.code.replace(/^0+/, '') === digits && digits.length < 6) {
-          consider({ rec: r, tier: 7, sub: 0, via: 'zero', codeRanges: [{ start: 6 - digits.length, end: 6 }] });
+      if (digits && (inst.market === 'KS' || inst.market === 'KQ') && inst.code.length === 6 && digits.length < 6) {
+        if (inst.code.replace(/^0+/, '') === digits) {
+          best = pick(best, { rec: r, tier: 7, sub: 0, via: 'zero', codeRanges: [{ start: 6 - digits.length, end: 6 }] });
         }
       }
       // T8: 한/영 변환
       if (hanToEng.length >= 2) {
-        if (r.codeKeys.includes(hanToEng)) consider({ rec: r, tier: 8, sub: 0, via: 'hanToEng', converted: hanToEng });
-        else if (hanToEng.length >= 2 && r.codeKeys.some((k) => k.length >= 3 && k.startsWith(hanToEng))) {
-          consider({ rec: r, tier: 8, sub: 1, via: 'hanToEng', converted: hanToEng });
+        if (r.codeKeys.includes(hanToEng)) best = pick(best, { rec: r, tier: 8, sub: 0, via: 'hanToEng', converted: hanToEng });
+        else if (r.codeKeys.some((k) => k.length >= 3 && k.startsWith(hanToEng))) {
+          best = pick(best, { rec: r, tier: 8, sub: 1, via: 'hanToEng', converted: hanToEng });
         }
       }
       if (engLower && r.keys && r.keys.startsWith(engLower)) {
-        consider({ rec: r, tier: 8, sub: 2, via: 'engToHan' });
+        best = pick(best, { rec: r, tier: 8, sub: 2, via: 'engToHan' });
       }
-      if (st.best) out.push(st.best);
+      if (best) out.push(best);
     }
 
     // 영→한 줄은 다른 결과가 3개 미만일 때만(05 §8.2)
-    const nonConv = out.filter((m) => m.via !== 'engToHan').length;
+    let nonConv = 0;
+    for (const m of out) if (m.via !== 'engToHan') nonConv++;
     return nonConv >= 3 ? out.filter((m) => m.via !== 'engToHan') : out;
   }
+}
+
+function push(m: Map<string, IndexRecord[]>, k: string, r: IndexRecord) {
+  const arr = m.get(k);
+  if (arr) arr.push(r);
+  else m.set(k, [r]);
+}
+
+/** 더 좋은 등급(작은 tier, 같으면 작은 sub)을 골라요 */
+function pick(best: SecurityMatch | null, m: SecurityMatch): SecurityMatch {
+  return !best || m.tier < best.tier || (m.tier === best.tier && m.sub < best.sub) ? m : best;
+}
+
+/** 이름 강조 범위(보이는 줄에서만 계산해요) */
+export function nameRangesOf(m: SecurityMatch): Range[] | undefined {
+  const hl = m.hl;
+  if (!hl) return undefined;
+  const inst = m.rec.inst;
+  if (hl.kind === 'ko-full') return [{ start: 0, end: (inst.nameKo ?? '').length }];
+  if (hl.kind === 'ko') return [mapNoSpaceRange(inst.nameKo ?? '', hl.start ?? 0, hl.len ?? 0)];
+  return [mapEnRange(inst.nameEn ?? '', hl.start ?? 0, hl.len ?? 0)];
 }
 
 /** 음절 + 초성 섞인 검색어: 음절은 같고, 자음은 그 음절의 초성과 같아야 해요(삼ㅅㅈㅈ) */

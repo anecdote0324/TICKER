@@ -1374,3 +1374,31 @@ button {
   height: 8px;
   display: inline-block;
 }
+
+/* 겹치는 이름 표(05 §7.7) */
+.help.wide {
+  width: 1100px;
+  max-width: 94vw;
+}
+.collision-filter {
+  background: #151515;
+  border: 1px solid #333;
+  color: var(--value-hi);
+  height: 26px;
+  padding: 0 8px;
+  font: 12px var(--mono);
+  width: 260px;
+}
+.collision-wrap {
+  max-height: 62vh;
+  overflow: auto;
+  margin-top: 8px;
+}
+.collision-table td {
+  vertical-align: top;
+}
+.collision-table th {
+  position: sticky;
+  top: 0;
+  background: #121212;
+}

@@ -33,7 +33,7 @@ import {
   type CommandWord,
 } from './lexicon';
 import { sortMatches } from './rank';
-import type { SearchIndex, SecurityMatch } from './search-index';
+import { nameRangesOf, type SearchIndex, type SecurityMatch } from './search-index';
 import type {
   Analysis,
   ChosenToken,
@@ -48,6 +48,8 @@ import type {
 
 export const MAX_ROWS = 8;
 const MAX_MORE = 200;
+/** 종목 줄을 만드는 최대 수(더 보기 + 끼워 넣을 기능 줄 여유) */
+const ROW_CAP = MAX_MORE + 20;
 
 interface RawToken {
   text: string;
@@ -181,6 +183,11 @@ export interface AnalyzeOptions {
 }
 
 export class CommandEngine {
+  /** 이번 해석에서 만들지 않은 종목 줄 수(더 보기 수에 더해요) */
+  private hiddenRows = 0;
+  /** 이번 해석에서 만들 종목 줄 수(목록을 펼치지 않았으면 보이는 8줄과 여유만) */
+  private rowCap = ROW_CAP;
+
   constructor(public index: SearchIndex) {}
 
   // ── 해석 ──
@@ -588,7 +595,7 @@ export class CommandEngine {
       flags,
       canonical: canonicalSecurity(inst),
       codeRanges: m.codeRanges,
-      nameRanges: m.nameRanges,
+      nameRanges: nameRangesOf(m),
       remembered: rememberedId === id,
       tier: m.tier,
       insert: inst.code,
@@ -725,7 +732,21 @@ export class CommandEngine {
   private securityRows(seg: Segment, list: SecurityMatch[], ctx: EngineContext, firstSlot: boolean): Row[] {
     const rows: Row[] = [];
     const remembered = ctx.remembered?.(normalizeText(seg.text).toLowerCase());
-    const secRows = list.map((m) => this.securityRow(m, ctx, remembered));
+    // 줄은 더 보기에 보일 만큼만 만들어요(05 §14.1). 기억된 줄과 한/영 변환 줄은 뒤에 있어도 넣어요
+    let shown = list;
+    const cap = this.rowCap;
+    if (list.length > cap) {
+      shown = list.slice(0, cap);
+      const rememberedInst = remembered?.startsWith('sec:') ? remembered.slice(4) : undefined;
+      if (rememberedInst || hasHangul(seg.text)) {
+        for (let i = cap; i < list.length; i++) {
+          const m = list[i];
+          if (m.rec.inst.id === rememberedInst || (m.via === 'hanToEng' && m.tier === 8)) shown.push(m);
+        }
+      }
+      this.hiddenRows += list.length - shown.length;
+    }
+    const secRows = shown.map((m) => this.securityRow(m, ctx, remembered));
 
     // 첫 칸에서는 기능 줄이 같은 등급의 종목 줄보다 먼저예요(최대 3줄)
     let fnRows: Row[] = [];
@@ -843,9 +864,12 @@ export class CommandEngine {
 
     // 목록
     const listSegment = opts.listSegment ?? (plan.kind === 'select' && current >= segs.length ? plan.segment : current);
+    this.hiddenRows = 0;
+    // 펼치지 않았으면 8줄 + 기능 줄을 끼워 넣을 여유만 만들어요
+    this.rowCap = opts.expanded ? ROW_CAP : MAX_ROWS + 8;
     let rows = this.rowsFor(listSegment, segs, matches, ctx, input, security);
     const limit = opts.expanded ? MAX_MORE : MAX_ROWS;
-    const more = Math.max(0, rows.length - limit);
+    const more = Math.max(0, rows.length - limit) + this.hiddenRows;
     rows = rows.slice(0, limit);
 
     const ghost = this.ghostFor(input, cursor, composing, segs, current, rows, plan, ctx, security, fn, fnImplied);

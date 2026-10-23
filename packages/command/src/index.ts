@@ -4,3 +4,4 @@ export * from './search-index';
 export * from './rank';
 export * from './types';
 export * from './engine';
+export * from './collisions';

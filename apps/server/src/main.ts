@@ -9,12 +9,15 @@ const dataDir = process.env.BT_DATA_DIR ?? join(root, 'data');
 const port = Number(process.env.BT_PORT ?? 8787);
 const token = process.env.BT_TOKEN; // 없으면 실행할 때마다 새로 만들어요
 const webDir = process.env.BT_WEB_DIR;
+// pnpm snapshot으로 만든 종목 목록 사본이 있으면 써요
+const snapshotFile = process.env.BT_SNAPSHOT ?? join(root, 'apps/desktop/snapshot/instruments.json.gz');
 
 const server = await startServer({
   dataDir,
   port,
   token,
   webDir,
+  snapshotFile,
   devOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
 });
 
