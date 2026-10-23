@@ -23,7 +23,8 @@ export const MARKET_LABEL: Record<Market, string> = {
 };
 
 /** 후보 줄과 설명 창의 표시(05 §4.5) */
-export type InstrumentFlag = 'PREF' | 'ETF' | 'ETN' | 'SPAC' | 'ADR' | 'REIT' | 'HALT' | 'DELISTED';
+/** LOOKUP: 마스터에 없어서 한국투자증권에서 직접 조회한 종목 */
+export type InstrumentFlag = 'PREF' | 'ETF' | 'ETN' | 'SPAC' | 'ADR' | 'REIT' | 'HALT' | 'DELISTED' | 'LOOKUP';
 
 export interface Instrument {
   /** 'EQ:KS:005930', 'EQ:US:AAPL', 'CRY:BTC', 'CUR:USDKRW', 'IDX:KOSPI' */

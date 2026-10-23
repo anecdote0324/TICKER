@@ -1402,3 +1402,43 @@ button {
   top: 0;
   background: #121212;
 }
+.palette-foot {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-top: 1px solid #1e1e1e;
+}
+
+/* 지금 명령의 토큰 뜻(05 §12.5) */
+.cmd-tokens {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  font: 500 12px var(--cmd);
+  padding: 0 2px;
+  line-height: 20px;
+  white-space: pre;
+  color: transparent;
+  pointer-events: none;
+}
+.cmd-tokens .tok {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.cmd-tokens .tok:hover {
+  text-decoration: underline dotted var(--label);
+  text-underline-offset: 3px;
+  text-decoration-color: var(--label);
+}
+.cmd-tip {
+  position: absolute;
+  top: 100%;
+  z-index: 50;
+  margin-top: 2px;
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  color: var(--value);
+  font-size: 11px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}

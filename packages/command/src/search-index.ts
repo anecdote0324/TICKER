@@ -271,34 +271,41 @@ export class SearchIndex {
     this.byCode.clear();
     this.byFirst1.clear();
     this.byFirst2.clear();
+    for (const r of this.records) this.link(r);
+  }
+
+  /** 직접 조회로 찾은 종목을 더해요(05 §4.5). 이미 있으면 바꾸지 않아요 */
+  addInstrument(inst: Instrument): IndexRecord {
+    const had = this.byId.get(inst.id);
+    if (had) return had;
+    const r = buildRecord(inst);
+    this.records.push(r);
+    this.link(r);
+    return r;
+  }
+
+  /** 레코드를 찾기 표(id, 코드, 앞글자 목록)에 넣어요 */
+  private link(r: IndexRecord) {
+    this.byId.set(r.inst.id, r);
+    for (const k of r.codeKeys) push(this.byCode, k, r);
     const s1 = new Set<string>();
     const s2 = new Set<string>();
-    for (const r of this.records) {
-      this.byId.set(r.inst.id, r);
-      for (const k of r.codeKeys) {
-        const arr = this.byCode.get(k);
-        if (arr) arr.push(r);
-        else this.byCode.set(k, [r]);
-      }
-      s1.clear();
-      s2.clear();
-      const addKey = (k: string) => {
-        if (!k) return;
-        const low = k.toLowerCase();
-        s1.add(low[0]);
-        if (low.length >= 2) s2.add(low.slice(0, 2));
-      };
-      for (const k of r.codeKeys) addKey(k);
-      addKey(r.nameKoKey);
-      addKey(r.nameEnKey);
-      for (const e of r.enStarts) addKey(e.key);
-      addKey(r.keys);
-      // 앞자리 0이 빠진 국내 코드(5930 → 005930)
-      const inst = r.inst;
-      if ((inst.market === 'KS' || inst.market === 'KQ') && inst.code.length === 6) addKey(inst.code.replace(/^0+/, ''));
-      for (const k of s1) push(this.byFirst1, k, r);
-      for (const k of s2) push(this.byFirst2, k, r);
-    }
+    const addKey = (k: string) => {
+      if (!k) return;
+      const low = k.toLowerCase();
+      s1.add(low[0]);
+      if (low.length >= 2) s2.add(low.slice(0, 2));
+    };
+    for (const k of r.codeKeys) addKey(k);
+    addKey(r.nameKoKey);
+    addKey(r.nameEnKey);
+    for (const e of r.enStarts) addKey(e.key);
+    addKey(r.keys);
+    // 앞자리 0이 빠진 국내 코드(5930 → 005930)
+    const inst = r.inst;
+    if ((inst.market === 'KS' || inst.market === 'KQ') && inst.code.length === 6) addKey(inst.code.replace(/^0+/, ''));
+    for (const k of s1) push(this.byFirst1, k, r);
+    for (const k of s2) push(this.byFirst2, k, r);
   }
 
   /** 영문·숫자 검색어가 볼 레코드. 한글 검색어는 부분 일치(T7) 때문에 모두 봐요 */

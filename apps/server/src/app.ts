@@ -117,6 +117,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
   });
 
+  // 목록에 없는 코드를 한국투자증권에서 직접 조회해요(05 §4.5). 찾으면 이번 실행 동안 목록에 더해요
+  app.get<{ Querystring: { code?: string; market?: string } }>('/api/lookup', async (req, reply) => {
+    const code = (req.query.code ?? '').toUpperCase();
+    const market = req.query.market === 'US' ? 'US' : 'KR';
+    if (!/^[0-9A-Z.\/-]{1,12}$/.test(code)) return reply.code(400).send({ error: '코드 모양이 아니에요' });
+    if (!hub.kis) return reply.code(409).send({ error: '한국투자증권 키를 넣으면 목록에 없는 코드도 직접 조회할 수 있어요' });
+    try {
+      const inst = await hub.kis.lookup(code, market);
+      hub.addInstrument(inst);
+      return inst;
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
   app.get<{ Querystring: { ids?: string } }>('/api/quotes', async (req) => hub.quoteSnapshot((req.query.ids ?? '').split(',').filter(Boolean)));
 
   app.get('/api/status', async () => ({ sources: hub.statuses(), kisBudget: hub.kis?.budgetUsage() }));

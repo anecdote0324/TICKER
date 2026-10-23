@@ -18,6 +18,7 @@ import {
   type SourceStatus,
 } from '@bt/shared';
 import { api, isMac } from '../api';
+import { clearImeLog, exportImeLog, imeLog, setImeLogEnabled } from '../imeLog';
 import { keyCapture } from '../keys';
 import { engine } from '../stores/instruments';
 import { settings, updateSettings } from '../stores/settings';
@@ -302,6 +303,54 @@ function Command() {
         </button>
       </div>
       <p className="note">나중에 추가할 항목: 6자리 코드를 치면 바로 여는 HTS 방식(v0.2, 기본 꺼짐), F키 모드(Windows, v0.2), 자산군별 기본 기능(v0.2).</p>
+      <ImeRecorder />
+    </>
+  );
+}
+
+/** 한글 입력 기록기(05 §8.1 K13): Windows IME·Mac에서 커맨드 라인 이벤트 순서를 남겨 보내요 */
+function ImeRecorder() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const f = () => force((n) => n + 1);
+    imeLog.listeners.add(f);
+    return () => {
+      imeLog.listeners.delete(f);
+    };
+  }, []);
+  return (
+    <>
+      <h3>한글 입력 기록기</h3>
+      <p className="note">
+        커맨드 라인에서 한글을 칠 때 키·조합·입력 이벤트의 순서를 남겨요. Tab·Enter·클릭이 이상하게 동작하면 켜 두고 다시 해 본 뒤, 기록을 복사해 보내 주세요. 기록에는 커맨드 라인에 친 글자가 들어가요(앱키 입력칸은 기록하지 않아요).
+      </p>
+      <div className="field">
+        <label>기록</label>
+        <div className="seg">
+          <button className={imeLog.enabled ? 'on' : ''} onClick={() => setImeLogEnabled(true)}>
+            켜기
+          </button>
+          <button className={!imeLog.enabled ? 'on' : ''} onClick={() => setImeLogEnabled(false)}>
+            끄기
+          </button>
+        </div>
+        <span className="label mono">{imeLog.entries.length}개</span>
+        <button
+          className="btn"
+          disabled={imeLog.entries.length === 0}
+          onClick={() =>
+            void navigator.clipboard.writeText(exportImeLog()).then(
+              () => showToast('한글 입력 기록을 복사했어요'),
+              () => showToast('복사하지 못했어요'),
+            )
+          }
+        >
+          기록 복사
+        </button>
+        <button className="btn" disabled={imeLog.entries.length === 0} onClick={clearImeLog}>
+          지우기
+        </button>
+      </div>
     </>
   );
 }

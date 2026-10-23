@@ -319,3 +319,65 @@ describe('겹침과 예외(§7, §13)', () => {
     expect(a.plan.kind).toBe('select');
   });
 });
+
+describe('§4.5·§13 목록에 없는 코드는 한국투자증권에서 직접 조회', () => {
+  const withKey = ctx({}, { lookup: true });
+
+  it('키가 있으면 첫 Enter는 직접 조회 줄을 선택만, 두 번째 Enter가 조회해요(기능이 없으면 GP)', () => {
+    const a = run('123456', withKey);
+    expect(a.rows[0]).toMatchObject({ id: 'lookup:KR:123456', kind: 'lookup', disabled: false });
+    expect(a.label).toBe('⏎ 선택: 123456 직접 조회');
+    const out = enterTwice('123456', withKey);
+    expect(out).toMatchObject({ kind: 'execute', exec: { kind: 'lookup', lookup: { code: '123456', market: 'KR' }, fn: 'GP' } });
+  });
+
+  it('기능을 함께 치면 그 기능으로 열어요', () => {
+    expect(enterTwice('123456 GIP', withKey)).toMatchObject({ kind: 'execute', exec: { kind: 'lookup', fn: 'GIP' } });
+  });
+
+  it('미국 티커 모양도 조회해요. 시장을 붙이면 그 시장만', () => {
+    expect(run('ZZZZ', withKey).rows[0].id).toBe('lookup:US:ZZZZ');
+    expect(run('ZZZZ KS', withKey).rows.some((r) => r.kind === 'lookup')).toBe(false);
+  });
+
+  it('키가 없으면 일치 없음 줄 아래에 안내만(고를 수 없어요)', () => {
+    const a = run('XYZQ');
+    expect(a.plan.kind).toBe('nomatch');
+    expect(a.rows.map((r) => r.kind)).toEqual(['nomatch', 'lookup']);
+    expect(a.rows[1].disabled).toBe(true);
+  });
+});
+
+describe('§3.7 뒤 단계 코드 모양은 자리만 지켜요', () => {
+  it.each([
+    ['KR103502G9C2', '채권 ISIN'],
+    ['KMZ5', '선물 월물'],
+    ['CO1', '선물 월물'],
+    ['101W9000', '지수선물'],
+    ['201W9340', '지수옵션'],
+  ])('%s → 실행 안 됨: %s', (input, word) => {
+    const a = run(input);
+    expect(a.plan.kind).toBe('error');
+    expect(a.label).toContain(word);
+    expect(a.label).toContain('제공 예정');
+  });
+});
+
+describe('§4.5 더 보기는 자산군별로 묶어요', () => {
+  it('여러 자산군이 섞이면 머리줄을 붙여 묶어요', () => {
+    const a = engine.analyze('C', 1, ctx(), { expanded: true });
+    const headers = a.rows.filter((r) => r.kind === 'header').map((r) => r.name);
+    expect(headers.length).toBeGreaterThanOrEqual(2);
+    expect(headers.some((h) => h.includes('코인'))).toBe(true);
+    // 머리줄 아래 종목은 모두 그 자산군이에요
+    let cur = '';
+    for (const r of a.rows) {
+      if (r.kind === 'header') cur = r.name;
+      else if (r.kind === 'security' && cur.includes('코인')) expect(r.badge).toBe('CRY');
+    }
+  });
+
+  it('펼치지 않으면 묶지 않아요', () => {
+    expect(run('C').rows.some((r) => r.kind === 'header' && r.name.includes('코인'))).toBe(false);
+  });
+});

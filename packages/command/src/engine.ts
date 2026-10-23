@@ -537,7 +537,17 @@ export class CommandEngine {
       seg.chooseReason = hasHangul(text) && ctx.hanEng && convertedFunction(text) ? 'convert' : 'prefix';
       return sorted;
     }
+    // 뒤 단계에서 쓸 코드 모양(05 §3.7): 지금은 안내만 하고, 해석기가 깨지지 않게 자리를 지켜요
+    const reserved = reservedShape(key);
+    if (reserved) {
+      seg.status = 'unavailable';
+      seg.error = reserved;
+      return sorted;
+    }
     seg.status = 'nomatch';
+    // 목록에 없는 코드: 한국투자증권에서 직접 조회해 볼 수 있어요(05 §4.5, §13)
+    const lk = lookupShape(key, mSeg?.market);
+    if (lk) seg.lookup = lk;
     return sorted;
   }
 
@@ -712,6 +722,20 @@ export class CommandEngine {
     return order;
   }
 
+  /** 더 보기 목록: 기능·명령 줄은 위에 두고, 종목 줄은 처음 나온 자산군 순서로 묶어 머리줄을 붙여요 */
+  private groupByAsset(rows: Row[]): Row[] {
+    const assetOf = (r: Row) => (r.instrumentId ? this.index.get(r.instrumentId)?.inst.assetClass : undefined);
+    const sec = rows.filter((r) => r.kind === 'security' && assetOf(r));
+    const classes = [...new Set(sec.map((r) => assetOf(r)!))];
+    if (classes.length < 2) return rows;
+    const out = rows.filter((r) => !(r.kind === 'security' && assetOf(r)) && r.kind !== 'header');
+    for (const c of classes) {
+      const group = sec.filter((r) => assetOf(r) === c);
+      out.push(headerRow(`── ${ASSET_LABEL[c]} ${group.length} ──`), ...group);
+    }
+    return out;
+  }
+
   /** 종목 뒤 빈 기능 칸의 목록 */
   private functionListFor(sec: Instrument, ctx: EngineContext): Row[] {
     const rows: Row[] = [];
@@ -868,6 +892,8 @@ export class CommandEngine {
     // 펼치지 않았으면 8줄 + 기능 줄을 끼워 넣을 여유만 만들어요
     this.rowCap = opts.expanded ? ROW_CAP : MAX_ROWS + 8;
     let rows = this.rowsFor(listSegment, segs, matches, ctx, input, security);
+    // 더 보기: 종목 줄을 자산군별로 묶어요(05 §4.5)
+    if (opts.expanded) rows = this.groupByAsset(rows);
     const limit = opts.expanded ? MAX_MORE : MAX_ROWS;
     const more = Math.max(0, rows.length - limit) + this.hiddenRows;
     rows = rows.slice(0, limit);
@@ -929,6 +955,10 @@ export class CommandEngine {
         return { kind: 'error', segment: seg.index, message: seg.error ?? '실행할 수 없어요' };
       }
       if (seg.status === 'nomatch') {
+        if (seg.slot === 'security' && seg.lookup && ctx.lookup) {
+          const row = lookupRow(seg.lookup, true);
+          return { kind: 'select', segment: seg.index, rowId: row.id, label: `${seg.lookup.code} 직접 조회` };
+        }
         if (seg.slot === 'security') return { kind: 'nomatch', text: seg.text };
         return { kind: 'error', segment: seg.index, message: seg.error ?? `'${seg.text}'를 알 수 없어요` };
       }
@@ -1014,7 +1044,14 @@ export class CommandEngine {
       case 'security': {
         const firstSlot = seg.index === 0 || (seg.index === 1 && segs[0].slot === 'asset');
         rows.push(...this.securityRows(seg, matches.get(seg.index) ?? [], ctx, firstSlot));
-        if (rows.length === 0) rows.push(noMatchRow(seg.text));
+        if (rows.length === 0) {
+          // 키가 있으면 직접 조회 줄이 1번, 없으면 일치 없음 줄 아래에 안내만
+          if (seg.lookup && ctx.lookup) rows.push(lookupRow(seg.lookup, true));
+          else {
+            rows.push(noMatchRow(seg.text));
+            if (seg.lookup) rows.push(lookupRow(seg.lookup, false));
+          }
+        }
         break;
       }
       case 'closed':
@@ -1264,6 +1301,14 @@ export class CommandEngine {
 
   /** Enter(05 §3.6). selectedRowId는 화면에서 선택(▶)한 줄이에요 */
   enter(a: Analysis, ctx: EngineContext, selectedRowId?: string): EnterOutcome {
+    // 직접 조회 줄을 고른 두 번째 Enter: 조회한 뒤 이 줄의 기능으로 열어요(기능이 없으면 GP)
+    if (selectedRowId?.startsWith('lookup:') && ctx.lookup) {
+      const seg = a.segments.find((s) => s.lookup && `lookup:${s.lookup.market}:${s.lookup.code}` === selectedRowId);
+      if (seg?.lookup) {
+        const fn = a.segments.find((s) => s.slot === 'function' && s.fn)?.fn?.code ?? 'GP';
+        return { kind: 'execute', exec: { kind: 'lookup', lookup: seg.lookup, fn, canonical: `${seg.lookup.code} ${fn}`, notes: ['직접 조회'] } };
+      }
+    }
     if (selectedRowId) {
       const row = a.rows.find((r) => r.id === selectedRowId);
       if (row && !row.disabled && row.kind !== 'header') {
@@ -1313,6 +1358,46 @@ function headerRow(text: string): Row {
     insert: '',
     disabled: true,
   };
+}
+
+/** 마스터에 없는 코드의 직접 조회 줄. 키가 없으면 안내만(고를 수 없음) */
+function lookupRow(lk: { code: string; market: 'KR' | 'US' }, enabled: boolean): Row {
+  return {
+    id: `lookup:${lk.market}:${lk.code}`,
+    kind: 'lookup',
+    badge: 'KIS',
+    code: lk.code,
+    name: enabled ? '목록에 없는 코드예요 — ⏎로 한국투자증권에서 직접 조회' : '목록에 없는 코드예요 — 한국투자증권 키를 넣으면 직접 조회할 수 있어요',
+    info: lk.market === 'KR' ? '국내 주식 코드 모양' : '미국 티커 모양',
+    flags: [],
+    canonical: lk.code,
+    tier: 99,
+    insert: lk.code,
+    disabled: !enabled,
+  };
+}
+
+/** 직접 조회해 볼 만한 코드 모양: 국내 6자리(숫자로 시작, 새 코드는 영문 포함), 미국 티커(영문 1~5자, .B 같은 클래스) */
+export function lookupShape(key: string, market?: Market): { code: string; market: 'KR' | 'US' } | undefined {
+  if (market !== 'US' && /^[0-9][0-9A-Z]{5}$/.test(key)) return { code: key, market: 'KR' };
+  if (market !== 'KS' && market !== 'KQ' && /^[A-Z]{1,5}(?:[./][A-Z])?$/.test(key)) return { code: key, market: 'US' };
+  return undefined;
+}
+
+/** 뒤 단계에서 쓸 코드 모양(05 §3.7, 08 §4.5). 지금은 안내만 해요 */
+export function reservedShape(key: string): string | undefined {
+  // 채권 ISIN(KR로 시작하는 12자리 등)
+  if (/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(key) && /[0-9]/.test(key.slice(2))) return `${key}는 채권 ISIN 모양이에요 — 채권(GOVT·CORP)은 v0.7에서 제공 예정`;
+  // 국내 지수선물·옵션 단축코드(101W9000, 201W9340, 301W9340 등: 1 선물, 2 콜, 3 풋)
+  if (/^[1-4]0[0-9][A-Z0-9]{2}[0-9]{3}$/.test(key)) {
+    const kind = key[0] === '1' || key[0] === '4' ? '지수선물' : '지수옵션';
+    return `${key}는 국내 ${kind} 코드 모양이에요 — ${kind === '지수선물' ? '지수선물은 v0.6' : '옵션은 v0.10'}에서 제공 예정`;
+  }
+  // 월물이 붙은 선물(KMZ5, ESZ25)과 연속 월물(CO1, KM1)
+  if (/^[A-Z]{1,3}[FGHJKMNQUVXZ][0-9]{1,2}$/.test(key) || /^[A-Z]{1,3}[1-9]$/.test(key)) {
+    return `${key}는 선물 월물 코드 모양이에요 — 지수선물 v0.6, 국채선물 v0.7, 원자재 v0.11에서 제공 예정`;
+  }
+  return undefined;
 }
 
 function noMatchRow(text: string): Row {

@@ -8,6 +8,8 @@ import { feedStatus } from '../stores/feed';
 import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
 import { useStore } from '../stores/store';
 import { getInstrument } from '../stores/instruments';
+import { appState, updateState } from '../stores/state';
+import { showToast } from '../stores/ui';
 
 interface Props {
   doc: Document;
@@ -48,6 +50,9 @@ function badgeClass(row: Row) {
   return 'gray';
 }
 
+/** 더블클릭은 첫 클릭 때 잡은 줄로 처리해요(첫 클릭이 목록을 바꾸기 때문, 05 §8.1 K8) */
+let firstClick: { row: Row; at: number } | null = null;
+
 export function CandidateList(p: Props) {
   const { analysis: a, assist } = p;
   const rows = a.rows;
@@ -79,8 +84,11 @@ export function CandidateList(p: Props) {
               onMouseEnter={() => p.onHover(i)}
               onMouseDown={(e) => {
                 e.preventDefault();
-                if (e.detail >= 2) p.onPick(row, true);
-                else p.onPick(row, false);
+                if (e.detail >= 2 && firstClick && Date.now() - firstClick.at < 800) p.onPick(firstClick.row, true);
+                else {
+                  firstClick = { row, at: Date.now() };
+                  p.onPick(row, false);
+                }
               }}
             >
               <span className="ac-mark">{row.id === p.selectedId ? '▶' : i === p.highlight ? '▸' : ''}</span>
@@ -133,7 +141,7 @@ export function CandidateList(p: Props) {
         )}
         {assist === 'beginner' && <div className="ac-keys">Tab 자동완성 · ↑↓ 고르기 · ⏎ 실행 · Esc 닫기 · {shortcutLabel('descCard')} 설명</div>}
       </div>
-      {showDescPane && (p.showDesc === 'syntax' ? <SyntaxCard /> : hl && <DescCard row={hl} />)}
+      {showDescPane && (p.showDesc === 'syntax' ? <SyntaxCard /> : hl && <DescCard row={hl} analysis={a} />)}
     </div>,
     p.doc.body,
   );
@@ -151,7 +159,63 @@ function SlotLine({ cost }: { cost: string }) {
   );
 }
 
-export function DescCard({ row }: { row: Row }) {
+/** 겹침 기본값(05 §7.4): 정확히 같은 코드가 여러 종목일 때, 이 줄을 그 입력의 기본값으로 정해요 */
+function DefaultButton({ row, analysis }: { row: Row; analysis: Analysis }) {
+  const chosen = useStore(appState, (s) => s.defaults.chosen);
+  const seg = analysis.segments[analysis.listSegment];
+  if (!seg || seg.slot !== 'security' || !row.instrumentId || row.tier > 1) return null;
+  if (seg.chooseReason !== 'ambiguous' && !seg.byUserDefault) return null;
+  const key = seg.text.toUpperCase();
+  const isDefault = chosen[key] === row.instrumentId;
+  const inst = getInstrument(row.instrumentId);
+  const label = `${inst?.code} ${inst?.market ?? inst?.assetClass}(${inst?.nameKo ?? inst?.nameEn ?? ''})`;
+  return (
+    <div style={{ marginTop: 6 }}>
+      {isDefault ? (
+        <>
+          <span className="k">↺ 내가 정한 기본값 · </span>
+          <button
+            className="btn"
+            style={{ height: 20, fontSize: 11 }}
+            onClick={() =>
+              updateState('defaults', (d) => {
+                const c = { ...d.chosen };
+                delete c[key];
+                return { ...d, chosen: c };
+              })
+            }
+          >
+            기본값 지우기
+          </button>
+        </>
+      ) : (
+        <button
+          className="btn"
+          style={{ height: 20, fontSize: 11 }}
+          title={`${key}⏎를 이 종목으로 열어요`}
+          onClick={() => {
+            const prev = appState.get().defaults.chosen[key];
+            updateState('defaults', (d) => ({ ...d, chosen: { ...d.chosen, [key]: row.instrumentId! } }));
+            showToast(`이제 ${key}⏎는 ${label}로 열려요`, {
+              label: '되돌리기',
+              run: () =>
+                updateState('defaults', (d) => {
+                  const c = { ...d.chosen };
+                  if (prev) c[key] = prev;
+                  else delete c[key];
+                  return { ...d, chosen: c };
+                }),
+            });
+          }}
+        >
+          기본값으로
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function DescCard({ row, analysis }: { row: Row; analysis?: Analysis }) {
   if (row.kind === 'security' && row.instrumentId) {
     const inst = getInstrument(row.instrumentId);
     if (!inst) return null;
@@ -190,6 +254,7 @@ export function DescCard({ row }: { row: Row }) {
           <code>{usable.join(' ')}</code>
         </div>
         <div className="k">Tab: 채우기 · ⏎: {row.id ? '선택 또는 실행' : ''}</div>
+        {analysis && <DefaultButton row={row} analysis={analysis} />}
       </div>
     );
   }

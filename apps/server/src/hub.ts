@@ -54,6 +54,11 @@ export class Hub implements AdapterHost {
     }
   }
 
+  /** 직접 조회로 찾은 종목을 목록에 더해요(다음 마스터를 받을 때까지) */
+  addInstrument(inst: Instrument) {
+    this.instruments.set(inst.id, inst);
+  }
+
   get demoMode() {
     return !this.kis;
   }

@@ -27,5 +27,7 @@ export function showToast(text: string, action?: Toast['action'], ms = 6000) {
 }
 
 export function openSettings(section?: string) {
+  // 커맨드 라인에서 열었으면 후보 목록이 설정 창 위에 남지 않게 포커스를 빼요
+  (document.activeElement as HTMLElement | null)?.blur?.();
   ui.set((s) => ({ ...s, settings: true, settingsSection: section, palette: false }));
 }

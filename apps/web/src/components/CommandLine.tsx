@@ -4,8 +4,11 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis, ChosenToken, EngineContext, Execution, Row } from '@bt/command';
-import { FUNCTIONS, type AssetClass } from '@bt/shared';
+import { ASSET_LABEL, canonicalSecurity, displayName, FUNCTIONS, MARKET_LABEL, type AssetClass, type Instrument } from '@bt/shared';
+import { api } from '../api';
+import { logIme } from '../imeLog';
 import { isShortcut } from '../keys';
+import { feedStatus } from '../stores/feed';
 import { engine, getInstrument, index, indexState, supports } from '../stores/instruments';
 import { applyExecution, panelCanonical, panels, type PanelState } from '../stores/panels';
 import { settings, updateSettings } from '../stores/settings';
@@ -25,7 +28,8 @@ interface Props {
 }
 
 interface Intent {
-  kind: 'tab' | 'enter' | 'down' | 'up' | 'esc';
+  /** click: 조합 중에 목록 줄을 눌렀을 때(K8), run: 더블클릭 */
+  kind: 'tab' | 'enter' | 'down' | 'up' | 'esc' | 'click' | 'run';
   code: string;
   rowId: string | null;
   used: boolean;
@@ -44,6 +48,8 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
   const st = useStore(settings);
   const app = useStore(appState);
   const idx = useStore(indexState);
+  // 한국투자증권이 연결돼 있으면 목록에 없는 코드를 직접 조회할 수 있어요(05 §4.5)
+  const canLookup = useStore(feedStatus, (f) => !f.demo);
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -90,9 +96,10 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       watchlist: new Set(app.watchlists.flatMap((g) => g.ids)),
       chosen,
       recent: [...new Set(app.history.map((h) => h.cmd))].slice(0, 5),
+      lookup: canLookup,
     }),
     // idx.count: 색인이 바뀌면 다시 계산
-    [security, panel?.fn, assist, st.commandLine.hanEngCorrection, st.commandLine.tabAutofill, app, chosen, idx.count],
+    [security, panel?.fn, assist, st.commandLine.hanEngCorrection, st.commandLine.tabAutofill, app, chosen, idx.count, canLookup],
   );
 
   // 고른 토큰은 그 글자가 그대로인 동안만 유지돼요
@@ -174,6 +181,20 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       if (exec.kind === 'command') {
         if (exec.cmd === 'settings') openSettings();
         else ui.set((s) => ({ ...s, help: exec.cmd === 'syntax' ? 'syntax' : 'help' }));
+      } else if (exec.kind === 'lookup' && exec.lookup) {
+        const { code, market } = exec.lookup;
+        const fnCode = exec.fn ?? 'GP';
+        showToast(`${code}를 한국투자증권에서 찾는 중…`);
+        api
+          .get<Instrument>(`/api/lookup?code=${encodeURIComponent(code)}&market=${market}`)
+          .then((inst) => {
+            index.addInstrument(inst);
+            indexState.set((s) => ({ ...s, count: s.count + 1 }));
+            applyExecution(panelId, { kind: 'function', fn: fnCode, instrumentId: inst.id, canonical: `${canonicalSecurity(inst)} ${fnCode}`, notes: ['직접 조회'] });
+            checkSlots();
+            showToast(`${code} ${inst.nameKo ?? inst.nameEn ?? ''}를 찾았어요. 이번 실행 동안 목록에 넣어 둘게요`);
+          })
+          .catch((e: Error) => showToast(`직접 조회 실패: ${e.message}`, undefined, 10000));
       } else if (exec.kind === 'asset-list') {
         showToast(`${exec.asset === 'EQUITY' ? '주식' : '종목'}은 코드나 이름으로 찾아요. 예: 005930, 삼성, AAPL`);
       } else {
@@ -319,6 +340,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
 
   const runIntent = (it: Intent) => {
     it.used = true;
+    logIme(null, `의도 실행: ${it.kind} ${it.rowId ?? ''}`);
     const rows = analysis.rows;
     const row = it.rowId ? rows.find((r) => r.id === it.rowId) : undefined;
     // 기록한 줄이 새 목록에 없으면 1번을 강조만 해요(K3-7)
@@ -327,9 +349,12 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       setSelectedId(null);
       return;
     }
-    if (it.kind === 'tab') {
+    if (it.kind === 'tab' || it.kind === 'click') {
       const target = row ?? rows[highlight];
       if (target) acceptRow(target);
+    } else if (it.kind === 'run') {
+      if (row) setSelectedId(row.id);
+      doEnter(row?.id ?? null);
     } else if (it.kind === 'enter') doEnter(it.rowId);
     else if (it.kind === 'down') moveHighlight(1);
     else if (it.kind === 'up') moveHighlight(-1);
@@ -339,6 +364,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
   // ── 키 처리 ──
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const ne = e.nativeEvent;
+    logIme(ne);
     const isComposingKey = ne.isComposing || ne.keyCode === 229 || composingRef.current;
     const key = e.key;
     const code = e.code;
@@ -352,6 +378,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
         const rows = analysis.rows;
         const target = kind === 'down' ? rows[Math.min(rows.length - 1, highlight + 1)] : kind === 'up' ? rows[Math.max(0, highlight - 1)] : kind === 'enter' ? rows.find((r) => r.id === selectedId) : rows[highlight];
         intent.current = { kind, code, rowId: target?.id ?? null, used: false };
+        logIme(null, `의도 기록: ${kind} ${target?.id ?? ''}`);
       }
       return;
     }
@@ -367,6 +394,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     }
     if (swallow.current && swallow.current.code === code && Date.now() < swallow.current.until) {
       e.preventDefault();
+      logIme(null, `늦게 온 ${code} 삼킴`);
       return;
     }
     swallow.current = null;
@@ -547,6 +575,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
   };
 
   const onInput = (e: React.FormEvent<HTMLInputElement>) => {
+    logIme(e.nativeEvent);
     const inp = e.currentTarget;
     setText(inp.value);
     setCursor(inp.selectionStart ?? inp.value.length);
@@ -587,7 +616,32 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     return parts;
   }, [analysis, text]);
 
-  const placeholder = !hasText && !focused ? panelCanonical(panel ?? ({} as PanelState), fn) || (assist === 'beginner' && !panel?.fn ? '명령 입력 — 종목코드·회사명·기능 (예: 005930, 삼성, AAPL, BTC, 차트)' : '명령 입력 · 도움말 ?') : '';
+  const current = panelCanonical(panel ?? ({} as PanelState), fn);
+  const placeholder = !hasText && !focused ? current || (assist === 'beginner' && !panel?.fn ? '명령 입력 — 종목코드·회사명·기능 (예: 005930, 삼성, AAPL, BTC, 차트)' : '명령 입력 · 도움말 ?') : '';
+
+  // 지금 명령의 토큰: 마우스를 올리면 뜻, 누르면 그 토큰을 고칠 수 있게 줄에 넣어요(05 §12.5)
+  const showTokens = variant === 'panel' && !focused && !hasText && !!current;
+  const tokens = useMemo(() => {
+    if (!showTokens) return [];
+    const a = engine.analyze(current, current.length, { ...ctx, chosen: [] });
+    return a.segments.map((s) => ({ seg: s, meaning: tokenMeaning(s) }));
+  }, [showTokens, current, ctx]);
+  const [tip, setTip] = useState<{ text: string; left: number } | null>(null);
+  const editToken = (index: number) => {
+    const seg = tokens[index]?.seg;
+    if (!seg) return;
+    setTip(null);
+    writeInput(current, seg.end);
+    if (seg.slot === 'security' || seg.slot === 'function' || seg.slot === 'closed') {
+      // 종목·기능: 그 칸의 다른 후보 목록을 열어요(Shift+Tab과 같아요)
+      setListSegment(seg.index);
+      setListOpen(true);
+      setDismissed(false);
+    } else {
+      // 시장·자산군: 그 토큰을 골라 두어서 바로 다시 칠 수 있게 해요
+      inputRef.current?.setSelectionRange(seg.start, seg.end);
+    }
+  };
   const label = !hasText ? (focused && assist === 'beginner' ? '⏎ 시작 목록' : '') : analysis.label;
   const labelText = variant === 'panel' && fieldRef.current && fieldRef.current.clientWidth < 220 ? shortenLabel(label) : label;
   const chip = analysis.contextChip ? `[${analysis.contextChip} ›]` : '';
@@ -605,6 +659,29 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
             </span>
           )}
         </div>
+        {showTokens && tokens.length > 0 && (
+          <div className="cmd-tokens" onMouseLeave={() => setTip(null)}>
+            {tokens.map(({ seg, meaning }, i) => (
+              <span key={i}>
+                {i > 0 && ' '}
+                <span
+                  className="tok"
+                  onMouseEnter={(e) => {
+                    const box = fieldRef.current?.getBoundingClientRect();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setTip({ text: meaning, left: box ? r.left - box.left : 0 });
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    editToken(i);
+                  }}
+                >
+                  {current.slice(seg.start, seg.end)}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
         <input
           ref={inputRef}
           role="combobox"
@@ -634,12 +711,16 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
             // 붙여넣기는 절대 실행하지 않아요. 목록도 열지 않아요(05 §13)
             setDismissed(true);
           }}
-          onCompositionStart={() => {
+          onKeyUp={(e) => logIme(e.nativeEvent)}
+          onCompositionUpdate={(e) => logIme(e.nativeEvent)}
+          onCompositionStart={(e) => {
+            logIme(e.nativeEvent);
             composingRef.current = true;
             setComposing(true);
             setHan('on');
           }}
-          onCompositionEnd={() => {
+          onCompositionEnd={(e) => {
+            logIme(e.nativeEvent);
             composingRef.current = false;
             setComposing(false);
             // 진짜 keydown이 대체 시간 안에 안 오면 의도를 실행하고, 늦게 온 같은 키는 삼켜요(K3-5)
@@ -647,13 +728,19 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
               const it = intent.current;
               if (it && !it.used) {
                 intent.current = null;
+                logIme(null, `대체 시간: 진짜 키가 안 와서 의도 실행`);
                 runIntent(it);
-                swallow.current = { code: it.code, until: Date.now() + 300 };
+                if (it.code) swallow.current = { code: it.code, until: Date.now() + 300 };
               }
             }, 50);
           }}
         />
       </div>
+      {tip && showTokens && (
+        <span className="cmd-tip" style={{ left: (fieldRef.current?.offsetLeft ?? 0) + tip.left }} role="tooltip">
+          {tip.text} · 눌러서 고치기
+        </span>
+      )}
       {han !== 'off' && <span className={`cmd-han ${han === 'unknown' ? 'unknown' : ''}`}>한</span>}
       {label && <span className={`cmd-label ${analysis.plan.kind === 'execute' ? 'exec' : ''} ${labelFlash ? 'flash' : ''}`}>{labelText}</span>}
       {variant === 'panel' && (
@@ -674,9 +761,20 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
           onMore={() => setExpanded(true)}
           onPick={(row, runNow) => {
             if (row.disabled) return;
+            // K8: 조합 중 클릭은 음절이 안 끝났을 수 있어요. 줄 id를 기록하고, 포커스를 뺐다 돌려 음절을 마무리한 뒤 실행해요
+            if (composingRef.current) {
+              intent.current = { kind: runNow ? 'run' : 'click', code: '', rowId: row.id, used: false };
+              logIme(null, `조합 중 클릭: ${row.id}`);
+              const inp = inputRef.current;
+              inp?.blur();
+              inp?.focus();
+              return;
+            }
             if (runNow) {
-              setSelectedId(row.id);
-              doEnter(row.id);
+              // 더블클릭: 첫 클릭이 목록을 바꿨으면(종목 → 기능 목록) 지금 줄의 Enter와 같아요
+              const here = analysis.rows.some((r) => r.id === row.id);
+              if (here) setSelectedId(row.id);
+              doEnter(here ? row.id : null);
             } else acceptRow(row);
           }}
         />
@@ -684,6 +782,19 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       {idx.loading && focused && hasText && <span className="cmd-label">종목 목록 불러오는 중…</span>}
     </div>
   );
+}
+
+/** 토큰의 뜻: GP = 가격 차트, KS = 코스피 */
+function tokenMeaning(s: Analysis['segments'][number]): string {
+  const t = s.text.toUpperCase();
+  if (s.slot === 'security' && s.inst) {
+    const where = s.inst.market ? MARKET_LABEL[s.inst.market] : ASSET_LABEL[s.inst.assetClass];
+    return `${t} = ${displayName(s.inst)} (${where})`;
+  }
+  if (s.slot === 'market' && s.market) return `${t} = 시장 ${MARKET_LABEL[s.market]}`;
+  if (s.slot === 'asset' && s.asset) return `${t} = 자산군 ${ASSET_LABEL[s.asset]}`;
+  if ((s.slot === 'function' || s.slot === 'closed') && s.fn) return `${t} = ${s.fn.nameKo}`;
+  return t;
 }
 
 function shortenLabel(label: string): string {

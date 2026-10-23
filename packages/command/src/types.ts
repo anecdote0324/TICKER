@@ -33,6 +33,8 @@ export interface EngineContext {
   chosen?: ChosenToken[];
   /** 최근 실행한 명령(표준형, 최신순) */
   recent?: string[];
+  /** 목록에 없는 코드를 한국투자증권에서 직접 조회할 수 있는지(키가 있을 때, 05 §4.5) */
+  lookup?: boolean;
 }
 
 export interface ChosenToken {
@@ -88,9 +90,11 @@ export interface Segment {
   fixLine?: string;
   /** 고르기 상태일 때 이유 */
   chooseReason?: 'prefix' | 'short' | 'ambiguous' | 'fuzzy' | 'convert';
+  /** 목록에 없지만 직접 조회해 볼 만한 코드 모양(05 §4.5) */
+  lookup?: { code: string; market: 'KR' | 'US' };
 }
 
-export type RowKind = 'security' | 'function' | 'market' | 'asset' | 'command' | 'convert' | 'fix' | 'unavailable' | 'nomatch' | 'history' | 'header';
+export type RowKind = 'security' | 'function' | 'market' | 'asset' | 'command' | 'convert' | 'fix' | 'unavailable' | 'nomatch' | 'lookup' | 'history' | 'header';
 
 export interface Row {
   id: string;
@@ -132,8 +136,10 @@ export type EnterPlan =
   | { kind: 'empty' };
 
 export interface Execution {
-  kind: 'function' | 'command' | 'asset-list';
+  kind: 'function' | 'command' | 'asset-list' | 'lookup';
   fn?: string;
+  /** lookup: 한국투자증권에서 직접 조회할 코드와 시장. 찾으면 fn으로 열어요 */
+  lookup?: { code: string; market: 'KR' | 'US' };
   /** 실행할 종목 id(종목이 필요 없는 기능이면 패널이 기억할 종목) */
   instrumentId?: string;
   cmd?: CommandWord;

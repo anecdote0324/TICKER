@@ -172,6 +172,39 @@ export class KisAdapter implements Adapter {
     }
   }
 
+  // ── 목록에 없는 코드 직접 조회(05 §4.5, §13) ──
+
+  /**
+   * 종목 마스터에 없는 코드(오늘 상장, 오래된 파일)를 KIS 상품 기본 정보로 찾아요. 없으면 오류를 던져요.
+   * 국내: 주식 기본 조회(CTPF1002R), 미국: 해외주식 상품 기본 정보(CTPF1702R)를 나스닥·뉴욕·아멕스 순서로. 필드 이름은 실제 계정으로 확인 필요(07)
+   */
+  async lookup(code: string, market: 'KR' | 'US'): Promise<Instrument> {
+    if (market === 'KR') {
+      const r = await this.get('/uapi/domestic-stock/v1/quotations/search-stock-info', 'CTPF1002R', { PRDT_TYPE_CD: '300', PDNO: code }, 0);
+      const o = r.output as KisRow | undefined;
+      const name = o?.prdt_abrv_name || o?.prdt_name;
+      if (!o || !name) throw new Error(`${code}를 한국투자증권에서도 찾지 못했어요`);
+      const mk = o.mket_id_cd === 'KSQ' || o.excg_dvsn_cd === '02' ? 'KQ' : 'KS';
+      return { id: `EQ:${mk}:${code}`, assetClass: 'EQUITY', market: mk, code, nameKo: name, exchange: 'KRX', currency: 'KRW', flags: ['LOOKUP'] };
+    }
+    for (const [type, ex] of [
+      ['512', 'NAS'],
+      ['513', 'NYS'],
+      ['529', 'AMS'],
+    ] as const) {
+      try {
+        const r = await this.get('/uapi/overseas-price/v1/quotations/search-info', 'CTPF1702R', { PRDT_TYPE_CD: type, PDNO: code }, 0);
+        const o = r.output as KisRow | undefined;
+        const nameEn = o?.prdt_eng_name;
+        if (!o || !(nameEn || o.prdt_name)) continue;
+        return { id: `EQ:US:${code}`, assetClass: 'EQUITY', market: 'US', code, nameEn: nameEn || undefined, nameKo: o.prdt_name || undefined, exchange: ex, currency: 'USD', flags: ['LOOKUP'] };
+      } catch {
+        // 다음 거래소
+      }
+    }
+    throw new Error(`${code}를 한국투자증권에서도 찾지 못했어요`);
+  }
+
   // ── REST ──
 
   private async get(path: string, trId: string, params: Record<string, string>, pri: Priority, retry = 1): Promise<KisResponse> {
