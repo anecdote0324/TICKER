@@ -17,7 +17,7 @@ export interface Settings {
   };
   display: {
     theme: 'modern';
-    /** 등락 색. 기본 한국식(02) */
+    /** 등락 색. 기본 글로벌식(초록 상승·빨강 하락, 02) */
     upDown: UpDownStyle;
     accent: string;
     /** 글자 크기 배율 */
@@ -39,7 +39,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   general: { restoreWorkspace: true },
-  display: { theme: 'modern', upDown: 'korean', accent: '#FB8B1E', fontScale: 1 },
+  display: { theme: 'modern', upDown: 'global', accent: '#FB8B1E', fontScale: 1 },
   commandLine: {
     assist: 'beginner',
     securityOnlyEnter: 'keep-function',

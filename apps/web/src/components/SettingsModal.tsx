@@ -120,11 +120,11 @@ function Display() {
       <div className="field">
         <label>방식</label>
         <div className="seg">
-          <button className={s.display.upDown === 'korean' ? 'on' : ''} onClick={() => void updateSettings({ display: { upDown: 'korean' } })}>
-            한국식 (기본) <span style={{ color: '#FF5F57' }}>▲</span> <span style={{ color: '#4C9AFF' }}>▼</span>
-          </button>
           <button className={s.display.upDown === 'global' ? 'on' : ''} onClick={() => void updateSettings({ display: { upDown: 'global' } })}>
-            글로벌식 <span style={{ color: '#3FD08A' }}>▲</span> <span style={{ color: '#FF5F57' }}>▼</span>
+            글로벌식 (기본) <span style={{ color: '#3FD08A' }}>▲</span> <span style={{ color: '#FF5F57' }}>▼</span>
+          </button>
+          <button className={s.display.upDown === 'korean' ? 'on' : ''} onClick={() => void updateSettings({ display: { upDown: 'korean' } })}>
+            한국식 <span style={{ color: '#FF5F57' }}>▲</span> <span style={{ color: '#4C9AFF' }}>▼</span>
           </button>
         </div>
       </div>

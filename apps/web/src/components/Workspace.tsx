@@ -312,6 +312,13 @@ export function Workspace({ screenId, initial, onChange, visible }: { screenId: 
       if (id) activePanelId.set(id);
     });
   };
+  // 화면 탭을 닫으면 그 화면의 배치 API도 지워요
+  useEffect(
+    () => () => {
+      if (dockApis.get(screenId) === apiRef.current) dockApis.delete(screenId);
+    },
+    [screenId],
+  );
   useEffect(() => {
     if (visible && apiRef.current) {
       const api = apiRef.current;

@@ -13,7 +13,7 @@ import { panels, type PanelState } from './stores/panels';
 import { settings } from './stores/settings';
 import { appState, updateState } from './stores/state';
 import { useStore } from './stores/store';
-import { ui } from './stores/ui';
+import { showToast, ui } from './stores/ui';
 
 interface SavedWorkspace {
   screens: Screen[];
@@ -51,6 +51,44 @@ export function App() {
   useEffect(() => panels.subscribe(scheduleSave), [scheduleSave]);
   useEffect(scheduleSave, [screens, active, scheduleSave]);
 
+  /** 화면 탭 닫기: 그 화면의 패널(떼어낸 창 포함)도 함께 닫고, 알림에서 되돌릴 수 있어요 */
+  const closeScreen = (id: string) => {
+    if (screens.length <= 1) return;
+    const index = screens.findIndex((s) => s.id === id);
+    const screen = screens[index];
+    if (!screen) return;
+    const api = dockApis.get(id);
+    const layout: ScreenLayout | null = api ? { dock: api.toJSON() } : (layouts.current[id] ?? null);
+    const panelIds = api ? api.panels.map((p) => (p.params as { panelId?: string } | undefined)?.panelId).filter((x): x is string => !!x) : [];
+    const removed = Object.fromEntries(panelIds.map((pid) => [pid, panels.get()[pid]]).filter(([, v]) => v)) as Record<string, PanelState>;
+
+    const rest = screens.filter((s) => s.id !== id);
+    setScreens(rest);
+    if (active === id) setActive(rest[Math.max(0, index - 1)].id);
+    const nextLayouts = { ...layouts.current };
+    delete nextLayouts[id];
+    layouts.current = nextLayouts;
+    panels.set((all) => {
+      const next = { ...all };
+      for (const pid of panelIds) delete next[pid];
+      return next;
+    });
+    showToast(`'${screen.name}' 화면을 닫았어요${panelIds.length ? ` · 패널 ${panelIds.length}개` : ''}`, {
+      label: '되돌리기',
+      run: () => {
+        panels.set((all) => ({ ...all, ...removed }));
+        if (layout) layouts.current = { ...layouts.current, [id]: layout };
+        setScreens((s) => {
+          if (s.some((x) => x.id === id)) return s;
+          const next = [...s];
+          next.splice(Math.min(index, next.length), 0, screen);
+          return next;
+        });
+        setActive(id);
+      },
+    });
+  };
+
   useEffect(() => {
     attachGlobalKeys(window);
     const onUnload = () => save();
@@ -70,6 +108,7 @@ export function App() {
           setActive(id);
         }}
         onRename={(id, name) => setScreens((s) => s.map((x) => (x.id === id ? { ...x, name } : x)))}
+        onClose={closeScreen}
         onAddPanel={() => {
           const api = dockApis.get(active);
           if (api) addPanel(api);

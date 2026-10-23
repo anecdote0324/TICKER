@@ -144,8 +144,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
 
   // 등락 색(설정)
   useEffect(() => {
-    const up = cssVar('--up') || '#FF5F57';
-    const down = cssVar('--down') || '#4C9AFF';
+    const up = cssVar('--up') || '#3FD08A';
+    const down = cssVar('--down') || '#FF5F57';
     candleRef.current?.applyOptions({ upColor: up, downColor: down, wickUpColor: up, wickDownColor: down });
     const bars = barsRef.current;
     volRef.current?.setData(bars.map((b, i) => ({ time: b.t as UTCTimestamp, value: b.v, color: (i > 0 && b.c < bars[i - 1].c) || b.c < b.o ? `${down}66` : `${up}66` })));
@@ -180,8 +180,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     closeRef.current?.applyOptions({ visible: closeOnly, priceFormat: { type: 'price', precision: d, minMove: Math.pow(10, -d) } });
     closeRef.current?.setData(closeOnly ? bars.map((b) => ({ time: b.t as UTCTimestamp, value: b.c })) : []);
     c.setData(bars.map((b) => ({ time: b.t as UTCTimestamp, open: b.o, high: b.h, low: b.l, close: b.c })));
-    const up = cssVar('--up') || '#FF5F57';
-    const down = cssVar('--down') || '#4C9AFF';
+    const up = cssVar('--up') || '#3FD08A';
+    const down = cssVar('--down') || '#FF5F57';
     volRef.current?.setData(bars.map((b, i) => ({ time: b.t as UTCTimestamp, value: b.v, color: (i > 0 && b.c < bars[i - 1].c) || b.c < b.o ? `${down}66` : `${up}66` })));
     const daily = !intraday;
     ma20Ref.current?.setData(daily ? sma(bars, 20) : []);

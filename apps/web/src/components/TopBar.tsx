@@ -12,7 +12,17 @@ export interface Screen {
 const pad = (n: number) => String(n).padStart(2, '0');
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-export function TopBar(props: { screens: Screen[]; active: string; onSelect: (id: string) => void; onAdd: () => void; onRename: (id: string, name: string) => void; onAddPanel: () => void }) {
+export function TopBar(props: {
+  screens: Screen[];
+  active: string;
+  onSelect: (id: string) => void;
+  onAdd: () => void;
+  onRename: (id: string, name: string) => void;
+  onClose: (id: string) => void;
+  onAddPanel: () => void;
+}) {
+  // 화면 탭이 하나뿐이면 닫을 수 없어요
+  const closable = props.screens.length > 1;
   const now = useNow(1000);
   const [editing, setEditing] = useState<string | null>(null);
   const seoul = zonedParts(now, 'Asia/Seoul');
@@ -39,9 +49,18 @@ export function TopBar(props: { screens: Screen[]; active: string; onSelect: (id
               }}
             />
           ) : (
-            <button key={s.id} className={s.id === props.active ? 'on' : ''} onClick={() => props.onSelect(s.id)} onDoubleClick={() => setEditing(s.id)} title="두 번 눌러 이름 바꾸기">
-              {s.name}
-            </button>
+            <div key={s.id} className={`stab ${s.id === props.active ? 'on' : ''}`}>
+              <button className="stab-name" onClick={() => props.onSelect(s.id)} onDoubleClick={() => setEditing(s.id)} title="두 번 눌러 이름 바꾸기">
+                {s.name}
+              </button>
+              {closable && (
+                <button className="stab-x" aria-label={`${s.name} 화면 닫기`} title="화면 닫기" onClick={() => props.onClose(s.id)}>
+                  <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.3 }}>
+                    <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
+                  </svg>
+                </button>
+              )}
+            </div>
           ),
         )}
         <button aria-label="화면 탭 추가" title="화면 탭 추가" onClick={props.onAdd} style={{ fontFamily: 'var(--mono)', fontSize: 14 }}>

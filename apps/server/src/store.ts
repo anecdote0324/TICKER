@@ -64,8 +64,13 @@ export class Store {
 
   async load() {
     await mkdir(this.dataDir, { recursive: true });
-    const s = await this.readJson<Partial<Settings>>('settings.json');
-    if (s) this.settings = mergeSettings(s);
+    const s = await this.readJson<Partial<Settings> & { schema?: number }>('settings.json');
+    if (s) {
+      // schema 1: 등락 색 기본값이 한국식이던 때. 화면이 설정을 통째로 저장해서 사용자가 고르지 않은 값도 들어 있어요.
+      // 기본값을 글로벌식으로 바꾸면서(02), 그때 저장된 등락 색은 버리고 새 기본값을 써요
+      if ((s.schema ?? 1) < SETTINGS_SCHEMA && s.display) delete (s.display as Partial<Settings['display']>).upDown;
+      this.settings = mergeSettings(s);
+    }
     for (const n of STATE_NAMES) {
       const v = await this.readJson(`state-${n}.json`);
       if (v !== undefined) this.state.set(n, v);
@@ -100,7 +105,7 @@ export class Store {
 
   async setSettings(patch: Partial<Settings>): Promise<Settings> {
     this.settings = mergeSettings({ ...this.settings, ...patch, general: { ...this.settings.general, ...patch.general }, display: { ...this.settings.display, ...patch.display }, commandLine: { ...this.settings.commandLine, ...patch.commandLine }, data: { ...this.settings.data, ...patch.data } });
-    await this.writeJson('settings.json', this.settings);
+    await this.writeJson('settings.json', { ...this.settings, schema: SETTINGS_SCHEMA });
     return this.settings;
   }
 
@@ -129,6 +134,9 @@ export class Store {
     await this.writeJson('secrets.json', this.secrets, 0o600);
   }
 }
+
+/** 설정 파일 형식 번호. 기본값을 바꿔서 예전 파일을 고쳐 읽어야 할 때 올려요 */
+const SETTINGS_SCHEMA = 2;
 
 function mergeSettings(s: Partial<Settings>): Settings {
   const d = DEFAULT_SETTINGS;

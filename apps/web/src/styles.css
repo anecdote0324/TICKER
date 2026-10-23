@@ -15,10 +15,11 @@
   --chip: #f5c542;
   --select: #16325e;
   --error: #ff5f57;
-  --up: #ff5f57;
-  --down: #4c9aff;
-  --up-bg: rgba(255, 95, 87, 0.28);
-  --down-bg: rgba(76, 154, 255, 0.28);
+  /* 등락 색 기본은 글로벌식(초록 상승·빨강 하락). 설정에서 한국식으로 바꾸면 화면이 덮어써요 */
+  --up: #3fd08a;
+  --down: #ff5f57;
+  --up-bg: rgba(63, 208, 138, 0.24);
+  --down-bg: rgba(255, 95, 87, 0.26);
   --scale: 1;
   --mono: 'IBM Plex Mono', 'D2Coding', ui-monospace, monospace;
   --sans: 'IBM Plex Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
@@ -120,6 +121,40 @@ button {
 .screen-tabs button.on {
   border-bottom-color: var(--accent);
   color: var(--value-hi);
+}
+.stab {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 2px solid transparent;
+}
+.stab.on {
+  border-bottom-color: var(--accent);
+}
+.screen-tabs .stab button {
+  border-bottom: 0;
+  height: 28px;
+}
+.screen-tabs .stab.on .stab-name {
+  color: var(--value-hi);
+}
+.screen-tabs .stab-name {
+  padding: 0 4px 0 12px;
+}
+.screen-tabs .stab-x {
+  width: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5a5a5a;
+  margin-right: 2px;
+}
+.screen-tabs .stab-x:hover {
+  color: var(--value-hi);
+  background: #222;
+}
+.screen-tabs .stab.on .stab-x {
+  color: var(--label);
 }
 .screen-tabs input {
   width: 110px;

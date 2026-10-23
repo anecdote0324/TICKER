@@ -6,7 +6,7 @@ import { createStore } from './store';
 
 export const settings = createStore<Settings>(DEFAULT_SETTINGS);
 
-/** 등락 색(02 색): 한국식 기본 */
+/** 등락 색(02 색): 글로벌식 기본 */
 export function applyTheme(s: Settings, doc: Document = document) {
   const root = doc.documentElement;
   const korean = s.display.upDown === 'korean';
