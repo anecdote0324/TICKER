@@ -6,7 +6,7 @@ import { isMac } from './api';
 import { focusRegistry } from './components/focus';
 import { activePanelId, navigate, panels } from './stores/panels';
 import { settings } from './stores/settings';
-import { openSettings, ui } from './stores/ui';
+import { openSettings, togglePalette } from './stores/ui';
 
 /** 설정에서 바꾼 키를 반영한 단축키 판정 */
 export function isShortcut(e: KeyLike, id: ShortcutId): boolean {
@@ -33,7 +33,7 @@ export function onGlobalKey(e: KeyboardEvent) {
   const active = activePanelId.get();
   if (isShortcut(e, 'palette')) {
     e.preventDefault();
-    ui.set((s) => ({ ...s, palette: !s.palette }));
+    togglePalette();
     return;
   }
   if (isShortcut(e, 'settings')) {

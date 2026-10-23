@@ -10,7 +10,7 @@ import { getInstrument, indexState } from '../stores/instruments';
 import { activePanelId, LINK_COLORS, panels, type LinkColor } from '../stores/panels';
 import { settings, updateSettings } from '../stores/settings';
 import { useStore } from '../stores/store';
-import { openSettings, ui } from '../stores/ui';
+import { openHelp, openSettings, ui } from '../stores/ui';
 
 function SourceItem({ s }: { s: SourceStatus }) {
   const ok = s.state === 'connected';
@@ -121,7 +121,7 @@ export function StatusBar() {
       </span>
       {keyLabel('palette', keys) && <span>명령 팔레트 {keyLabel('palette', keys)}</span>}
       {keyLabel('settings', keys) && <span>설정 {keyLabel('settings', keys)}</span>}
-      <button onClick={() => ui.set((s) => ({ ...s, help: 'help' }))}>도움말 ?</button>
+      <button onClick={() => openHelp('help')}>도움말 ?</button>
     </footer>
   );
 }

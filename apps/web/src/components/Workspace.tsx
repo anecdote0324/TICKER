@@ -20,7 +20,7 @@ import { PriceChart } from '../widgets/PriceChart';
 import { Wei } from '../widgets/Wei';
 import { TitleBar } from '../widgets/common';
 import { activePanelId, LINK_COLORS, nextPanelNumber, panels, removePanel, upsertPanel, type LinkColor, type PanelState } from '../stores/panels';
-import { applyTheme, popoutDocuments, settings } from '../stores/settings';
+import { preparePopoutDocument, releasePopoutDocument } from '../popout';
 import { useStore } from '../stores/store';
 import { CommandLine } from './CommandLine';
 import { focusRegistry } from './focus';
@@ -133,6 +133,8 @@ function CommandLineWithRegistry({ id }: { id: string }) {
     focusRegistry.command.set(id, (initial: string) => {
       const inp = wrapRef.current?.querySelector('input');
       if (!inp) return;
+      // 다른 창(떼어낸 창)의 패널이면 그 창을 앞으로 가져와요(Ctrl+Tab, Mod+숫자)
+      if (!inp.ownerDocument.hasFocus()) inp.ownerDocument.defaultView?.focus();
       inp.focus();
       if (initial) {
         inp.ownerDocument.execCommand('insertText', false, initial);
@@ -174,16 +176,7 @@ function HeaderActions(props: IDockviewHeaderActionsProps) {
           aria-label="새 창으로 떼어내기"
           title="새 창으로 떼어내기(다른 모니터로 옮길 수 있어요)"
           onClick={() => {
-            void props.containerApi.addPopoutGroup(props.group, {
-              popoutUrl: 'popout.html',
-              onDidOpen: (ev) => {
-                const doc = ev.window.document;
-                // 떼어낸 창에도 스타일과 색을 복사해요(05 §14.3)
-                for (const node of document.querySelectorAll('style, link[rel="stylesheet"]')) doc.head.appendChild(node.cloneNode(true));
-                applyTheme(settings.get(), doc);
-                popoutDocuments.add(doc);
-              },
-            });
+            void props.containerApi.addPopoutGroup(props.group, { popoutUrl: 'popout.html' });
           }}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.2 }}>
@@ -286,6 +279,8 @@ export interface ScreenLayout {
 
 export function Workspace({ screenId, initial, onChange, visible }: { screenId: string; initial: ScreenLayout | null; onChange: (l: ScreenLayout) => void; visible: boolean }) {
   const apiRef = useRef<DockviewApi | null>(null);
+  // 화면을 다른 창으로 옮기거나 워크스페이스를 불러오면 이 배치는 사라지지만 패널은 그대로예요
+  const disposed = useRef(false);
   const onReady = (e: DockviewReadyEvent) => {
     const api = e.api;
     apiRef.current = api;
@@ -306,7 +301,16 @@ export function Workspace({ screenId, initial, onChange, visible }: { screenId: 
     api.onDidRemovePanel((panel) => {
       const id = (panel.params as { panelId?: string } | undefined)?.panelId;
       // 떼어낸 창으로 옮길 때도 제거·추가가 일어나요. 같은 id가 다시 생기지 않을 때만 지워요
-      if (id) setTimeout(() => !api.getPanel(panel.id) && !findPanelInAll(panel.id) && removePanel(id), 500);
+      if (id) setTimeout(() => !disposed.current && !api.getPanel(panel.id) && !findPanelInAll(panel.id) && removePanel(id), 500);
+    });
+    // 떼어낸 창(복원된 것 포함)에도 스타일·색·단축키를 붙여요(05 §14.3)
+    api.onDidAddPopoutGroup((g) => preparePopoutDocument(g.window));
+    api.onWillClosePopoutWindow((ev) => {
+      try {
+        releasePopoutDocument(ev.window.document);
+      } catch {
+        // 이미 닫힌 창
+      }
     });
     api.onDidActivePanelChange((ev) => {
       const id = ((ev as { panel?: { params?: { panelId?: string } } }).panel ?? (ev as unknown as { params?: { panelId?: string } }))?.params?.panelId;
@@ -316,6 +320,7 @@ export function Workspace({ screenId, initial, onChange, visible }: { screenId: 
   // 화면 탭을 닫으면 그 화면의 배치 API도 지워요
   useEffect(
     () => () => {
+      disposed.current = true;
       if (dockApis.get(screenId) === apiRef.current) dockApis.delete(screenId);
     },
     [screenId],

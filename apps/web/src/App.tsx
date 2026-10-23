@@ -7,6 +7,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { StatusBar } from './components/StatusBar';
 import { TickerTape } from './components/TickerTape';
 import { TopBar, type Screen } from './components/TopBar';
+import { ScreenWindow, ScreenWindowBar } from './components/ScreenWindow';
 import { addPanel, dockApis, Workspace, type ScreenLayout } from './components/Workspace';
 import { WorkspaceMenu } from './components/WorkspaceMenu';
 import { attachGlobalKeys } from './keys';
@@ -15,6 +16,7 @@ import { settings } from './stores/settings';
 import { appState, updateState, type NamedWorkspace } from './stores/state';
 import { useStore } from './stores/store';
 import { showToast, ui } from './stores/ui';
+import { screenWindows } from './stores/windows';
 
 export interface SavedWorkspace {
   /** 불러온(또는 마지막으로 저장한) 이름 붙인 워크스페이스 */
@@ -147,6 +149,39 @@ export function App() {
     });
   };
 
+  /** 지금 배치를 기억해 둬요. 화면을 다른 창으로 옮기면 배치를 새로 그려서, 옮기기 직전 것을 써요 */
+  const keepLayout = (id: string) => {
+    const api = dockApis.get(id);
+    if (api) layouts.current = { ...layouts.current, [id]: { dock: api.toJSON() } };
+  };
+
+  /** 화면 탭을 통째로 새 창으로 떼어내요. 메인 창에는 화면이 하나 이상 남아야 해요 */
+  const detachScreen = (id: string) => {
+    const rest = screens.filter((s) => !s.detached && s.id !== id);
+    if (!rest.length) return;
+    keepLayout(id);
+    setScreens((all) => all.map((s) => (s.id === id ? { ...s, detached: true } : s)));
+    if (active === id) {
+      // 메인 창은 왼쪽 옆 화면을 보여 줘요
+      const left = screens.slice(0, screens.findIndex((s) => s.id === id)).filter((s) => !s.detached);
+      setActive((left[left.length - 1] ?? rest[0]).id);
+    }
+  };
+
+  /** 떼어낸 화면을 메인 창으로 돌려놓아요(창을 닫아도 같아요) */
+  const attachScreen = (id: string, bounds?: Screen['bounds']) => {
+    keepLayout(id);
+    setScreens((all) => all.map((s) => (s.id === id ? { ...s, detached: false, bounds: bounds ?? s.bounds } : s)));
+    setActive(id);
+    window.focus();
+  };
+
+  // 메인 창이 보여 줄 화면: 고른 화면이 떼어낸 것이면 메인 창에 남은 첫 화면
+  const mainScreens = screens.filter((s) => !s.detached);
+  const mainActive = mainScreens.some((s) => s.id === active) ? active : (mainScreens[0]?.id ?? active);
+  // 팔레트·도움말을 떼어낸 화면 창에 그릴지(그 창에서 열었을 때)
+  const overlayHost = u.host && screens.some((s) => s.id === u.host && s.detached) ? u.host : undefined;
+
   useEffect(() => {
     attachGlobalKeys(window);
     const onUnload = () => save();
@@ -158,8 +193,13 @@ export function App() {
     <div className="app">
       <TopBar
         screens={screens}
-        active={active}
-        onSelect={setActive}
+        active={mainActive}
+        onSelect={(id) => {
+          // 떼어낸 화면이면 그 창을 앞으로 가져와요
+          const w = screenWindows.get(id);
+          if (w && !w.closed) w.focus();
+          else setActive(id);
+        }}
         onAdd={() => {
           const id = `s${Date.now().toString(36)}`;
           setScreens((s) => [...s, { id, name: `화면 ${s.length + 1}` }]);
@@ -167,29 +207,58 @@ export function App() {
         }}
         onRename={(id, name) => setScreens((s) => s.map((x) => (x.id === id ? { ...x, name } : x)))}
         onClose={closeScreen}
+        onDetach={detachScreen}
+        onAttach={(id) => attachScreen(id)}
         onAddPanel={() => {
-          const api = dockApis.get(active);
+          const api = dockApis.get(mainActive);
           if (api) addPanel(api);
         }}
         workspaceMenu={<WorkspaceMenu current={wsName} list={named} onSave={saveNamed} onLoad={loadNamed} onDelete={deleteNamed} onReset={resetWorkspace} />}
       />
-      {screens.map((s) => (
-        <Workspace
-          key={`${generation}:${s.id}`}
-          screenId={s.id}
-          visible={s.id === active}
-          initial={layouts.current[s.id] ?? null}
-          onChange={(l) => {
-            layouts.current = { ...layouts.current, [s.id]: l };
-            scheduleSave();
-          }}
-        />
-      ))}
+      {screens.map((s) => {
+        const workspace = (
+          <Workspace
+            key={`${generation}:${s.id}:${s.detached ? 'window' : 'main'}`}
+            screenId={s.id}
+            visible={s.detached || s.id === mainActive}
+            initial={layouts.current[s.id] ?? null}
+            onChange={(l) => {
+              layouts.current = { ...layouts.current, [s.id]: l };
+              scheduleSave();
+            }}
+          />
+        );
+        if (!s.detached) return workspace;
+        return (
+          <ScreenWindow
+            key={`${generation}:${s.id}:window`}
+            screen={s}
+            onClosed={(bounds) => attachScreen(s.id, bounds)}
+            onFailed={() => {
+              attachScreen(s.id);
+              showToast(`'${s.name}' 화면을 새 창으로 열지 못해서 메인 창에 두었어요`);
+            }}
+            onBounds={(bounds) => setScreens((all) => all.map((x) => (x.id === s.id ? { ...x, bounds } : x)))}
+          >
+            <ScreenWindowBar
+              name={s.name}
+              onAddPanel={() => {
+                const api = dockApis.get(s.id);
+                if (api) addPanel(api);
+              }}
+              onAttach={() => attachScreen(s.id)}
+            />
+            {workspace}
+            {overlayHost === s.id && u.palette && <Palette />}
+            {overlayHost === s.id && <HelpOverlay />}
+          </ScreenWindow>
+        );
+      })}
       <TickerTape />
       <StatusBar />
-      {u.palette && <Palette />}
+      {!overlayHost && u.palette && <Palette />}
       {u.settings && <SettingsModal />}
-      <HelpOverlay />
+      {!overlayHost && <HelpOverlay />}
       <ToastView />
     </div>
   );

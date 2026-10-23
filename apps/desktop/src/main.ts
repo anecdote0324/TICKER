@@ -131,15 +131,17 @@ function hardenNavigation(win: BrowserWindow, origin: string) {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     }
   });
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
     if (url === 'about:blank' || url.startsWith(`${origin}/popout.html`) || url.startsWith(`${origin}/`)) {
-      // 떼어낸 창(dockview 팝아웃): 같은 출처라 부모 창의 화면 코드가 그대로 그려요
+      // 떼어낸 창(dockview 팝아웃, 화면 탭을 통째로 떼어낸 창): 같은 출처라 부모 창의 화면 코드가 그대로 그려요
+      const screen = frameName.startsWith('ticker-screen-');
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
           backgroundColor: '#000000',
           autoHideMenuBar: true,
           title: 'TICKER',
+          ...(screen ? { minWidth: 640, minHeight: 400 } : {}),
           webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
         },
       };

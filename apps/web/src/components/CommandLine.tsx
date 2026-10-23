@@ -16,7 +16,7 @@ import { settings, updateSettings } from '../stores/settings';
 import { checkSlots } from '../stores/slots';
 import { appState, updateState, usageScore } from '../stores/state';
 import { useStore } from '../stores/store';
-import { openSettings, showToast, ui } from '../stores/ui';
+import { openHelp, openSettings, showToast, ui } from '../stores/ui';
 import { CandidateList } from './CandidateList';
 
 interface Props {
@@ -183,7 +183,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     (exec: Execution, via?: { row?: Row; query?: string }) => {
       if (exec.kind === 'command') {
         if (exec.cmd === 'settings') openSettings();
-        else ui.set((s) => ({ ...s, help: exec.cmd === 'syntax' ? 'syntax' : 'help' }));
+        else openHelp(exec.cmd === 'syntax' ? 'syntax' : 'help');
       } else if (exec.kind === 'lookup' && exec.lookup) {
         const { code, market } = exec.lookup;
         const fnCode = exec.fn ?? 'GP';
@@ -747,7 +747,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       {han !== 'off' && <span className={`cmd-han ${han === 'unknown' ? 'unknown' : ''}`}>한</span>}
       {label && <span className={`cmd-label ${analysis.plan.kind === 'execute' ? 'exec' : ''} ${labelFlash ? 'flash' : ''}`}>{labelText}</span>}
       {variant === 'panel' && (
-        <button className="icon-btn cmd-help" aria-label="도움말" title="도움말" onClick={() => ui.set((s) => ({ ...s, help: 'help' }))}>
+        <button className="icon-btn cmd-help" aria-label="도움말" title="도움말" onClick={() => openHelp('help')}>
           ?
         </button>
       )}

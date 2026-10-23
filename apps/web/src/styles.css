@@ -155,6 +155,20 @@ button {
 .screen-tabs .stab.on .stab-x {
   color: var(--label);
 }
+/* 다른 창으로 떼어낸 화면 탭 */
+.screen-tabs .stab.detached .stab-name {
+  color: #6a6a6a;
+  font-style: italic;
+}
+/* 떼어낸 화면 창의 맨 위 줄: 그 화면 하나만 */
+.screen-tabs .stab-solo {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  color: var(--value-hi);
+  font-weight: 500;
+}
 .screen-tabs input {
   width: 110px;
   background: #111;
