@@ -49,6 +49,8 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+또는 GitHub의 Actions → Release → Run workflow에서 `tag`에 `v0.1.0`을 넣고 실행해요. 지금 커밋에 그 태그를 만들면서 릴리스를 올려요.
+
 - GitHub Actions가 Windows 설치 파일(.exe, 설치형·휴대용)과 Mac(Apple Silicon) .dmg를 만들어 릴리스에 올려요. 정식 버전은 **초안**이라 GitHub의 Releases 화면에서 공개를 눌러야 하고, `-`가 붙은 미리 보기는 바로 공개돼요. 저장소가 비공개라 릴리스도 나만 볼 수 있어요.
 - 앱 버전 번호는 태그에서 가져와요. package.json의 version은 고치지 않아도 돼요.
 - 번호는 고치는 판이면 끝자리(`v0.1.1`), 다음 단계 기능이 다 들어가면 가운데(`v0.2.0`)를 올려요. `-`가 붙은 태그(`v0.2.0-beta.1`)는 미리 보기 릴리스예요.
