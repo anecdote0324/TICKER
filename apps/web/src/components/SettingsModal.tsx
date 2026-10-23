@@ -20,7 +20,9 @@ import {
 import { api, isMac } from '../api';
 import { clearImeLog, exportImeLog, imeLog, setImeLogEnabled } from '../imeLog';
 import { keyCapture } from '../keys';
-import { engine } from '../stores/instruments';
+import { analyzeStats, slowInputs } from '../perf';
+import { feedStats } from '../stores/feed';
+import { engine, indexState } from '../stores/instruments';
 import { settings, updateSettings } from '../stores/settings';
 import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
 import { updateState } from '../stores/state';
@@ -662,6 +664,46 @@ function KisUsage() {
   );
 }
 
+/** 성능(05 §14.1): 목표 p95 ≤ 2ms(키 하나당 해석), 한 프레임 ≤ 16ms */
+function PerfInfo() {
+  const idx = useStore(indexState);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  const a = analyzeStats();
+  const f = (x: number) => x.toFixed(1);
+  return (
+    <>
+      <h3>성능</h3>
+      <table className="cmp">
+        <tbody>
+          <tr>
+            <td style={{ width: 200 }}>커맨드 라인 해석</td>
+            <td className="mono">{a.count ? `최근 ${a.count}번 · p50 ${f(a.p50)}ms · p95 ${f(a.p95)}ms · p99 ${f(a.p99)}ms · 최대 ${f(a.max)}ms` : '아직 측정 없음(커맨드 라인에 입력해 보세요)'}</td>
+          </tr>
+          <tr>
+            <td>16ms를 넘긴 입력 이벤트</td>
+            <td className="mono">{slowInputs.observed ? `${slowInputs.count}번${slowInputs.count ? ` · 가장 긴 ${Math.round(slowInputs.worst)}ms` : ''}` : '측정할 수 없는 환경'}</td>
+          </tr>
+          <tr>
+            <td>종목 색인 준비</td>
+            <td className="mono">{idx.timing ? `${idx.count.toLocaleString()}개 · 워커 ${idx.timing.worker}ms · 화면 스레드 ${idx.timing.main}ms` : '—'}</td>
+          </tr>
+          <tr>
+            <td>시세 받기</td>
+            <td className="mono">
+              {feedStats.thread === 'worker' ? '웹 워커' : '화면 스레드'}
+              {feedStats.messages ? ` · 5초에 ${feedStats.messages}건, 해석 ${f(feedStats.parsedMs)}ms` : ''}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 function About() {
   const [info, setInfo] = useState<{ version: string } | null>(null);
   useEffect(() => {
@@ -679,6 +721,7 @@ function About() {
       <p className="note">
         한국투자증권 Open API · Binance 공개 시세 · ECB 기준환율(Frankfurter) · KIS 종목 마스터 파일. 블룸버그와 관련이 없는 개인 프로젝트예요.
       </p>
+      <PerfInfo />
       <h3>글꼴</h3>
       <p className="note">IBM Plex Mono · IBM Plex Sans KR(© IBM Corp.), D2Coding(© NAVER Corp.). 모두 SIL Open Font License 1.1이에요.</p>
     </>

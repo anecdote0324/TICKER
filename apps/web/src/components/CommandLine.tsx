@@ -8,6 +8,7 @@ import { ASSET_LABEL, canonicalSecurity, displayName, FUNCTIONS, MARKET_LABEL, t
 import { api } from '../api';
 import { logIme } from '../imeLog';
 import { isShortcut } from '../keys';
+import { recordAnalyze } from '../perf';
 import { feedStatus } from '../stores/feed';
 import { engine, getInstrument, index, indexState, supports } from '../stores/instruments';
 import { applyExecution, panelCanonical, panels, type PanelState } from '../stores/panels';
@@ -107,10 +108,12 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     setChosen((c) => c.filter((x) => text.slice(x.start, x.start + x.text.length) === x.text));
   }, [text]);
 
-  const analysis: Analysis = useMemo(
-    () => engine.analyze(text, cursor, ctx, { composing, listSegment, expanded }),
-    [text, cursor, ctx, composing, listSegment, expanded],
-  );
+  const analysis: Analysis = useMemo(() => {
+    const t0 = performance.now();
+    const a = engine.analyze(text, cursor, ctx, { composing, listSegment, expanded });
+    if (text) recordAnalyze(performance.now() - t0);
+    return a;
+  }, [text, cursor, ctx, composing, listSegment, expanded]);
 
   // 목록이 바뀌면 강조를 1번·선택 없음으로(K5)
   const rowsKey = analysis.rows.map((r) => r.id).join('|');

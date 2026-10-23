@@ -105,7 +105,7 @@
 - [x] 문법 자리 예약: 지수선물 월물·채권 ISIN·옵션 티커 모양(지금은 GOVT·CORP·COMDTY 단어만 예약) ([05](design/05-command-line.md) §3.7, [08](design/08-bloomberg-coverage.md) §4.5)
 - [x] 상태 표시줄에 연동 그룹 표시 ([02](design/02-ui.md))
 - [x] 글자 크기 설정이 화면 전체에 적용되게(지금은 일부만) ([06](design/06-settings.md))
-- [ ] 성능 목표 측정(키 하나당 해석 p95 2ms 등), 시세 처리를 화면과 다른 스레드로 ([01](design/01-overview.md), [05](design/05-command-line.md) §14.1)
+- [x] 성능 목표 측정(키 하나당 해석 p95 2ms 등), 시세 처리를 화면과 다른 스레드로 ([01](design/01-overview.md), [05](design/05-command-line.md) §14.1)
 
 **실제 환경에서 확인할 것** ([07](design/07-open-questions.md)에서 관리)
 

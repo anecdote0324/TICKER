@@ -1,10 +1,12 @@
 // 시세 연결: 서버와 WebSocket 하나만 두고 모든 패널(떼어낸 창 포함)이 나눠 받아요.
 // 화면에 보이는 종목만 구독하고, 어떤 패널에도 안 보이면 해제해요.
 // 갱신은 화면 주사율에 맞춰 묶어서 알려요(01 성능 원칙).
+// 연결과 JSON 해석은 웹 워커(workers/feed-worker)에서 해요. 워커를 못 쓰면 화면 스레드에서 직접 받아요.
 
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import type { Quote, ServerMessage, SourceStatus } from '@bt/shared';
 import { wsUrl } from '../api';
+import type { FeedWorkerOut } from '../workers/feed-worker';
 import { createStore } from './store';
 
 const quotes = new Map<string, Quote>();
@@ -22,13 +24,21 @@ export interface FeedStatus {
 export const feedStatus = createStore<FeedStatus>({ connected: false, demo: true, sources: [] });
 
 let ws: WebSocket | null = null;
+let worker: Worker | null = null;
+let workerOpen = false;
+let workerFailed = false;
 let backoff = 500;
+
+/** 시세 해석 통계(설정 → 정보의 성능) */
+export const feedStats = { thread: 'main' as 'worker' | 'main', parsedMs: 0, messages: 0 };
 let pendingSub = new Set<string>();
 let pendingUnsub = new Set<string>();
 let sendTimer = 0;
 
 function send(msg: object) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  if (worker) {
+    if (workerOpen) worker.postMessage({ type: 'send', msg });
+  } else if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
 function flushSubs() {
@@ -56,11 +66,7 @@ function onMessage(msg: ServerMessage) {
       feedStatus.set((s) => ({ ...s, demo: msg.demo }));
       break;
     case 'quotes':
-      for (const q of msg.quotes) {
-        quotes.set(q.id, q);
-        dirty.add(q.id);
-      }
-      if (!frame) frame = requestAnimationFrame(notify);
+      applyQuotes(msg.quotes);
       break;
     case 'status':
       feedStatus.set((s) => ({ ...s, sources: msg.sources, demo: !msg.sources.some((x) => x.source === 'KIS') }));
@@ -70,18 +76,67 @@ function onMessage(msg: ServerMessage) {
   }
 }
 
+function applyQuotes(list: Quote[]) {
+  for (const q of list) {
+    quotes.set(q.id, q);
+    dirty.add(q.id);
+  }
+  if (!frame) frame = requestAnimationFrame(notify);
+}
+
+function onOpen() {
+  backoff = 500;
+  feedStatus.set((s) => ({ ...s, connected: true }));
+  // 다시 연결되면 지금 보고 있는 종목을 모두 다시 구독해요
+  pendingSub = new Set(refs.keys());
+  pendingUnsub.clear();
+  flushSubs();
+}
+
+/** 웹 워커로 연결해요. 못 만들면 false */
+function connectViaWorker(): boolean {
+  if (typeof Worker === 'undefined' || workerFailed) return false;
+  try {
+    worker = new Worker(new URL('../workers/feed-worker.ts', import.meta.url), { type: 'module' });
+  } catch {
+    worker = null;
+    return false;
+  }
+  feedStats.thread = 'worker';
+  worker.onmessage = (e: MessageEvent<FeedWorkerOut>) => {
+    const m = e.data;
+    if (m.type === 'quotes') applyQuotes(m.quotes);
+    else if (m.type === 'message') onMessage(m.msg);
+    else if (m.type === 'open') {
+      workerOpen = true;
+      onOpen();
+    } else if (m.type === 'close') {
+      workerOpen = false;
+      feedStatus.set((s) => ({ ...s, connected: false }));
+    } else if (m.type === 'stats') {
+      feedStats.parsedMs = m.parsedMs;
+      feedStats.messages = m.messages;
+    }
+  };
+  // 워커를 불러오지 못하면(오래된 환경, 보안 정책) 화면 스레드에서 직접 받아요
+  worker.onerror = () => {
+    worker?.terminate();
+    worker = null;
+    workerFailed = true;
+    workerOpen = false;
+    connectFeed();
+  };
+  worker.postMessage({ type: 'connect', url: wsUrl() });
+  return true;
+}
+
 export function connectFeed() {
-  if (ws) return;
+  if (ws || worker) return;
+  if (connectViaWorker()) return;
+  feedStats.thread = 'main';
   const sock = new WebSocket(wsUrl());
   ws = sock;
-  sock.onopen = () => {
-    backoff = 500;
-    feedStatus.set((s) => ({ ...s, connected: true }));
-    // 다시 연결되면 지금 보고 있는 종목을 모두 다시 구독해요
-    pendingSub = new Set(refs.keys());
-    pendingUnsub.clear();
-    flushSubs();
-  };
+  sock.onopen = onOpen;
   sock.onmessage = (ev) => {
     try {
       onMessage(JSON.parse(String(ev.data)) as ServerMessage);
