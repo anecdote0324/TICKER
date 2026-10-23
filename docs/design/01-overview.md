@@ -14,10 +14,10 @@
 
 | 항목 | 결정 | 이유 |
 |---|---|---|
-| 앱 형태 | Electron 데스크톱 앱. 개발 중에는 브라우저와 실행 스크립트로 작업 | Windows와 Mac에서 같은 Chromium으로 그려서 화면이 똑같고, Node 서버를 앱 안에 그대로 품을 수 있어요 |
+| 앱 형태 | Electron 데스크톱 앱(v0.1은 Electron 45). 개발 중에는 브라우저와 실행 스크립트로 작업. 화면은 내장 서버(127.0.0.1, 실행마다 빈 포트)에서 불러와요 | Windows와 Mac에서 같은 Chromium으로 그려서 화면이 똑같고, Node 서버를 앱 안에 그대로 품을 수 있어요 |
 | 지원 OS | Windows 주력, macOS(Apple Silicon)는 보조 | 현재 보유한 PC가 Windows예요. Mac 빌드는 GitHub Actions의 Apple Silicon 빌드 서버에서 자동으로 만들어요 |
 | 언어 | TypeScript (화면과 서버 모두) | 화면은 어차피 TypeScript여야 하고, 서버와 데이터 형식을 공유할 수 있어요. 서버는 계산보다 중계가 대부분이라 언어 속도 차이가 체감되지 않아요 |
-| 화면 기술 | React + Vite, 창 관리 dockview, 메인 차트 TradingView Lightweight Charts, 스파크라인·소형 차트 uPlot | 차트 수십 개를 동시에 그리는 데 맞춘 조합. 실제 성능은 개발하면서 재요 |
+| 화면 기술 | React + Vite, 창 관리 dockview(창 떼어내기는 dockview 팝아웃 창), 메인 차트 TradingView Lightweight Charts, 소형 차트 uPlot(GRID, v0.3). v0.1의 스파크라인은 SVG로 그려요 | 차트 수십 개를 동시에 그리는 데 맞춘 조합. 실제 성능은 개발하면서 재요 |
 | 서버 | Node.js + Fastify + WebSocket, 앱 안에서 실행 | 시세 수집과 중계, API 키 보호 |
 | DB | SQLite | 파일 하나, 별도 설치 불필요 |
 | 저장소 구성 | pnpm 모노레포 | 화면·서버·공통 형식을 한 저장소에서 관리 |

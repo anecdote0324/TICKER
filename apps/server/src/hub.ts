@@ -12,6 +12,8 @@ import type { Logger } from './util';
 export interface Client {
   send(msg: ServerMessage): void;
   ids: Set<string>;
+  /** 종목 목록이 준비되기 전에 들어온 구독 요청 */
+  pending?: Set<string>;
 }
 
 const FLUSH_MS = 100;
@@ -34,8 +36,19 @@ export class Hub implements AdapterHost {
 
   constructor(public log: Logger) {}
 
+  private ready = false;
+
   setInstruments(list: Instrument[]) {
     this.instruments = new Map(list.map((i) => [i.id, i]));
+    this.ready = true;
+    // 목록이 준비되기 전에 들어온 구독을 이제 처리해요
+    for (const c of this.clients) {
+      if (c.pending?.size) {
+        const ids = [...c.pending];
+        c.pending.clear();
+        this.subscribe(c, ids);
+      }
+    }
   }
 
   get demoMode() {
@@ -68,7 +81,10 @@ export class Hub implements AdapterHost {
     for (const id of ids) {
       if (c.ids.has(id)) continue;
       const inst = this.instruments.get(id);
-      if (!inst) continue;
+      if (!inst) {
+        if (!this.ready) (c.pending ??= new Set()).add(id);
+        continue;
+      }
       c.ids.add(id);
       const n = (this.refs.get(id) ?? 0) + 1;
       this.refs.set(id, n);
@@ -83,6 +99,7 @@ export class Hub implements AdapterHost {
   unsubscribe(c: Client, ids: string[]) {
     const gone: Instrument[] = [];
     for (const id of ids) {
+      c.pending?.delete(id);
       if (!c.ids.delete(id)) continue;
       const n = (this.refs.get(id) ?? 1) - 1;
       if (n <= 0) {

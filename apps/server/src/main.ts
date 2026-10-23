@@ -19,7 +19,7 @@ const server = await startServer({
 });
 
 console.info(`데이터 폴더: ${dataDir}`);
-console.info(`화면 주소(개발): http://localhost:5173/#token=${server.token}`);
+console.info(`화면 주소(개발): http://127.0.0.1:5173/#token=${server.token}`);
 
 const shutdown = async () => {
   await server.close();

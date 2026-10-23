@@ -1,0 +1,28 @@
+appId: local.personal.terminal
+productName: Terminal
+copyright: 개인용
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: web
+    to: web
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+  category: public.app-category.finance
+  # 개인용이라 코드 서명은 하지 않아요(01 설치 파일과 서명)
+  identity: null

@@ -31,7 +31,7 @@ export function Wei({ panel }: { panel: PanelState }) {
           <span style={{ width: 70, textAlign: 'right' }}>변동</span>
           <span style={{ width: 64, textAlign: 'right' }}>변동률</span>
           <span style={{ width: 72, textAlign: 'right' }}>시간</span>
-          <span style={{ width: 52, textAlign: 'right' }}>추세</span>
+          <span className="col-spark" style={{ width: 52, textAlign: 'right' }}>추세</span>
         </div>
         {REGIONS.map((region) => (
           <div key={region}>

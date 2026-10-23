@@ -73,7 +73,7 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
           <span style={{ width: 84, textAlign: 'right' }}>현재가</span>
           <span style={{ width: 70, textAlign: 'right' }}>등락</span>
           <span style={{ width: 34 }} />
-          <span style={{ width: 52, textAlign: 'right' }}>추세</span>
+          <span className="col-spark" style={{ width: 52, textAlign: 'right' }}>추세</span>
         </div>
         {visible.map((g) => (
           <div key={g.id}>

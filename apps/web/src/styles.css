@@ -396,6 +396,19 @@ button {
   min-height: 0;
   overflow: auto;
   position: relative;
+  container-type: inline-size;
+}
+/* 좁은 패널에서는 덜 중요한 열부터 숨겨요: 추세 → 신선도 열은 남겨요(실시간 아님 표시는 빠뜨리지 않아요) */
+@container (max-width: 380px) {
+  .row .spark,
+  .thead .col-spark {
+    display: none;
+  }
+}
+@container (max-width: 300px) {
+  .row .cd {
+    display: none;
+  }
 }
 .pbody::-webkit-scrollbar {
   width: 8px;
