@@ -113,7 +113,7 @@
 - [ ] Windows 11 한글 IME 시험 표, 입력칸 (a)·(b)안 비교
 - [ ] Windows·Mac에서 앱키 암호화 저장(OS 보안 저장소)
 - [x] Windows 설치형(.exe) 설치와 실행(v0.1.0-beta.1)
-- [ ] Windows 제거 프로그램이 Windows 보안에 막혀요. 어떻게 할지 정하기([07](design/07-open-questions.md))
+- [x] Windows 제거 프로그램이 Windows 보안에 막혀요. 그대로 두고 손으로 지우는 방법을 안내해요([01](design/01-overview.md) 설치 파일과 서명)
 - [ ] Windows 휴대용 .exe, Mac .dmg 설치와 첫 실행 경고
 - [ ] 떼어낸 창의 위치 복원, 모니터를 뺐을 때 창 모으기
 - [ ] 목록에 없는 코드 직접 조회(한국투자증권 상품 기본 정보 응답 필드)
