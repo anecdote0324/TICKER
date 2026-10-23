@@ -75,4 +75,6 @@ pnpm dist             # 지금 OS용 설치 파일(apps/desktop/release)
 
 claude.ai 목업 (비공개, 소유자만 열람 가능): https://claude.ai/artifact/1AE6PgM1jVf4bTsRT85xoV
 
+개발을 시작하기 전에 화면을 미리 보려고 만든 것이에요. 이제는 더 이상 고치지 않아서 실제 앱과 다를 수 있어요. 화면의 기준은 실제 앱과 [02 화면 디자인](docs/design/02-ui.md)이에요.
+
 목업의 숫자와 뉴스는 모두 모의 데이터예요.

@@ -1,6 +1,6 @@
 # 06 설정 화면
 
-목업 (비공개 claude.ai 링크, "설정 · 커맨드 라인" 보드): https://claude.ai/artifact/1AE6PgM1jVf4bTsRT85xoV
+목업 (비공개 claude.ai 링크, "설정 · 커맨드 라인" 보드, 더 이상 고치지 않아요. 화면의 기준은 실제 앱과 이 문서예요): https://claude.ai/artifact/1AE6PgM1jVf4bTsRT85xoV
 
 ## 공통 규칙
 
