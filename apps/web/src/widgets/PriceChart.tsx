@@ -1,5 +1,7 @@
 // GP 가격 차트(일·주·월봉 캔들, 거래량, 20일·60일 이동평균선)와 GIP 장중 차트(분봉).
 // 왼쪽 위에 시가·고가·저가·종가와 신선도 배지를 붙여요(02).
+// 보이는 범위: 기간 버튼(GP 1M~MAX, GIP 1H~MAX)으로 배율을 정하고, 종목만 바꾸면 그 배율 그대로 가장 최근 봉으로 가요.
+// 가격 축은 종목·기간이 바뀔 때마다 보이는 봉에 다시 맞춰요(손으로 당긴 가격 축이 다음 종목에 남지 않게).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -21,12 +23,11 @@ import { fmtPrice, fmtBig, priceDigits } from '../format';
 import { getBars } from '../stores/bars';
 import { useQuote } from '../stores/feed';
 import { supports, useInstrument } from '../stores/instruments';
-import type { PanelState } from '../stores/panels';
+import { patchPanel, type PanelState } from '../stores/panels';
 import { settings } from '../stores/settings';
 import { useStore } from '../stores/store';
+import { GIP_RANGES, GP_RANGES, GIP_DEFAULT, GP_DEFAULT, RIGHT_PAD, visibleBarCount } from './chartRange';
 import { TitleBar } from './common';
-
-const RANGES: Record<string, number> = { '3M': 63, '6M': 126, '1Y': 250, MAX: 100000 };
 
 // 십자선 동기화: 한 차트에 마우스를 올리면 다른 차트에도 같은 시점에 세로선(02)
 type CrossListener = (t: number | null, from: IChartApi) => void;
@@ -75,8 +76,15 @@ function sma(bars: Bar[], n: number) {
 
 export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: boolean }) {
   const inst = useInstrument(panel.securityId);
-  const [interval, setInterval] = useState<BarInterval>(intraday ? '1m' : '1d');
-  const [range, setRange] = useState('6M');
+  // 봉 단위와 기간은 패널마다 기억해요(종목을 바꾸거나 앱을 다시 켜도 그대로)
+  const interval: BarInterval = intraday ? '1m' : (panel.gpInterval ?? '1d');
+  const range = intraday ? (panel.gipRange && GIP_RANGES[panel.gipRange] ? panel.gipRange : GIP_DEFAULT) : panel.gpRange && GP_RANGES[panel.gpRange] ? panel.gpRange : GP_DEFAULT;
+  // 기간 버튼을 누를 때마다 늘려요. 같은 버튼을 다시 눌러도 기본 보기로 돌아가요
+  const [fitTick, setFitTick] = useState(0);
+  const pickRange = (r: string) => {
+    patchPanel(panel.id, intraday ? { gipRange: r } : { gpRange: r });
+    setFitTick((n) => n + 1);
+  };
   const [series, setSeries] = useState<BarSeries | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hover, setHover] = useState<Bar | null>(null);
@@ -90,8 +98,11 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const ma60Ref = useRef<ISeriesApi<'Line'> | null>(null);
   const closeRef = useRef<ISeriesApi<'Line'> | null>(null);
   const barsRef = useRef<Bar[]>([]);
-
-  useEffect(() => setInterval(intraday ? '1m' : '1d'), [intraday]);
+  const barsIdRef = useRef<string | null>(null);
+  // 지금 보이는 범위를 어떤 기준으로 맞췄는지(종목 id, 봉 단위·기간·버튼 누름)
+  const viewRef = useRef<{ id: string; key: string } | null>(null);
+  // 차트 크기가 아직 0이라 미뤄 둔 범위 맞추기
+  const pendingFit = useRef<(() => void) | null>(null);
 
   // 차트 만들기
   useEffect(() => {
@@ -102,7 +113,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       layout: { background: { type: ColorType.Solid, color: '#0A0A0A' }, textColor: '#8C8C8C', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, attributionLogo: false },
       grid: { vertLines: { color: '#141414' }, horzLines: { color: '#141414' } },
       rightPriceScale: { borderColor: '#242424' },
-      timeScale: { borderColor: '#242424', timeVisible: intraday, secondsVisible: false, tickMarkFormatter: (t: number, type: TickMarkType) => kstTick(t, type) },
+      timeScale: { borderColor: '#242424', rightOffset: RIGHT_PAD, timeVisible: intraday, secondsVisible: false, tickMarkFormatter: (t: number, type: TickMarkType) => kstTick(t, type) },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#555', labelBackgroundColor: '#262626' }, horzLine: { color: '#555', labelBackgroundColor: '#262626' } },
       // 시간 축은 한국 시간으로 보여 줘요(배지 시각과 같은 기준)
       localization: { locale: 'ko-KR', timeFormatter: (t: number) => kstLabel(t, intraday ? 'full' : 'date') },
@@ -111,8 +122,10 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const vol = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false });
     chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.22 } });
-    const ma20 = chart.addSeries(LineSeries, { color: '#FB8B1E', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    const ma60 = chart.addSeries(LineSeries, { color: '#BDBDBD', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    // 이동평균선은 가격 축 맞춤에서 빼요. 현재가에서 멀리 떨어진 60일선 때문에 캔들이 작게 몰리지 않게
+    const maOptions = { lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider: () => null } as const;
+    const ma20 = chart.addSeries(LineSeries, { ...maOptions, color: '#FB8B1E' });
+    const ma60 = chart.addSeries(LineSeries, { ...maOptions, color: '#BDBDBD' });
     // 환율처럼 종가만 있는 데이터는 캔들 대신 선으로 그려요
     const closeLine = chart.addSeries(LineSeries, { color: '#E6E6E6', lineWidth: 1, priceLineColor: '#FB8B1E', visible: false });
     closeRef.current = closeLine;
@@ -135,8 +148,19 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       }
     };
     crossListeners.add(listener);
+    // 크기가 0일 때 범위를 맞추면 배율이 가장 작게 굳어요. 크기가 생기면 그때 맞춰요
+    const onSize = (w: number) => {
+      if (w > 0 && pendingFit.current) {
+        const fit = pendingFit.current;
+        pendingFit.current = null;
+        fit();
+      }
+    };
+    chart.timeScale().subscribeSizeChange(onSize);
+    viewRef.current = null;
     return () => {
       crossListeners.delete(listener);
+      chart.timeScale().unsubscribeSizeChange(onSize);
       chart.remove();
       chartRef.current = null;
     };
@@ -170,9 +194,12 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   // 데이터 넣기
   useEffect(() => {
     const c = candleRef.current;
-    if (!c || !series || !inst) return;
+    const chart = chartRef.current;
+    // 종목을 바꾼 직전에는 앞 종목의 봉이 남아 있어요. 새 봉이 올 때까지 기다려요
+    if (!c || !chart || !series || !inst || series.id !== inst.id || series.interval !== interval) return;
     const bars = series.bars;
     barsRef.current = bars.slice();
+    barsIdRef.current = series.id;
     const d = priceDigits(inst, bars[bars.length - 1]?.c);
     c.applyOptions({ priceFormat: { type: 'price', precision: d, minMove: Math.pow(10, -d) } });
     const closeOnly = bars.length > 0 && bars.every((b) => b.o === b.c && b.h === b.c && b.l === b.c);
@@ -186,15 +213,35 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const daily = !intraday;
     ma20Ref.current?.setData(daily ? sma(bars, 20) : []);
     ma60Ref.current?.setData(daily ? sma(bars, 60) : []);
-    const n = intraday ? bars.length : Math.min(bars.length, RANGES[range] / (interval === '1w' ? 5 : interval === '1M' ? 21 : 1));
-    if (bars.length > 0) chartRef.current?.timeScale().setVisibleLogicalRange({ from: bars.length - n - 0.5, to: bars.length + 2 });
-  }, [series, range, interval, intraday, inst]);
+    if (bars.length === 0) return;
+
+    const ts = chart.timeScale();
+    const key = `${interval}|${range}|${fitTick}`;
+    const view = viewRef.current;
+    const idChanged = view?.id !== series.id;
+    if (!view || view.key !== key) {
+      // 처음이거나 봉 단위·기간 버튼이 바뀌었으면 그 기간에 맞춰요
+      const n = visibleBarCount(bars, intraday, interval, range);
+      const fit = () => chart.timeScale().setVisibleLogicalRange({ from: bars.length - n - 0.5, to: bars.length - 1 + RIGHT_PAD + 0.5 });
+      if (ts.width() > 0) fit();
+      else pendingFit.current = fit;
+    } else if (idChanged) {
+      // 종목만 바뀌었으면 지금 배율 그대로 가장 최근 봉으로
+      ts.scrollToPosition(RIGHT_PAD, false);
+    }
+    if (!view || view.key !== key || idChanged) {
+      // 가격 축은 보이는 봉에 다시 맞춰요(손으로 당겨 꺼진 자동 맞춤을 다시 켜요)
+      chart.priceScale('right').applyOptions({ autoScale: true });
+    }
+    viewRef.current = { id: series.id, key };
+  }, [series, range, interval, intraday, inst, fitTick]);
 
   // 실시간 시세로 마지막 봉 고치기
   useEffect(() => {
     const c = candleRef.current;
     const bars = barsRef.current;
-    if (!c || !quote || bars.length === 0) return;
+    // 종목을 바꾼 직후에는 앞 종목의 봉이 남아 있어서, 새 종목 시세로 고치면 가격 축이 튀어요
+    if (!c || !quote || bars.length === 0 || quote.id !== barsIdRef.current) return;
     const last = bars[bars.length - 1];
     if (intraday) {
       const t = Math.floor(quote.fresh.asOf / 60_000) * 60;
@@ -217,22 +264,30 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const fnCode = intraday ? 'GIP' : 'GP';
   const tools = useMemo(
     () =>
-      intraday ? null : (
+      intraday ? (
         <>
-          {(['1d', '1w', '1M'] as BarInterval[]).map((iv) => (
-            <button key={iv} className={interval === iv ? 'on' : ''} onClick={() => setInterval(iv)}>
+          {Object.keys(GIP_RANGES).map((r) => (
+            <button key={r} className={range === r ? 'on' : ''} title={r === '1D' ? '가장 최근 장 전체(24시간 시장은 최근 24시간)' : '이 기간으로 보기(다시 누르면 처음 보기로)'} onClick={() => pickRange(r)}>
+              {r}
+            </button>
+          ))}
+        </>
+      ) : (
+        <>
+          {(['1d', '1w', '1M'] as const).map((iv) => (
+            <button key={iv} className={interval === iv ? 'on' : ''} onClick={() => patchPanel(panel.id, { gpInterval: iv })}>
               {iv === '1d' ? '일' : iv === '1w' ? '주' : '월'}
             </button>
           ))}
           <span style={{ width: 8 }} />
-          {Object.keys(RANGES).map((r) => (
-            <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>
+          {Object.keys(GP_RANGES).map((r) => (
+            <button key={r} className={range === r ? 'on' : ''} title="이 기간으로 보기(다시 누르면 처음 보기로)" onClick={() => pickRange(r)}>
               {r}
             </button>
           ))}
         </>
       ),
-    [interval, range, intraday],
+    [interval, range, intraday, panel.id], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   return (

@@ -30,6 +30,10 @@ export interface PanelState {
   fwd: NavEntry[];
   /** MON이 보여 줄 관심종목 묶음 */
   watchGroups?: string[];
+  /** GP에서 고른 봉 단위와 보이는 기간, GIP에서 고른 보이는 기간(패널마다 기억) */
+  gpInterval?: '1d' | '1w' | '1M';
+  gpRange?: string;
+  gipRange?: string;
 }
 
 export const panels = createStore<Record<string, PanelState>>({});
