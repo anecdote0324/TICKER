@@ -14,6 +14,8 @@ migrateOldUserData();
 const isDev = !app.isPackaged;
 let server: RunningServer | null = null;
 let mainWindow: BrowserWindow | null = null;
+/** 떼어낸 창(패널 묶음 창·화면 창). window.open의 이름 → 창 */
+const childWindows = new Map<string, BrowserWindow>();
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -149,7 +151,13 @@ function hardenNavigation(win: BrowserWindow, origin: string) {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
-  win.webContents.on('did-create-window', (child) => {
+  win.webContents.on('did-create-window', (child, details) => {
+    // 전체 화면 단축키가 어느 창의 것인지 창 이름(window.open의 이름)으로 찾아요
+    if (details.frameName) {
+      const name = details.frameName;
+      childWindows.set(name, child);
+      child.on('closed', () => childWindows.get(name) === child && childWindows.delete(name));
+    }
     child.setMenu(null);
     child.webContents.setZoomFactor(zoomFactor);
     child.setBounds(visibleBounds(child.getBounds()));
@@ -213,6 +221,15 @@ ipcMain.on('bt:zoom', (event, factor: unknown) => {
   if (typeof factor !== 'number' || !Number.isFinite(factor) || factor < 0.5 || factor > 2) return;
   zoomFactor = factor;
   for (const w of BrowserWindow.getAllWindows()) w.webContents.setZoomFactor(factor);
+});
+
+// 전체 화면(Windows F11, Mac ⌃⌘F, 06 단축키): 단축키를 누른 그 창만. 메인 창이 F11을 메뉴로 받지 않아서(Windows는 메뉴 막대 없음) 화면이 알려 줘요
+ipcMain.handle('bt:fullscreen', (event, name: unknown) => {
+  if (!server || !(event.senderFrame?.url ?? '').startsWith(server.url)) return false;
+  const target = (typeof name === 'string' && name && childWindows.get(name)) || BrowserWindow.fromWebContents(event.sender);
+  if (!target || target.isDestroyed()) return false;
+  target.setFullScreen(!target.isFullScreen());
+  return target.isFullScreen();
 });
 
 ipcMain.on('bt:open-external', (_e, url: unknown) => {

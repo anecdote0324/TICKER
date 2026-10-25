@@ -29,6 +29,16 @@ describe('단축키', () => {
     expect(formatBinding('Alt+ArrowDown', false)).toBe('Alt+↓');
   });
 
+  it('전체 화면: Windows F11, Mac ⌃⌘F', () => {
+    expect(matchesShortcut(key('F11', 'F11'), 'fullscreen', {}, false)).toBe(true);
+    expect(matchesShortcut(key('KeyF', 'f', { ctrlKey: true, metaKey: true }), 'fullscreen', {}, true)).toBe(true);
+    expect(matchesShortcut(key('F11', 'F11'), 'fullscreen', {}, true)).toBe(false);
+    expect(formatBinding('Mod+Ctrl+F', true)).toBe('⌃⌘F');
+    // 설정에서 Mac의 ⌃⌘F를 눌러 받으면 같은 키로 알아봐요
+    expect(findConflict(bindingFromEvent(key('KeyF', 'f', { ctrlKey: true, metaKey: true }), true)!, 'palette', {}, true)?.id).toBe('fullscreen');
+    expect(isReservedBinding('F11', false)).toBe(false);
+  });
+
   it('겹치는 키와 고정 키를 알아봐요', () => {
     expect(findConflict('Mod+K', 'settings', {}, false)?.id).toBe('palette');
     expect(findConflict('Mod+K', 'palette', {}, false)).toBeUndefined();

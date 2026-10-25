@@ -34,7 +34,7 @@
 
 ## 단축키
 
-- 바꿀 수 있는 키: 명령 팔레트, 설정 창, 커맨드 라인으로, 커맨드 라인 ↔ 패널 본문(F6), 패널 본문으로(Windows Ctrl+↓), 패널 화면 뒤로·앞으로, 다음·이전 패널, 지금 칸 목록 열기(Alt+↓, Windows Ctrl+Space), 설명 창·문법 요약(F1, Mod+/), 자산군 EQUITY·CRYPTO·CURNCY·INDEX(Mod+Shift+E/C/X/I). 기본값은 [05](05-command-line.md) §10이에요.
+- 바꿀 수 있는 키: 명령 팔레트, 설정 창, 전체 화면(Windows F11, Mac ⌃⌘F), 커맨드 라인으로, 커맨드 라인 ↔ 패널 본문(F6), 패널 본문으로(Windows Ctrl+↓), 패널 화면 뒤로·앞으로, 다음·이전 패널, 지금 칸 목록 열기(Alt+↓, Windows Ctrl+Space), 설명 창·문법 요약(F1, Mod+/), 자산군 EQUITY·CRYPTO·CURNCY·INDEX(Mod+Shift+E/C/X/I). 기본값은 [05](05-command-line.md) §10이에요.
 - 키 이름을 누르면 새 키를 받아요. 누른 조합이 바로 적용돼요. Esc는 취소, Backspace는 그 키를 빼요. `+`로 키를 하나 더 붙일 수 있어요.
 - 다른 단축키가 쓰는 키는 받지 않고 어디서 쓰는지 알려 줘요. 입력 규칙의 일부인 키(Tab, Enter, Esc, 화살표, 글자·숫자만, Mod+1…9, Alt+1…9, 되돌리기·복사·붙여넣기 같은 편집 키)도 받지 않아요.
 - 바꾼 키만 저장해요. 줄마다 `기본값`, 아래에 `모두 기본값으로`가 있어요.

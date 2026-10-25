@@ -6,7 +6,7 @@ import { isMac } from './api';
 import { focusRegistry } from './components/focus';
 import { activePanelId, navigate, panels } from './stores/panels';
 import { settings } from './stores/settings';
-import { openSettings, togglePalette } from './stores/ui';
+import { openSettings, showToast, togglePalette } from './stores/ui';
 
 /** 설정에서 바꾼 키를 반영한 단축키 판정 */
 export function isShortcut(e: KeyLike, id: ShortcutId): boolean {
@@ -21,6 +21,28 @@ export function shortcutLabel(id: ShortcutId): string {
 
 /** 단축키를 받는 중(설정 창)에는 앱 단축키를 멈춰요 */
 export const keyCapture = { active: false };
+
+/**
+ * 전체 화면(Windows F11, Mac ⌃⌘F): 단축키를 누른 그 창만 바꿔요(메인 창 또는 떼어낸 창).
+ * 데스크톱 앱은 메인 프로세스가 창 이름으로 찾아 바꾸고, 브라우저(개발용)에서는 화면 전체 API를 써요.
+ */
+async function toggleFullScreen(view: Window) {
+  const isMain = view === window;
+  let on = false;
+  try {
+    if (window.btBridge?.toggleFullScreen) on = await window.btBridge.toggleFullScreen(isMain ? '' : view.name);
+    else {
+      const doc = view.document;
+      if (doc.fullscreenElement) await doc.exitFullscreen();
+      else await doc.documentElement.requestFullscreen();
+      on = !!doc.fullscreenElement;
+    }
+  } catch {
+    return;
+  }
+  // 알림은 메인 창에 떠요. 떼어낸 창이면 그 창에서는 보이지 않아서 띄우지 않아요
+  if (on && isMain) showToast(`전체 화면이에요 · ${shortcutLabel('fullscreen')}로 나가요`, undefined, 3000);
+}
 
 function focusPanel(id: string) {
   activePanelId.set(id);
@@ -39,6 +61,11 @@ export function onGlobalKey(e: KeyboardEvent) {
   if (isShortcut(e, 'settings')) {
     e.preventDefault();
     openSettings();
+    return;
+  }
+  if (isShortcut(e, 'fullscreen')) {
+    e.preventDefault();
+    void toggleFullScreen((e.view as Window | null) ?? window);
     return;
   }
   if (isShortcut(e, 'focusCommand')) {

@@ -9,6 +9,8 @@ declare global {
       openExternal(url: string): void;
       /** 화면 전체 배율(글자 크기 설정, 06). 모든 창에 적용돼요 */
       setZoom?(factor: number): void;
+      /** 이름이 name인 창(빈 이름은 메인 창)의 전체 화면을 바꿔요. 바뀐 뒤 전체 화면인지 */
+      toggleFullScreen?(name: string): Promise<boolean>;
     };
   }
 }

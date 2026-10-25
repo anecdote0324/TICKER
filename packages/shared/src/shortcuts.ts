@@ -5,6 +5,7 @@
 export type ShortcutId =
   | 'palette'
   | 'settings'
+  | 'fullscreen'
   | 'focusCommand'
   | 'toggleFocus'
   | 'bodyFocus'
@@ -31,6 +32,8 @@ export interface ShortcutDef {
 export const SHORTCUTS: ShortcutDef[] = [
   { id: 'palette', label: '명령 팔레트', scope: '어디서나', win: ['Mod+K'], mac: ['Mod+K'] },
   { id: 'settings', label: '설정 창', scope: '어디서나', win: ['Mod+,'], mac: ['Mod+,'] },
+  // 지금 창(메인 창 또는 떼어낸 창)만 전체 화면으로. Mac은 macOS 표준 키(⌃⌘F). F11은 Mac에서 바탕 화면 보기예요
+  { id: 'fullscreen', label: '전체 화면', scope: '어디서나', win: ['F11'], mac: ['Mod+Ctrl+F'] },
   { id: 'focusCommand', label: '활성 패널의 커맨드 라인으로', scope: '어디서나', win: ['Mod+L'], mac: ['Mod+L'] },
   { id: 'toggleFocus', label: '커맨드 라인 ↔ 패널 본문', scope: '어디서나', win: ['F6'], mac: ['F6'] },
   // Mac의 Ctrl+↓는 시스템 단축키(앱 윈도우)와 겹칠 수 있어서 기본으로 묶지 않아요(05 §10.1)

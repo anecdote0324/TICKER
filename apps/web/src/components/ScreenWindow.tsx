@@ -87,7 +87,9 @@ export function ScreenWindow(props: {
       }
       try {
         const next = { x: w.screenX, y: w.screenY, width: w.outerWidth, height: w.outerHeight };
-        if (next.width > 0 && next.height > 0 && !sameBounds(last, next)) {
+        // 전체 화면일 때의 크기는 기억하지 않아요(다음에 열 때는 전체 화면 전의 크기로)
+        const fullScreen = next.width >= w.screen.width && next.height >= w.screen.height;
+        if (next.width > 0 && next.height > 0 && !fullScreen && !sameBounds(last, next)) {
           last = next;
           cb.current.onBounds(next);
         }
