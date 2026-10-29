@@ -2,6 +2,7 @@
 // 이 개발 환경에서는 KIS 서버에 접속할 수 없어서, 요청·응답 형식은 KIS 공식 예제 코드를 기준으로 만들었어요.
 // 실제 계정으로 붙여 볼 때 07의 "확인할 것"을 함께 확인해요.
 
+import { createHash } from 'node:crypto';
 import {
   INDICES,
   usesRealtimeSlot,
@@ -13,7 +14,7 @@ import {
   type Quote,
   type SourceStatus,
 } from '@bt/shared';
-import { fetchJson, HttpError, sleep } from '../util';
+import { fetchJson, HttpError, sleep, withTimeout } from '../util';
 import { RequestBudget, SlotAllocator, type Priority } from './kis-budget';
 import type { Adapter, AdapterHost } from './types';
 
@@ -23,15 +24,28 @@ export interface KisCredentials {
   env: 'real' | 'virtual';
 }
 
+/** 저장해 둔 토큰. keyId는 어느 키(앱키·서버)로 받은 토큰인지예요(키를 바꾸면 다시 받아요) */
+export interface SavedKisToken {
+  token: string;
+  expiresAt: number;
+  keyId?: string;
+}
+
 export interface KisTokenStore {
-  load(): Promise<{ token: string; expiresAt: number } | undefined>;
-  save(t: { token: string; expiresAt: number }): Promise<void>;
+  load(): Promise<SavedKisToken | undefined>;
+  save(t: SavedKisToken): Promise<void>;
 }
 
 const ENDPOINTS = {
   real: { rest: 'https://openapi.koreainvestment.com:9443', ws: 'ws://ops.koreainvestment.com:21000', perSecond: 18 },
   virtual: { rest: 'https://openapivts.koreainvestment.com:29443', ws: 'ws://ops.koreainvestment.com:31000', perSecond: 2 },
 };
+
+/** 시험용으로 접속 주소를 바꿔요(가짜 KIS 서버). 배포판은 쓰지 않아요 */
+export interface KisEndpoints {
+  rest: string;
+  ws: string;
+}
 
 /** 실시간 구독 슬롯 한도(예제 코드는 40개로 막아 둠, 07 확인할 것) */
 const WS_LIMIT = 40;
@@ -52,10 +66,12 @@ const H0STCNT0_FIELDS = 46;
 const HDFSCNT0_FIELDS = 26;
 
 export class KisAdapter implements Adapter {
+  /** 단계마다 기다리는 시간(테스트에서 줄여 써요) */
+  static timeouts = { step: 25_000, tokenStore: 5000 };
   readonly source = 'KIS' as const;
   private budget: RequestBudget;
   private slots = new SlotAllocator(WS_LIMIT);
-  private token: { token: string; expiresAt: number } | undefined;
+  private token: SavedKisToken | undefined;
   private tokenPromise: Promise<string> | null = null;
   private approvalKey: string | undefined;
   private ws: WebSocket | null = null;
@@ -71,17 +87,29 @@ export class KisAdapter implements Adapter {
   private pollTimer: NodeJS.Timeout | null = null;
   private pollCursor = 0;
   private lastPoll = new Map<string, number>();
+  /** 같은 조회 실패를 1분에 한 번만 기록해요 */
+  private warned = new Map<string, number>();
+  /** 최근 실패(진단 정보) */
+  private recentErrors: string[] = [];
+  private wsOpenedAt = 0;
+  private lastWsMessageAt = 0;
 
   constructor(
     private host: AdapterHost,
     private cred: KisCredentials,
     private tokenStore: KisTokenStore,
+    private endpoints?: KisEndpoints,
   ) {
     this.budget = new RequestBudget(ENDPOINTS[cred.env].perSecond);
   }
 
+  /** 이 키로 받은 토큰인지 알아보는 값(앱키·서버의 해시 앞부분). 키 자체는 남기지 않아요 */
+  private get keyId() {
+    return createHash('sha256').update(`${this.cred.env}|${this.cred.appKey}`).digest('hex').slice(0, 16);
+  }
+
   private get ep() {
-    return ENDPOINTS[this.cred.env];
+    return { ...ENDPOINTS[this.cred.env], ...this.endpoints };
   }
 
   canServe(inst: Instrument) {
@@ -123,9 +151,15 @@ export class KisAdapter implements Adapter {
   private async getToken(): Promise<string> {
     if (this.token && this.token.expiresAt - Date.now() > 10 * 60_000) return this.token.token;
     if (!this.token) {
-      const saved = await this.tokenStore.load();
-      if (saved && saved.expiresAt - Date.now() > 10 * 60_000) {
+      // 저장해 둔 토큰을 못 읽어도(보안 저장소가 늦거나 실패) 새로 받으면 돼요
+      const saved = await withTimeout(this.tokenStore.load(), KisAdapter.timeouts.tokenStore, '저장해 둔 토큰을 제때 읽지 못했어요').catch((e: Error) => {
+        this.host.log.warn(`KIS ${e.message}`);
+        return undefined;
+      });
+      // 다른 키(앱키를 바꿨거나 실전·모의를 바꿈)로 받은 토큰은 쓰지 않아요
+      if (saved && saved.keyId === this.keyId && saved.expiresAt - Date.now() > 10 * 60_000) {
         this.token = saved;
+        this.host.log.info(`KIS 저장해 둔 토큰을 써요(${Math.round((saved.expiresAt - Date.now()) / 3600_000)}시간 남음)`);
         return saved.token;
       }
     }
@@ -138,8 +172,11 @@ export class KisAdapter implements Adapter {
           body: JSON.stringify({ grant_type: 'client_credentials', appkey: this.cred.appKey, appsecret: this.cred.appSecret }),
           timeoutMs: 15_000,
         });
-        this.token = { token: r.access_token, expiresAt: Date.now() + r.expires_in * 1000 };
-        await this.tokenStore.save(this.token);
+        if (!r.access_token) throw new Error('토큰 응답에 access_token이 없어요');
+        this.token = { token: r.access_token, expiresAt: Date.now() + r.expires_in * 1000, keyId: this.keyId };
+        this.host.log.info(`KIS 토큰 발급(${Math.round(r.expires_in / 3600)}시간)`);
+        // 토큰 저장이 늦거나 실패해도 이번 실행은 메모리의 토큰으로 계속해요(다음 실행 때 다시 받아요)
+        await withTimeout(this.tokenStore.save(this.token), KisAdapter.timeouts.tokenStore, '토큰을 제때 저장하지 못했어요').catch((e: Error) => this.host.log.warn(`KIS ${e.message}`));
         return r.access_token;
       })().finally(() => {
         this.tokenPromise = null;
@@ -156,20 +193,62 @@ export class KisAdapter implements Adapter {
       body: JSON.stringify({ grant_type: 'client_credentials', appkey: this.cred.appKey, secretkey: this.cred.appSecret }),
       timeoutMs: 15_000,
     });
+    if (!r.approval_key) throw new Error('응답에 approval_key가 없어요');
     this.approvalKey = r.approval_key;
+    this.host.log.info('KIS 실시간 접속키 발급');
     return r.approval_key;
   }
 
-  /** 연결 테스트: 토큰을 받고 삼성전자 현재가를 한 번 조회해요 */
+  /**
+   * 연결 테스트: 토큰을 받고 삼성전자 현재가를 한 번 조회해요.
+   * 단계마다 시간을 정해서 늦어도 끝나고, 실패하면 어느 단계에서 막혔는지 알려 줘요
+   */
   async test(): Promise<{ ok: boolean; message: string }> {
+    let step = '토큰 받기';
     try {
-      await this.getToken();
-      const r = await this.get('/uapi/domestic-stock/v1/quotations/inquire-price', 'FHKST01010100', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: '005930' }, 0);
+      const late = `한국투자증권이 ${KisAdapter.timeouts.step / 1000}초 동안 응답하지 않았어요`;
+      await withTimeout(this.getToken(), KisAdapter.timeouts.step, late);
+      step = '삼성전자 현재가 조회';
+      const r = await withTimeout(
+        this.get('/uapi/domestic-stock/v1/quotations/inquire-price', 'FHKST01010100', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: '005930' }, 0),
+        KisAdapter.timeouts.step,
+        late,
+      );
       const p = (r.output as KisRow | undefined)?.stck_prpr;
+      if (!p) return { ok: false, message: `연결은 됐지만 현재가 응답에 값이 없어요(${step})` };
       return { ok: true, message: `연결됐어요 · 삼성전자 현재가 ${Number(p).toLocaleString('ko-KR')}원` };
     } catch (e) {
-      return { ok: false, message: `연결하지 못했어요: ${(e as Error).message}` };
+      const msg = (e as Error).message + (e instanceof HttpError && e.body ? ` · ${e.body.slice(0, 200)}` : '');
+      this.noteError(`연결 테스트(${step}): ${msg}`);
+      return { ok: false, message: `연결하지 못했어요(${step}): ${msg}` };
     }
+  }
+
+  /** 실패를 진단 정보에 남기고, 같은 실패는 1분에 한 번만 기록해요 */
+  private noteError(msg: string) {
+    this.recentErrors.push(`${new Date().toISOString()} ${msg}`);
+    if (this.recentErrors.length > 20) this.recentErrors.shift();
+    const key = msg.slice(0, 80);
+    const now = Date.now();
+    if (now - (this.warned.get(key) ?? 0) < 60_000) return;
+    this.warned.set(key, now);
+    this.host.log.warn(`KIS ${msg}`);
+  }
+
+  /** 진단 정보(설정 → 정보 → 진단 정보 복사). 키·토큰은 넣지 않아요 */
+  diagnostics() {
+    return {
+      env: this.cred.env,
+      state: this.state,
+      message: this.message,
+      tokenHoursLeft: this.token ? Math.round((this.token.expiresAt - Date.now()) / 360_000) / 10 : null,
+      wsOpenSec: this.wsOpenedAt ? Math.round((Date.now() - this.wsOpenedAt) / 1000) : null,
+      lastWsMessageSecAgo: this.lastWsMessageAt ? Math.round((Date.now() - this.lastWsMessageAt) / 1000) : null,
+      wsSubscribed: this.wsSubs.size,
+      subscribed: this.subscribed.size,
+      budget: this.budget.usage(),
+      recentErrors: this.recentErrors.slice(-10),
+    };
   }
 
   // ── 목록에 없는 코드 직접 조회(05 §4.5, §13) ──
@@ -232,6 +311,8 @@ export class KisAdapter implements Adapter {
           await sleep(1100);
           return this.get(path, trId, params, pri, retry - 1);
         }
+        // 한국투자증권의 오류 내용(msg_cd·msg1)이 응답 본문에 있어서 함께 알려 줘요
+        if (e instanceof HttpError) throw new Error(`${trId} ${e.message}${e.body ? ` · ${e.body.slice(0, 200)}` : ''}`);
         throw e;
       }
     });
@@ -249,20 +330,43 @@ export class KisAdapter implements Adapter {
       this.scheduleReconnect(`실시간 접속키 발급 실패: ${(e as Error).message}`);
       return;
     }
-    const ws = new WebSocket(this.ep.ws);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.ep.ws);
+    } catch (e) {
+      this.scheduleReconnect(`실시간 서버 주소를 열 수 없어요: ${(e as Error).message}`);
+      return;
+    }
     this.ws = ws;
     let opened = false;
+    // 방화벽 등으로 연결이 열리지도 끊기지도 않으면 15초 뒤 다시 해요(그동안은 몇 초 간격 조회로 받아요)
+    const openTimer = setTimeout(() => {
+      if (!opened && this.ws === ws) {
+        this.noteError('실시간 서버(ops.koreainvestment.com)에 15초 안에 연결하지 못했어요');
+        ws.close();
+      }
+    }, 15_000);
     ws.onopen = () => {
       opened = true;
+      clearTimeout(openTimer);
       this.backoff = 2000;
+      this.wsOpenedAt = Date.now();
       this.wsSubs.clear();
+      this.host.log.info('KIS 실시간 연결');
       this.setState('connected');
       this.syncWs();
     };
-    ws.onmessage = (ev) => this.onWsMessage(String(ev.data));
-    ws.onclose = () => {
+    ws.onmessage = (ev) => {
+      this.lastWsMessageAt = Date.now();
+      this.onWsMessage(String(ev.data));
+    };
+    ws.onerror = () => this.noteError(opened ? '실시간 연결 오류' : '실시간 서버에 연결하지 못했어요');
+    ws.onclose = (ev) => {
+      clearTimeout(openTimer);
       if (this.ws !== ws) return;
       this.ws = null;
+      this.wsOpenedAt = 0;
+      this.host.log.info(`KIS 실시간 끊김(코드 ${ev.code}${ev.reason ? `, ${ev.reason}` : ''})`);
       this.scheduleReconnect(opened ? '실시간 연결이 끊겼어요' : '실시간 서버에 연결할 수 없어요');
     };
     void key;
@@ -317,8 +421,9 @@ export class KisAdapter implements Adapter {
       try {
         const j = JSON.parse(raw) as { header?: { tr_id?: string }; body?: { msg1?: string; rt_cd?: string } };
         // 연결 확인 신호는 그대로 돌려보내요
-        if (j.header?.tr_id === 'PINGPONG') this.ws?.send(raw);
-        else if (j.body?.rt_cd && j.body.rt_cd !== '0') this.host.log.warn(`KIS 실시간: ${j.body.msg1}`);
+        if (j.header?.tr_id === 'PINGPONG') {
+          if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(raw);
+        } else if (j.body?.rt_cd && j.body.rt_cd !== '0') this.noteError(`실시간 구독 거절(${j.header?.tr_id ?? ''}): ${j.body.msg1}`);
       } catch {
         // 무시
       }
@@ -458,7 +563,7 @@ export class KisAdapter implements Adapter {
       const q = await this.fetchQuote(inst, pri, intervalMs);
       if (q) this.host.emitQuote(q);
     } catch (e) {
-      this.host.log.debug(`KIS 조회 실패 ${inst.id}: ${(e as Error).message}`);
+      this.noteError(`조회 실패(${inst.assetClass === 'INDEX' ? '지수' : inst.market === 'US' ? '미국' : '국내'}): ${(e as Error).message}`);
     }
   }
 

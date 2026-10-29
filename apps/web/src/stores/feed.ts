@@ -19,9 +19,27 @@ export interface FeedStatus {
   connected: boolean;
   demo: boolean;
   sources: SourceStatus[];
+  /** 연결은 열려 있는데 서버가 한동안 아무것도 보내지 않아요(서버는 5초마다 상태를 보내요) */
+  stale: boolean;
 }
 
-export const feedStatus = createStore<FeedStatus>({ connected: false, demo: true, sources: [] });
+export const feedStatus = createStore<FeedStatus>({ connected: false, demo: true, sources: [], stale: false });
+
+/** 서버에서 마지막으로 무엇이든 받은 때 */
+let lastServerMessage = Date.now();
+const STALE_MS = 15_000;
+
+function heard() {
+  lastServerMessage = Date.now();
+  if (feedStatus.get().stale) feedStatus.set((s) => ({ ...s, stale: false }));
+}
+
+// 상태 표시줄의 초록 점이 멈춘 서버를 연결됨으로 보여 주지 않게 해요
+window.setInterval(() => {
+  const s = feedStatus.get();
+  const stale = s.connected && Date.now() - lastServerMessage > STALE_MS;
+  if (stale !== s.stale) feedStatus.set((x) => ({ ...x, stale }));
+}, 3000);
 
 let ws: WebSocket | null = null;
 let worker: Worker | null = null;
@@ -61,6 +79,7 @@ function notify() {
 }
 
 function onMessage(msg: ServerMessage) {
+  heard();
   switch (msg.type) {
     case 'hello':
       feedStatus.set((s) => ({ ...s, demo: msg.demo }));
@@ -77,7 +96,9 @@ function onMessage(msg: ServerMessage) {
 }
 
 function applyQuotes(list: Quote[]) {
+  heard();
   for (const q of list) {
+    if (!q) continue;
     quotes.set(q.id, q);
     dirty.add(q.id);
   }
@@ -86,6 +107,7 @@ function applyQuotes(list: Quote[]) {
 
 function onOpen() {
   backoff = 500;
+  heard();
   feedStatus.set((s) => ({ ...s, connected: true }));
   // 다시 연결되면 지금 보고 있는 종목을 모두 다시 구독해요
   pendingSub = new Set(refs.keys());

@@ -12,8 +12,9 @@ import { settings, updateSettings } from '../stores/settings';
 import { useStore } from '../stores/store';
 import { openHelp, openSettings, ui } from '../stores/ui';
 
-function SourceItem({ s }: { s: SourceStatus }) {
-  const ok = s.state === 'connected';
+function SourceItem({ s, stale }: { s: SourceStatus; stale: boolean }) {
+  // 내장 서버가 답하지 않으면 마지막으로 받은 상태를 믿을 수 없어서 연결됨으로 보여 주지 않아요
+  const ok = s.state === 'connected' && !stale;
   const name = s.source === 'KIS' ? '한국투자증권' : s.source === 'BINANCE' ? 'Binance' : s.source === 'ECB' ? '환율' : '데모';
   let extra = '';
   if (s.source === 'KIS' && s.wsLimit) extra = ` 실시간 ${s.wsUsed ?? 0}/${s.wsLimit}`;
@@ -81,13 +82,18 @@ export function StatusBar() {
   return (
     <footer className="statusbar">
       {!fs.connected && <span className="warn">⚠ 내장 서버 연결 끊김 · 다시 연결 중</span>}
+      {fs.connected && fs.stale && (
+        <span className="warn" title="서버가 15초 넘게 아무것도 보내지 않았어요. 시세가 멈춰 있어요. 설정 → 정보 → 진단 정보 복사로 상태를 알려 주세요">
+          ⚠ 내장 서버 응답 없음
+        </span>
+      )}
       {fs.demo && (
         <span className="demo-flag" title="한국투자증권 키를 넣기 전에는 주식·지수가 데모 값이에요" onClick={() => openSettings('data')} style={{ cursor: 'pointer' }}>
           데모 시세
         </span>
       )}
       {fs.sources.map((s) => (
-        <SourceItem key={s.source} s={s} />
+        <SourceItem key={s.source} s={s} stale={fs.stale} />
       ))}
       <span className="label" title={snapshotNote(idx.sources)}>
         {idx.loading ? '종목 목록 불러오는 중…' : `종목 ${idx.count.toLocaleString()}개`}

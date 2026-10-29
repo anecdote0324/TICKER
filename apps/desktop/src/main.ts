@@ -28,16 +28,56 @@ app.on('second-instance', () => {
   mainWindow.focus();
 });
 
-/** OS 보안 저장소(Windows DPAPI, macOS 키체인)로 앱키를 암호화해요. 쓸 수 없으면 데이터 폴더의 키 파일로 대신해요 */
+/** 보안 저장소가 이 시간 안에 답하지 않으면 예전 방식(바로 끝나는 API)으로 다시 해요 */
+const SECRET_ASYNC_MS = 5000;
+
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`보안 저장소가 ${ms / 1000}초 동안 응답하지 않았어요`)), ms);
+    p.then(
+      (v) => (clearTimeout(t), resolve(v)),
+      (e) => (clearTimeout(t), reject(e)),
+    );
+  });
+}
+
+/**
+ * OS 보안 저장소(Windows DPAPI, macOS 키체인)로 앱키를 암호화해요. 쓸 수 없으면 데이터 폴더의 키 파일로 대신해요.
+ * 비동기 API가 답하지 않으면(첫 호출 때 초기화가 끝나지 않는 경우) 같은 저장소의 예전 동기 API로 다시 해요.
+ * 동기 API로 암호화한 값은 비동기 API로도 풀 수 있어요(Electron 문서).
+ */
 async function osSecretBox(): Promise<SecretBox | undefined> {
-  if (!(await safeStorage.isAsyncEncryptionAvailable().catch(() => false))) return undefined;
+  // 없다고 답하면 예전처럼 키 파일을 써요. 답이 없을 때만 동기 API로 대신해요(저장 방식이 바뀌면 저장된 키를 못 읽어서)
+  const available = await within(safeStorage.isAsyncEncryptionAvailable(), SECRET_ASYNC_MS).catch(() => 'no-answer' as const);
+  if (available === false) return undefined;
+  const asyncOk = available === true;
+  const syncOk = safeStorage.isEncryptionAvailable();
+  if (!asyncOk && !syncOk) return undefined;
+  const note = (msg: string) => server?.log.warn(msg) ?? console.warn(msg);
   return {
     kind: 'os',
     async encrypt(plain) {
-      return (await safeStorage.encryptStringAsync(plain)).toString('base64');
+      if (asyncOk) {
+        try {
+          return (await within(safeStorage.encryptStringAsync(plain), SECRET_ASYNC_MS)).toString('base64');
+        } catch (e) {
+          if (!syncOk) throw e;
+          note(`보안 저장소(비동기) 암호화 실패, 동기 API로 다시 해요: ${(e as Error).message}`);
+        }
+      }
+      return safeStorage.encryptString(plain).toString('base64');
     },
     async decrypt(cipher) {
-      return (await safeStorage.decryptStringAsync(Buffer.from(cipher, 'base64'))).result;
+      const buf = Buffer.from(cipher, 'base64');
+      if (asyncOk) {
+        try {
+          return (await within(safeStorage.decryptStringAsync(buf), SECRET_ASYNC_MS)).result;
+        } catch (e) {
+          if (!syncOk) throw e;
+          note(`보안 저장소(비동기) 복호화 실패, 동기 API로 다시 해요: ${(e as Error).message}`);
+        }
+      }
+      return safeStorage.decryptString(buf);
     },
   };
 }
@@ -241,7 +281,14 @@ app.whenReady().then(async () => {
   const dataDir = join(app.getPath('userData'), 'data');
   const webDir = isDev ? join(__dirname, '../../web/dist') : join(process.resourcesPath, 'web');
   const snapshotFile = isDev ? join(__dirname, '../snapshot/instruments.json.gz') : join(process.resourcesPath, 'snapshot', 'instruments.json.gz');
-  server = await startServer({ dataDir, port: 0, webDir, snapshotFile, secretBox: await osSecretBox(), version: app.getVersion() });
+  // 가짜 한국투자증권 서버로 시험할 때만(개발판에서 BT_KIS_REST·BT_KIS_WS를 둘 다 줄 때). 배포판은 늘 실제 주소예요
+  const kisEndpoints = isDev && process.env.BT_KIS_REST && process.env.BT_KIS_WS ? { rest: process.env.BT_KIS_REST, ws: process.env.BT_KIS_WS } : undefined;
+  // 서버 기록은 데이터 폴더의 logs/server.log에 남겨요(설정 → 정보 → 진단 정보 복사). 키·토큰은 남기지 않아요
+  const logFile = join(app.getPath('userData'), 'logs', 'server.log');
+  server = await startServer({ dataDir, port: 0, webDir, snapshotFile, secretBox: await osSecretBox(), version: app.getVersion(), kisEndpoints, logFile });
+  // 메인 프로세스에서 놓친 오류는 오류 창을 띄우는 대신 기록하고 계속 돌아가요(오류 창이 떠 있는 동안 서버가 멈춰요)
+  process.on('uncaughtException', (e) => server?.log.error(`처리하지 못한 오류: ${e.stack ?? e.message}`));
+  process.on('unhandledRejection', (e) => server?.log.error(`처리하지 못한 약속 거절: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`));
   await createMainWindow();
 });
 

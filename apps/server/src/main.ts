@@ -19,6 +19,8 @@ const server = await startServer({
   webDir,
   snapshotFile,
   devOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  // 가짜 한국투자증권 서버로 시험할 때만(두 값을 모두 줘야 해요)
+  kisEndpoints: process.env.BT_KIS_REST && process.env.BT_KIS_WS ? { rest: process.env.BT_KIS_REST, ws: process.env.BT_KIS_WS } : undefined,
 });
 
 console.info(`데이터 폴더: ${dataDir}`);

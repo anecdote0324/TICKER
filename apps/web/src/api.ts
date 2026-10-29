@@ -46,12 +46,26 @@ export class ApiError extends Error {
   }
 }
 
+/** 내장 서버가 이 시간 안에 답하지 않으면 실패로 알려요(버튼이 `… 중`에 멈춰 있지 않게) */
+const REQUEST_TIMEOUT_MS = 60_000;
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: { 'x-bt-token': token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const ctl = new AbortController();
+  const timer = window.setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: { 'x-bt-token': token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: ctl.signal,
+    });
+  } catch (e) {
+    if (ctl.signal.aborted) throw new ApiError(0, `내장 서버가 ${REQUEST_TIMEOUT_MS / 1000}초 동안 답하지 않았어요. 설정 → 정보의 진단 정보 복사로 상태를 알려 주세요`);
+    throw e;
+  } finally {
+    window.clearTimeout(timer);
+  }
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
   if (!res.ok) throw new ApiError(res.status, (data as { error?: string })?.error ?? `HTTP ${res.status}`);

@@ -21,7 +21,7 @@ import { api, isMac } from '../api';
 import { clearImeLog, exportImeLog, imeLog, setImeLogEnabled } from '../imeLog';
 import { keyCapture } from '../keys';
 import { analyzeStats, slowInputs } from '../perf';
-import { feedStats } from '../stores/feed';
+import { feedStats, feedStatus } from '../stores/feed';
 import { engine, indexState } from '../stores/instruments';
 import { settings, updateSettings } from '../stores/settings';
 import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
@@ -597,6 +597,7 @@ function Data() {
         )}
       </div>
       {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.message}</p>}
+      <p className="note">연결 테스트가 실패하면 어느 단계에서 막혔는지 함께 보여 줘요. 원인을 모르겠으면 정보 → 진단 정보 복사로 보내 주세요.</p>
       <p className="note">실시간 구독은 약 40개, 조회는 초당 약 20건까지예요. 화면에 보이는 종목부터 실시간으로 받고, 넘치는 종목은 몇 초 간격으로 조회해요.</p>
       <KisUsage />
 
@@ -704,6 +705,56 @@ function PerfInfo() {
   );
 }
 
+/**
+ * 진단 정보 복사: 서버 상태·한국투자증권 연결 단계·최근 서버 기록과 화면 쪽 연결 상태를 글로 모아 복사해요.
+ * 앱키·앱시크릿·토큰은 들어가지 않아요(앱키는 끝 4자리만). 문제가 생겼을 때 이 글을 보내 주면 원인을 찾을 수 있어요
+ */
+function Diagnostics() {
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const copy = async () => {
+    setBusy(true);
+    setMsg(null);
+    const fs = feedStatus.get();
+    const client = {
+      at: new Date().toISOString(),
+      app: window.btBridge?.version ?? 'browser',
+      platform: window.btBridge?.platform ?? navigator.platform,
+      feed: { connected: fs.connected, stale: fs.stale, demo: fs.demo, thread: feedStats.thread, messagesPer5s: feedStats.messages },
+    };
+    let server: unknown;
+    try {
+      server = await api.get('/api/diagnostics');
+    } catch (e) {
+      server = { error: (e as Error).message };
+    }
+    const text = ['[TICKER 진단 정보]', JSON.stringify({ client, server }, null, 1)].join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setMsg({ ok: true, text: '진단 정보를 복사했어요. 채팅에 붙여 넣어 보내 주세요(키·토큰은 들어 있지 않아요)' });
+    } catch {
+      setMsg({ ok: false, text: '복사하지 못했어요' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <h3>진단</h3>
+      <div className="field">
+        <label>진단 정보</label>
+        <button className="btn" disabled={busy} onClick={() => void copy()}>
+          {busy ? '모으는 중…' : '진단 정보 복사'}
+        </button>
+      </div>
+      {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p>}
+      <p className="note">
+        연결 상태, 한국투자증권 연결 단계와 최근 오류, 최근 서버 기록을 모아 복사해요. 앱키·앱시크릿·토큰은 넣지 않아요(앱키는 끝 4자리만). 서버 기록 파일은 데이터 폴더의 `logs/server.log`예요.
+      </p>
+    </>
+  );
+}
+
 function About() {
   const [info, setInfo] = useState<{ version: string } | null>(null);
   useEffect(() => {
@@ -722,6 +773,7 @@ function About() {
         한국투자증권 Open API · Binance 공개 시세 · ECB 기준환율(Frankfurter) · KIS 종목 마스터 파일. 블룸버그와 관련이 없는 개인 프로젝트예요.
       </p>
       <PerfInfo />
+      <Diagnostics />
       <h3>글꼴</h3>
       <p className="note">IBM Plex Mono · IBM Plex Sans KR(© IBM Corp.), D2Coding(© NAVER Corp.). 모두 SIL Open Font License 1.1이에요.</p>
     </>

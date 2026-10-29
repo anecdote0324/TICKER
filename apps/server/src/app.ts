@@ -13,6 +13,7 @@ import type { BarInterval, ClientMessage, CredentialStatus, InstrumentsResponse,
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
 import { STATE_NAMES, type StateName, type Store } from './store';
+import { withTimeout, type RecordingLogger } from './util';
 
 export interface AppDeps {
   hub: Hub;
@@ -25,7 +26,12 @@ export interface AppDeps {
   devOrigins?: string[];
   version: string;
   makeKis: (cred: KisCredentials) => KisAdapter;
+  log: RecordingLogger;
 }
+
+/** 키를 암호화하거나 푸는 데 이보다 오래 걸리면 보안 저장소가 응답하지 않는 걸로 봐요 */
+const SECRET_TIMEOUT_MS = 15_000;
+const SECRET_TIMEOUT_MSG = 'PC의 보안 저장소(Windows 데이터 보호·Mac 키체인)가 15초 동안 응답하지 않아요';
 
 const BAR_INTERVALS = new Set<BarInterval>(['1m', '5m', '1d', '1w', '1M']);
 
@@ -150,8 +156,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // ── 한국투자증권 키 ──
+  // 끝나지 않는 단계(보안 저장소, 실시간 준비)가 있어도 화면의 버튼이 멈추지 않게 단계마다 시간을 정해요.
+  // 기록에는 앱키 끝 4자리만 남기고, 앱시크릿·토큰은 남기지 않아요
+  const { log } = deps;
+  const readSecret = (name: string) => withTimeout(store.getSecret(name), SECRET_TIMEOUT_MS, SECRET_TIMEOUT_MSG);
+  const saveSecret = (name: string, value: string | undefined) => withTimeout(store.setSecret(name, value), SECRET_TIMEOUT_MS, SECRET_TIMEOUT_MSG);
   const credentialStatus = async (): Promise<CredentialStatus & { secretKind: string }> => {
-    const raw = await store.getSecret('kis');
+    const raw = await readSecret('kis');
     if (!raw) return { kis: { configured: false, env: 'real' }, secretKind: store.secretKind };
     const c = JSON.parse(raw) as KisCredentials & { lastTest?: CredentialStatus['kis']['lastTest'] };
     return {
@@ -159,36 +170,93 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       secretKind: store.secretKind,
     };
   };
+  /** 키를 저장한 뒤 실시간 소스를 한국투자증권으로 바꿔요. 오래 걸려도 응답은 먼저 보내요 */
+  const switchToKis = async (kis: KisAdapter) => {
+    await withTimeout(hub.setKis(kis), 20_000, '실시간 준비가 20초 안에 끝나지 않았어요').catch((e) => log.warn(`한국투자증권으로 바꾸는 중: ${(e as Error).message}`));
+  };
+  const envName = (c: KisCredentials) => (c.env === 'real' ? '실전' : '모의');
 
-  app.get('/api/credentials', credentialStatus);
+  app.get('/api/credentials', async (_req, reply) => {
+    try {
+      return await credentialStatus();
+    } catch (e) {
+      log.error(`저장된 키를 읽지 못했어요: ${(e as Error).message}`);
+      return reply.code(500).send({ error: `저장된 키를 읽지 못했어요: ${(e as Error).message}` });
+    }
+  });
 
   app.put<{ Body: { appKey?: string; appSecret?: string; env?: 'real' | 'virtual' } }>('/api/credentials/kis', async (req, reply) => {
     const { appKey, appSecret, env } = req.body ?? {};
     if (!appKey || !appSecret) return reply.code(400).send({ error: '앱키와 앱시크릿을 모두 넣어 주세요' });
     const cred: KisCredentials = { appKey: appKey.trim(), appSecret: appSecret.trim(), env: env === 'virtual' ? 'virtual' : 'real' };
+    const t0 = Date.now();
+    log.info(`한국투자증권 키 저장·연결 테스트 시작(${envName(cred)}, 앱키 …${cred.appKey.slice(-4)}, 앱키 ${cred.appKey.length}자·앱시크릿 ${cred.appSecret.length}자)`);
     const kis = deps.makeKis(cred);
     const test = await kis.test();
-    await store.setSecret('kis', JSON.stringify({ ...cred, lastTest: { ...test, at: Date.now() } }));
-    if (test.ok) await hub.setKis(kis);
-    return { test, status: await credentialStatus() };
+    log.info(`한국투자증권 연결 테스트 ${test.ok ? '성공' : '실패'}(${Date.now() - t0}ms): ${test.message}`);
+    try {
+      await saveSecret('kis', JSON.stringify({ ...cred, lastTest: { ...test, at: Date.now() } }));
+    } catch (e) {
+      log.error(`키 저장 실패: ${(e as Error).message}`);
+      return reply.code(500).send({ error: `키를 저장하지 못했어요: ${(e as Error).message}` });
+    }
+    if (test.ok) await switchToKis(kis);
+    else kis.stop();
+    return { test, status: await credentialStatus().catch(() => ({ kis: { configured: true, env: cred.env }, secretKind: store.secretKind })) };
   });
 
   app.post('/api/credentials/kis/test', async (_req, reply) => {
-    const raw = await store.getSecret('kis');
+    let raw: string | undefined;
+    try {
+      raw = await readSecret('kis');
+    } catch (e) {
+      return reply.code(500).send({ error: `저장된 키를 읽지 못했어요: ${(e as Error).message}` });
+    }
     if (!raw) return reply.code(400).send({ error: '저장된 키가 없어요' });
     const cred = JSON.parse(raw) as KisCredentials;
+    const t0 = Date.now();
     const kis = hub.kis ?? deps.makeKis(cred);
     const test = await kis.test();
-    await store.setSecret('kis', JSON.stringify({ ...cred, lastTest: { ...test, at: Date.now() } }));
-    if (test.ok && !hub.kis) await hub.setKis(kis);
-    return { test, status: await credentialStatus() };
+    log.info(`한국투자증권 다시 테스트 ${test.ok ? '성공' : '실패'}(${Date.now() - t0}ms, ${envName(cred)}): ${test.message}`);
+    await saveSecret('kis', JSON.stringify({ ...cred, lastTest: { ...test, at: Date.now() } })).catch((e) => log.error(`키 저장 실패: ${(e as Error).message}`));
+    if (test.ok && !hub.kis) await switchToKis(kis);
+    return { test, status: await credentialStatus().catch(() => ({ kis: { configured: true, env: cred.env }, secretKind: store.secretKind })) };
   });
 
   app.delete('/api/credentials/kis', async () => {
-    await store.setSecret('kis', undefined);
-    await store.setSecret('kisToken', undefined);
+    await saveSecret('kis', undefined).catch((e) => log.error(`키 지우기 실패: ${(e as Error).message}`));
+    await saveSecret('kisToken', undefined).catch(() => undefined);
     await hub.setKis(undefined);
-    return { status: await credentialStatus() };
+    log.info('한국투자증권 키를 지웠어요');
+    return { status: await credentialStatus().catch(() => ({ kis: { configured: false, env: 'real' as const }, secretKind: store.secretKind })) };
+  });
+
+  // ── 진단 정보(설정 → 정보 → 진단 정보 복사) ──
+  // 앱키·앱시크릿·토큰은 넣지 않아요. 사용자가 복사해서 보내는 글이에요
+  app.get('/api/diagnostics', async () => {
+    let kis: Record<string, unknown> = { configured: false };
+    try {
+      const raw = await readSecret('kis');
+      if (raw) {
+        const c = JSON.parse(raw) as KisCredentials & { lastTest?: unknown };
+        kis = { configured: true, env: c.env, appKeyHint: `…${c.appKey.slice(-4)}`, lastTest: c.lastTest };
+      }
+    } catch (e) {
+      kis = { error: (e as Error).message };
+    }
+    return {
+      version: deps.version,
+      platform: process.platform,
+      electron: process.versions.electron,
+      node: process.versions.node,
+      uptimeSec: Math.round(process.uptime()),
+      secretKind: store.secretKind,
+      kis,
+      kisRuntime: hub.kis?.diagnostics(),
+      sources: hub.statuses(),
+      logFile: log.file,
+      log: log.recent().slice(-200),
+    };
   });
 
   // ── 화면 파일(배포판) ──

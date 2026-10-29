@@ -192,7 +192,11 @@ export class Hub implements AdapterHost {
     this.pending = new Set();
     for (const c of this.clients) {
       const quotes: Quote[] = [];
-      for (const id of ids) if (c.ids.has(id)) quotes.push(this.quotes.get(id)!);
+      for (const id of ids) {
+        // 보내기 전에 구독이 끝나거나 소스가 바뀌어 지워진 값은 건너뛰어요(빈 값이 섞이면 화면이 그 묶음을 버려요)
+        const q = c.ids.has(id) ? this.quotes.get(id) : undefined;
+        if (q) quotes.push(q);
+      }
       if (quotes.length) c.send({ type: 'quotes', quotes });
     }
   }

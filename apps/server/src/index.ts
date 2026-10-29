@@ -7,13 +7,13 @@ import type { InstrumentsResponse } from '@bt/shared';
 import { BinanceAdapter } from './adapters/binance';
 import { DemoAdapter } from './adapters/demo';
 import { EcbAdapter } from './adapters/ecb';
-import { KisAdapter, type KisCredentials, type KisTokenStore } from './adapters/kis';
+import { KisAdapter, type KisCredentials, type KisEndpoints, type KisTokenStore, type SavedKisToken } from './adapters/kis';
 import { buildApp } from './app';
 import { History } from './history';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
 import { fileSecretBox, Store, type SecretBox } from './store';
-import { consoleLogger } from './util';
+import { recordingLogger, withTimeout, type RecordingLogger } from './util';
 
 export interface ServerOptions {
   dataDir: string;
@@ -29,17 +29,23 @@ export interface ServerOptions {
   secretBox?: SecretBox;
   version?: string;
   quiet?: boolean;
+  /** 서버 기록 파일(데스크톱 앱은 데이터 폴더의 logs/server.log). 없으면 메모리에만 */
+  logFile?: string;
+  /** 시험용 가짜 한국투자증권 서버 주소(개발 실행의 BT_KIS_REST·BT_KIS_WS) */
+  kisEndpoints?: KisEndpoints;
 }
 
 export interface RunningServer {
   port: number;
   token: string;
   url: string;
+  log: RecordingLogger;
   close(): Promise<void>;
 }
 
 export async function startServer(opts: ServerOptions): Promise<RunningServer> {
-  const log = consoleLogger('server', opts.quiet);
+  const log = recordingLogger('server', { quiet: opts.quiet, file: opts.logFile });
+  log.info(`서버 시작 · 버전 ${opts.version ?? '개발'} · ${process.platform} · Node ${process.versions.node}`);
   await mkdir(opts.dataDir, { recursive: true });
   const store = new Store(opts.dataDir, opts.secretBox ?? (await fileSecretBox(opts.dataDir)));
   await store.load();
@@ -57,13 +63,13 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const tokenStore: KisTokenStore = {
     async load() {
       const raw = await store.getSecret('kisToken');
-      return raw ? (JSON.parse(raw) as { token: string; expiresAt: number }) : undefined;
+      return raw ? (JSON.parse(raw) as SavedKisToken) : undefined;
     },
     async save(t) {
       await store.setSecret('kisToken', JSON.stringify(t));
     },
   };
-  const makeKis = (cred: KisCredentials) => new KisAdapter(hub, cred, tokenStore);
+  const makeKis = (cred: KisCredentials) => new KisAdapter(hub, cred, tokenStore, opts.kisEndpoints);
 
   // 종목 색인은 마스터를 받는 동안 기다리지 않고 시작해요. 목록 요청만 기다려요
   let instruments: Promise<InstrumentsResponse> = buildInstruments(opts.dataDir, hub.binance, log, opts.snapshotFile).then((r) => {
@@ -78,10 +84,27 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     });
   }, 12 * 3600_000);
 
+  // 서버(앱의 메인 프로세스)가 오래 멈추면 기록해요. 멈춘 동안에는 시세도 API 응답도 나가지 않아요
+  let lastBeat = Date.now();
+  const lagTimer = setInterval(() => {
+    const now = Date.now();
+    const lag = now - lastBeat - 1000;
+    if (lag > 2000) log.warn(`서버가 ${(lag / 1000).toFixed(1)}초 동안 멈춰 있었어요`);
+    lastBeat = now;
+  }, 1000);
+  lagTimer.unref?.();
+  // 화면이 서버가 살아 있는지 알 수 있게 상태를 5초마다 보내요(시세가 없을 때도). 오래 안 오면 화면이 ⚠로 바꿔요
+  const heartbeat = setInterval(() => hub.emitStatus(), 5000);
+  heartbeat.unref?.();
+
   await Promise.all([hub.binance.start(), hub.demo.start()]);
   void hub.ecb.start();
 
-  const kisRaw = await store.getSecret('kis');
+  // 저장된 키를 못 읽어도(보안 저장소가 답하지 않음) 앱은 데모 시세로 켜져요
+  const kisRaw = await withTimeout(store.getSecret('kis'), 15_000, '보안 저장소가 15초 동안 응답하지 않았어요').catch((e: Error) => {
+    log.error(`저장된 한국투자증권 키를 읽지 못했어요: ${e.message}`);
+    return undefined;
+  });
   if (kisRaw) {
     const cred = JSON.parse(kisRaw) as KisCredentials;
     await instruments.catch(() => undefined);
@@ -96,6 +119,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     token,
     port: () => port,
     instruments: () => instruments,
+    log,
     webDir: opts.webDir,
     devOrigins: opts.devOrigins,
     version: opts.version ?? '0.1.0-dev',
@@ -110,8 +134,11 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     port,
     token,
     url: `http://127.0.0.1:${port}`,
+    log,
     async close() {
       clearInterval(rebuild);
+      clearInterval(lagTimer);
+      clearInterval(heartbeat);
       hub.binance.stop();
       hub.ecb.stop();
       hub.demo.stop();
