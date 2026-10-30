@@ -1,7 +1,7 @@
 // 환율: ECB 기준환율(Frankfurter, 키 없음). 하루 한 번 갱신되는 값이라 '일별' 배지가 붙어요.
 // KIS 환율 조회(04 1순위 후보)는 실제로 붙여 본 뒤에 주기 조회로 바꿔요(07 확인할 것).
 
-import { FX_PAIRS, type Bar, type BarSeries, type Freshness, type Instrument, type Quote, type SourceStatus } from '@bt/shared';
+import { FX_PAIRS, isHourInterval, type Bar, type BarInterval, type BarSeries, type Freshness, type Instrument, type Quote, type SourceStatus } from '@bt/shared';
 import { fetchJson, ymdUtc } from '../util';
 import type { Adapter, AdapterHost } from './types';
 
@@ -113,10 +113,11 @@ export class EcbAdapter implements Adapter {
     for (const inst of insts) this.subscribed.delete(inst.id);
   }
 
-  async bars(inst: Instrument, interval: '1m' | '5m' | '1d' | '1w' | '1M'): Promise<BarSeries> {
+  async bars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
     const pair = FX_PAIRS.find((p) => p.code === inst.code);
     if (!pair) throw new Error(`환율 ${inst.code}를 찾을 수 없어요`);
     if (interval === '1m' || interval === '5m') throw new Error('환율 소스에 분봉이 없어요');
+    if (isHourInterval(interval)) throw new Error('환율 소스에 시간봉이 없어요');
     const end = new Date();
     const start = new Date(end.getTime() - 2 * 365 * 86400_000);
     const s = await fetchJson<Series>(`${BASE}/${ymdUtc(start)}..${ymdUtc(end)}?base=${pair.base}&symbols=${pair.quote}`, { timeoutMs: 20_000 });

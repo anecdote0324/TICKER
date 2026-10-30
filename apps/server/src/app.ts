@@ -33,7 +33,7 @@ export interface AppDeps {
 const SECRET_TIMEOUT_MS = 15_000;
 const SECRET_TIMEOUT_MSG = 'PC의 보안 저장소(Windows 데이터 보호·Mac 키체인)가 15초 동안 응답하지 않아요';
 
-const BAR_INTERVALS = new Set<BarInterval>(['1m', '5m', '1d', '1w', '1M']);
+const BAR_INTERVALS = new Set<BarInterval>(['1m', '5m', '1h', '2h', '4h', '1d', '1w', '1M']);
 
 function safeEqual(a: string, b: string) {
   const x = Buffer.from(a);

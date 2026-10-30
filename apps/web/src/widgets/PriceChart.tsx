@@ -1,6 +1,7 @@
-// GP 가격 차트(일·주·월봉 캔들, 거래량, 20일·60일 이동평균선)와 GIP 장중 차트(1·5·15·60분봉).
+// GP 가격 차트(1·2·4시간봉과 일·주·월봉 캔들, 거래량, 20·60봉 이동평균선)와 GIP 장중 차트(1분봉, 실시간이 주 목적).
 // 왼쪽 위에 시가·고가·저가·종가와 신선도 배지를 붙여요(02).
-// 봉 크기(GP 일·주·월, GIP 1분~60분)와 보이는 기간(GP 1M~MAX, GIP 1H~MAX)은 따로 골라요. 1H는 1시간봉이 아니라 최근 1시간이에요.
+// GP는 봉 크기(1시간~월)와 보이는 기간(1M~MAX)을 따로 골라요. 시간봉은 과거까지 이어서 보여 줘요.
+// GIP는 늘 1분봉이고 1H·4H·1D·MAX는 보이는 기간이에요(1H는 1시간봉이 아니라 최근 1시간).
 // 보이는 범위는 기간 버튼으로 배율을 정하고, 종목만 바꾸면 그 배율 그대로 가장 최근 봉으로 가요.
 // 가격 축은 종목·기간이 바뀔 때마다 보이는 봉에 다시 맞춰요(손으로 당긴 가격 축이 다음 종목에 남지 않게).
 // 종목을 바꾸면 새 봉이 올 때까지 앞 종목의 봉과 시고저종을 지우고 '불러오는 중'을 보여 줘요.
@@ -19,7 +20,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { intradayAt, type Bar, type BarInterval, type BarSeries, type Instrument } from '@bt/shared';
+import { bucketStart, intervalMinutes, intradayAt, isHourInterval, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument } from '@bt/shared';
 import { FreshBadge } from '../components/FreshBadge';
 import { fmtPrice, fmtBig, priceDigits } from '../format';
 import { getBars } from '../stores/bars';
@@ -28,7 +29,7 @@ import { supports, useInstrument } from '../stores/instruments';
 import { patchPanel, type PanelState } from '../stores/panels';
 import { settings } from '../stores/settings';
 import { useStore } from '../stores/store';
-import { aggregateBars, GIP_MINUTES, GIP_MINUTES_DEFAULT, GIP_RANGES, GP_RANGES, GIP_DEFAULT, GP_DEFAULT, RIGHT_PAD, visibleBarCount } from './chartRange';
+import { GIP_RANGES, GP_HOUR_DEFAULT, GP_RANGES, GIP_DEFAULT, GP_DEFAULT, RIGHT_PAD, visibleBarCount } from './chartRange';
 import { TitleBar } from './common';
 
 // 십자선 동기화: 한 차트에 마우스를 올리면 다른 차트에도 같은 시점에 세로선(02)
@@ -76,17 +77,26 @@ function sma(bars: Bar[], n: number) {
   return out;
 }
 
+/** GP 봉 크기 버튼(시간봉은 주식·코인만) */
+const GP_INTERVALS = ['1h', '2h', '4h', '1d', '1w', '1M'] as const;
+const GP_INTERVAL_LABEL: Record<(typeof GP_INTERVALS)[number], string> = { '1h': '1시간', '2h': '2시간', '4h': '4시간', '1d': '일', '1w': '주', '1M': '월' };
+
 export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: boolean }) {
   const inst = useInstrument(panel.securityId);
-  // 봉 단위와 기간은 패널마다 기억해요(종목을 바꾸거나 앱을 다시 켜도 그대로)
-  const interval: BarInterval = intraday ? '1m' : (panel.gpInterval ?? '1d');
-  const range = intraday ? (panel.gipRange && GIP_RANGES[panel.gipRange] ? panel.gipRange : GIP_DEFAULT) : panel.gpRange && GP_RANGES[panel.gpRange] ? panel.gpRange : GP_DEFAULT;
-  // GIP 봉 크기(분). 받은 1분봉을 묶어서 그려요
-  const minutes = intraday && (GIP_MINUTES as readonly number[]).includes(panel.gipMinutes ?? 0) ? panel.gipMinutes! : GIP_MINUTES_DEFAULT;
+  // 봉 단위와 기간은 패널마다 기억해요(종목을 바꾸거나 앱을 다시 켜도 그대로). 시간봉이 없는 종목(지수·환율)은 일봉으로
+  const hourOk = !!inst && supportsHourBars(inst);
+  const gpInterval = panel.gpInterval ?? '1d';
+  const interval: BarInterval = intraday ? '1m' : isHourInterval(gpInterval) && !hourOk ? '1d' : gpInterval;
+  const hourly = isHourInterval(interval);
+  // 시간봉은 기간을 따로 기억해요(처음은 1M. 일봉의 3M을 시간봉으로 보면 봉이 너무 촘촘해요)
+  const gpRange = hourly ? (panel.gpHourRange ?? GP_HOUR_DEFAULT) : (panel.gpRange ?? GP_DEFAULT);
+  const range = intraday ? (panel.gipRange && GIP_RANGES[panel.gipRange] ? panel.gipRange : GIP_DEFAULT) : GP_RANGES[gpRange] ? gpRange : GP_DEFAULT;
+  // 가로축에 시각을 보여 줄지(분봉·시간봉)
+  const timeMode = intraday || hourly;
   // 기간 버튼을 누를 때마다 늘려요. 같은 버튼을 다시 눌러도 기본 보기로 돌아가요
   const [fitTick, setFitTick] = useState(0);
   const pickRange = (r: string) => {
-    patchPanel(panel.id, intraday ? { gipRange: r } : { gpRange: r });
+    patchPanel(panel.id, intraday ? { gipRange: r } : hourly ? { gpHourRange: r } : { gpRange: r });
     setFitTick((n) => n + 1);
   };
   const [series, setSeries] = useState<BarSeries | null>(null);
@@ -118,10 +128,10 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       layout: { background: { type: ColorType.Solid, color: '#0A0A0A' }, textColor: '#8C8C8C', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, attributionLogo: false },
       grid: { vertLines: { color: '#141414' }, horzLines: { color: '#141414' } },
       rightPriceScale: { borderColor: '#242424' },
-      timeScale: { borderColor: '#242424', rightOffset: RIGHT_PAD, timeVisible: intraday, secondsVisible: false, tickMarkFormatter: (t: number, type: TickMarkType) => kstTick(t, type) },
+      timeScale: { borderColor: '#242424', rightOffset: RIGHT_PAD, timeVisible: timeMode, secondsVisible: false, tickMarkFormatter: (t: number, type: TickMarkType) => kstTick(t, type) },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#555', labelBackgroundColor: '#262626' }, horzLine: { color: '#555', labelBackgroundColor: '#262626' } },
       // 시간 축은 한국 시간으로 보여 줘요(배지 시각과 같은 기준)
-      localization: { locale: 'ko-KR', timeFormatter: (t: number) => kstLabel(t, intraday ? 'full' : 'date') },
+      localization: { locale: 'ko-KR', timeFormatter: (t: number) => kstLabel(t, timeMode ? 'full' : 'date') },
     });
     const candle = chart.addSeries(CandlestickSeries, { borderVisible: false, priceLineColor: '#FB8B1E' });
     const vol = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false });
@@ -178,7 +188,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       chart.remove();
       chartRef.current = null;
     };
-  }, [intraday]);
+  }, [timeMode]);
 
   // 등락 색(설정)
   useEffect(() => {
@@ -191,24 +201,31 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
 
   const noIntraday = !!inst && intraday && !supports('GIP', inst);
 
+  // 시간봉은 1분마다 다시 받아요. 오늘 봉이 자라고, 내장 서버가 뒤에서 채운 지난 봉이 이어져요
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    if (!hourly) return;
+    const id = window.setInterval(() => setRefreshTick((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, [hourly]);
+
   // 봉 받기
   useEffect(() => {
     if (!inst || noIntraday) return;
     let alive = true;
     setError(null);
-    getBars(inst.id, interval, intraday ? 20_000 : 5 * 60_000).then(
+    getBars(inst.id, interval, intraday ? 20_000 : hourly ? 55_000 : 5 * 60_000).then(
       (s) => alive && setSeries(s),
       (e: Error) => alive && (setError(e.message), setSeries(null)),
     );
     return () => {
       alive = false;
     };
-  }, [inst?.id, interval, intraday, noIntraday]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inst?.id, interval, intraday, noIntraday, refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 지금 종목·봉 단위의 봉(종목을 바꾼 직후에는 아직 없어요)
   const ready = series && inst && series.id === inst.id && series.interval === interval ? series : null;
-  // 그릴 봉: GIP는 고른 봉 크기로 묶어요
-  const viewBars = useMemo(() => (ready ? (intraday ? aggregateBars(ready.bars, minutes) : ready.bars) : null), [ready, intraday, minutes]);
+  const viewBars = ready?.bars ?? null;
 
   // 데이터 넣기
   useEffect(() => {
@@ -238,18 +255,19 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const up = cssVar('--up') || '#3FD08A';
     const down = cssVar('--down') || '#FF5F57';
     volRef.current?.setData(bars.map((b, i) => ({ time: b.t as UTCTimestamp, value: b.v, color: (i > 0 && b.c < bars[i - 1].c) || b.c < b.o ? `${down}66` : `${up}66` })));
-    const daily = !intraday;
-    ma20Ref.current?.setData(daily ? sma(bars, 20) : []);
-    ma60Ref.current?.setData(daily ? sma(bars, 60) : []);
+    // 이동평균선은 GP에만(일봉이면 20·60일, 시간봉이면 20·60봉)
+    const withMa = !intraday;
+    ma20Ref.current?.setData(withMa ? sma(bars, 20) : []);
+    ma60Ref.current?.setData(withMa ? sma(bars, 60) : []);
     if (bars.length === 0) return;
 
     const ts = chart.timeScale();
-    const key = `${interval}|${minutes}|${range}|${fitTick}`;
+    const key = `${interval}|${range}|${fitTick}`;
     const view = viewRef.current;
     const idChanged = view?.id !== ready.id;
     if (!view || view.key !== key) {
       // 처음이거나 봉 단위·기간 버튼이 바뀌었으면 그 기간에 맞춰요
-      const n = visibleBarCount(bars, intraday, interval, range, minutes);
+      const n = visibleBarCount(bars, intraday, interval, range);
       const fit = () => chart.timeScale().setVisibleLogicalRange({ from: bars.length - n - 0.5, to: bars.length - 1 + RIGHT_PAD + 0.5 });
       if (ts.width() > 0) fit();
       else pendingFit.current = fit;
@@ -262,7 +280,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       chart.priceScale('right').applyOptions({ autoScale: true });
     }
     viewRef.current = { id: ready.id, key };
-  }, [ready, viewBars, range, interval, minutes, intraday, inst, fitTick]);
+  }, [ready, range, interval, intraday, inst, fitTick]);
 
   // 실시간 시세로 마지막 봉 고치기
   useEffect(() => {
@@ -271,13 +289,12 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     // 종목을 바꾼 직후에는 앞 종목의 봉이 남아 있어서, 새 종목 시세로 고치면 가격 축이 튀어요
     if (!c || !quote || bars.length === 0 || quote.id !== barsIdRef.current) return;
     const last = bars[bars.length - 1];
-    if (intraday) {
-      // 고른 봉 크기의 칸(1분봉이면 1분)
-      const size = minutes * 60;
-      const t = Math.floor(quote.fresh.asOf / 1000 / size) * size;
+    if ((intraday || hourly) && inst) {
+      // 이 시세가 들어갈 봉 칸(1분봉, 시간봉은 정규장 시작에 맞춘 칸)
+      const t = intraday ? Math.floor(quote.fresh.asOf / 60_000) * 60 : bucketStart(inst, Math.floor(quote.fresh.asOf / 1000), intervalMinutes(interval as '1h'));
       // 새 봉은 장중 체결로만 만들어요(장이 닫힌 뒤 조회한 값으로 봉을 더하면 가로축이 건너뛰어요)
       if (t > last.t) {
-        if (!inst || !intradayAt(inst, quote.fresh.asOf)) return;
+        if (!intradayAt(inst, quote.fresh.asOf)) return;
         const nb: Bar = { t, o: quote.last, h: quote.last, l: quote.last, c: quote.last, v: 0 };
         bars.push(nb);
         c.update({ time: t as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
@@ -288,7 +305,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     last.h = Math.max(last.h, quote.last);
     last.l = Math.min(last.l, quote.last);
     c.update({ time: last.t as UTCTimestamp, open: last.o, high: last.h, low: last.l, close: last.c });
-  }, [quote, intraday]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [quote, intraday, hourly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = hover ?? viewBars?.[viewBars.length - 1];
   const fresh = quote?.fresh ?? ready?.fresh;
@@ -300,17 +317,14 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     () =>
       intraday ? (
         <>
-          {GIP_MINUTES.map((m) => (
-            <button key={m} className={minutes === m ? 'on' : ''} title={`봉 크기: 봉 하나가 ${m}분`} onClick={() => patchPanel(panel.id, { gipMinutes: m })}>
-              {m}분
-            </button>
-          ))}
-          <span style={{ width: 8 }} />
+          <span className="label" style={{ alignSelf: 'center', fontSize: 11, marginRight: 4 }} title="GIP는 늘 1분봉이에요. 시간봉은 GP에서 봐요(예: 005930 GP ⏎ → 1시간)">
+            1분봉
+          </span>
           {Object.keys(GIP_RANGES).map((r) => (
             <button
               key={r}
               className={range === r ? 'on' : ''}
-              title={r === '1D' ? '보이는 기간: 가장 최근 장 전체(24시간 시장은 최근 24시간)' : r === 'MAX' ? '보이는 기간: 받아 둔 분봉 전체' : `보이는 기간: 최근 ${r === '1H' ? '1시간' : '4시간'}(봉 크기는 왼쪽 분 버튼). 다시 누르면 처음 보기로`}
+              title={r === '1D' ? '보이는 기간: 가장 최근 장 전체(24시간 시장은 최근 24시간)' : r === 'MAX' ? '보이는 기간: 받아 둔 분봉 전체' : `보이는 기간: 최근 ${r === '1H' ? '1시간' : '4시간'}(1시간봉이 아니에요. 시간봉은 GP에서). 다시 누르면 처음 보기로`}
               onClick={() => pickRange(r)}
             >
               {r}
@@ -319,9 +333,9 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         </>
       ) : (
         <>
-          {(['1d', '1w', '1M'] as const).map((iv) => (
-            <button key={iv} className={interval === iv ? 'on' : ''} title={`봉 크기: ${iv === '1d' ? '일봉' : iv === '1w' ? '주봉' : '월봉'}`} onClick={() => patchPanel(panel.id, { gpInterval: iv })}>
-              {iv === '1d' ? '일' : iv === '1w' ? '주' : '월'}
+          {GP_INTERVALS.filter((iv) => hourOk || !isHourInterval(iv)).map((iv) => (
+            <button key={iv} className={interval === iv ? 'on' : ''} title={`봉 크기: ${GP_INTERVAL_LABEL[iv]}봉${isHourInterval(iv) ? '(과거까지 이어서)' : ''}`} onClick={() => patchPanel(panel.id, { gpInterval: iv })}>
+              {GP_INTERVAL_LABEL[iv]}
             </button>
           ))}
           <span style={{ width: 8 }} />
@@ -332,7 +346,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
           ))}
         </>
       ),
-    [interval, range, minutes, intraday, panel.id], // eslint-disable-line react-hooks/exhaustive-deps
+    [interval, range, intraday, hourOk, panel.id], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   return (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateBars, visibleBarCount } from './chartRange';
+import { visibleBarCount } from './chartRange';
 
 /** start부터 1분 간격 봉 n개 */
 const minutes = (start: number, n: number) => Array.from({ length: n }, (_, i) => ({ t: start + i * 60 }));
@@ -33,19 +33,16 @@ describe('차트에 보여 줄 봉 수', () => {
     expect(visibleBarCount([...minutes(0, 390), ...minutes(day, 5)], true, '1m', '1H')).toBe(30);
   });
 
-  it('GIP 봉 크기: 1분봉을 5분·60분봉으로 묶고, 기간은 시간으로 세요', () => {
-    // 09:00(한국)부터 1분봉 390개(정규장 6시간 30분)
-    const open = Date.UTC(2026, 9, 29, 0) / 1000;
-    const one = Array.from({ length: 390 }, (_, i) => ({ t: open + i * 60, o: 100 + i, h: 101 + i, l: 99 + i, c: 100.5 + i, v: 1 }));
-    const five = aggregateBars(one, 5);
-    expect(five).toHaveLength(78);
-    expect(five[0]).toEqual({ t: open, o: 100, h: 105, l: 99, c: 104.5, v: 5 });
-    const hour = aggregateBars(one, 60);
-    // 09·10·11·12·13·14·15시 칸(15시 칸은 15:00~15:29)
-    expect(hour.map((b) => b.v)).toEqual([60, 60, 60, 60, 60, 60, 30]);
-    // 1H 기간 = 5분봉 12개, 4H = 60분봉 4개지만 너무 크게 보이지 않게 8개는 자리를 잡아요
-    expect(visibleBarCount(five, true, '1m', '1H', 5)).toBe(12);
-    expect(visibleBarCount(hour, true, '1m', '4H', 60)).toBe(8);
-    expect(aggregateBars(one, 1)).toBe(one);
+  it('GP 시간봉은 기간을 달력 날 수로 세요(국내 1시간봉 하루 7개)', () => {
+    const day = 86400;
+    // 평일 60일치 1시간봉 7개씩(09~15시)
+    const hours = Array.from({ length: 60 }, (_, d) => Array.from({ length: 7 }, (_, h) => ({ t: d * day + h * 3600 }))).flat();
+    const n1m = visibleBarCount(hours, false, '1h', '1M');
+    expect(n1m).toBeGreaterThanOrEqual(31 * 7 - 7);
+    expect(n1m).toBeLessThanOrEqual(31 * 7);
+    expect(visibleBarCount(hours, false, '1h', 'MAX')).toBe(420);
+    // 봉이 적어도 20개는 자리를 잡아요
+    expect(visibleBarCount(hours.slice(0, 10), false, '4h', '1M')).toBe(10);
+    expect(visibleBarCount(hours.slice(0, 30), false, '4h', '1M')).toBe(30);
   });
 });

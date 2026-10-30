@@ -210,15 +210,23 @@ export class BinanceAdapter implements Adapter {
   }
 
   async bars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
-    const sym = inst.feedSymbol ?? `${inst.code}USDT`;
-    const map: Record<BarInterval, string> = { '1m': '1m', '5m': '5m', '1d': '1d', '1w': '1w', '1M': '1M' };
-    const limit = interval === '1m' ? 1000 : 500;
-    const rows = await this.rest<Array<[number, string, string, string, string, string]>>(
-      `/api/v3/klines?symbol=${sym}&interval=${map[interval]}&limit=${limit}`,
-    );
-    const bars: Bar[] = rows.map((k) => ({ t: Math.floor(k[0] / 1000), o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
+    const limit = interval === '1m' || interval === '1h' ? 1000 : 500;
+    const bars = await this.klines(inst, interval, limit);
     const now = Date.now();
     return { id: inst.id, interval, bars, fresh: { source: 'BINANCE', mode: 'realtime', asOf: now, receivedAt: now } };
+  }
+
+  /** before(초)보다 오래된 1시간봉 1000개(약 41일) */
+  async olderHourBars(inst: Instrument, before: number): Promise<Bar[]> {
+    return this.klines(inst, '1h', 1000, before * 1000 - 1);
+  }
+
+  private async klines(inst: Instrument, interval: BarInterval, limit: number, endTime?: number): Promise<Bar[]> {
+    const sym = inst.feedSymbol ?? `${inst.code}USDT`;
+    const rows = await this.rest<Array<[number, string, string, string, string, string]>>(
+      `/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}${endTime ? `&endTime=${endTime}` : ''}`,
+    );
+    return rows.map((k) => ({ t: Math.floor(k[0] / 1000), o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
   }
 
   status(): SourceStatus {

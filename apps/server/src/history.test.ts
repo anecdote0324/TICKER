@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { Bar, Freshness, Instrument, Quote } from '@bt/shared';
 import type { Adapter } from './adapters/types';
 import { History, mergeBars } from './history';
-import { Hub } from './hub';
+import { Hub, nextBackfillPoint } from './hub';
 import { consoleLogger } from './util';
 
 async function tmpHistory() {
@@ -114,5 +114,59 @@ describe('시세 중계와 저장', () => {
     (hub as unknown as { barCache: Map<string, unknown> }).barCache.clear();
     const s = await hub.bars(sam.id, '1m');
     expect(s.bars.map((b) => b.c)).toEqual([1, 3, 4]);
+  });
+});
+
+describe('시간봉 저장과 지난 봉 채우기', () => {
+  const sam: Instrument = { id: 'EQ:KS:005930', assetClass: 'EQUITY', market: 'KS', code: '005930' };
+  const H = 3600;
+  const D = 86400;
+  // 2026-10-26(월) 09:00 한국 시간
+  const mon = Date.UTC(2026, 9, 26, 0) / 1000;
+  const dayBars = (day: number) => Array.from({ length: 7 }, (_, h) => bar(day + h * H, day / D + h));
+
+  it('빈 곳(6일 넘게)이 있으면 위에서부터, 없으면 가장 오래된 봉 앞을 채워요', () => {
+    const bars = [...dayBars(mon - 21 * D), ...dayBars(mon)];
+    expect(nextBackfillPoint(bars, 0, () => false)).toBe(mon);
+    expect(nextBackfillPoint(bars, 0, (t) => t === mon)).toBe(mon - 21 * D);
+    expect(nextBackfillPoint(bars, mon, () => false)).toBe(mon);
+    expect(nextBackfillPoint(dayBars(mon), mon, () => false)).toBeUndefined();
+  });
+
+  it('1시간봉을 저장하고 뒤에서 지난 봉을 채운 뒤, 2·4시간봉은 묶어서 줘요', async () => {
+    const hub = new Hub(consoleLogger('test', true));
+    const { history } = await tmpHistory();
+    hub.history = history;
+    const afters: Array<number | undefined> = [];
+    const adapter = {
+      source: 'KIS',
+      bars: async (_i: Instrument, interval: string, opts?: { after?: number }) => {
+        afters.push(opts?.after);
+        return { id: sam.id, interval, bars: dayBars(mon), fresh: { source: 'KIS', mode: 'poll', asOf: Date.now(), receivedAt: Date.now() } };
+      },
+      // 앞의 두 주(평일 10일)까지만 있어요
+      olderHourBars: async (_i: Instrument, before: number) => {
+        const days = [1, 2, 3, 4, 7, 8, 9, 10, 11, 14].map((n) => mon - n * D).filter((d) => d < before && d > before - 5 * D);
+        return days.flatMap(dayBars);
+      },
+    } as unknown as Adapter;
+    hub.kis = adapter as never;
+    hub.setInstruments([sam, { id: 'FX:USDKRW', assetClass: 'CURNCY', code: 'USDKRW' }]);
+    const first = await hub.bars(sam.id, '1h');
+    expect(first.bars).toHaveLength(7);
+    // 뒤에서 채우기가 끝날 때까지
+    for (let i = 0; i < 50 && (hub as unknown as { backfilling: boolean }).backfilling; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(history.load(sam.id, '1h').bars).toHaveLength(77);
+    (hub as unknown as { barCache: Map<string, unknown> }).barCache.clear();
+    const again = await hub.bars(sam.id, '1h');
+    expect(again.bars).toHaveLength(77);
+    // 다시 받을 때는 저장해 둔 마지막 봉 뒤만
+    expect(afters).toEqual([undefined, mon + 6 * H]);
+    // 4시간봉: 하루 09·13시 두 칸
+    const four = await hub.bars(sam.id, '4h');
+    expect(four.bars).toHaveLength(22);
+    expect(four.bars.slice(-2).map((b) => b.t)).toEqual([mon, mon + 4 * H]);
+    // 지수·환율은 시간봉이 없어요
+    await expect(hub.bars('FX:USDKRW', '1h')).rejects.toThrow('시간봉');
   });
 });

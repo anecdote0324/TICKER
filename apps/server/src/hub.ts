@@ -1,7 +1,7 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { intradayAt, staticInstruments, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
+import { aggregateBars, intervalMinutes, intradayAt, isHourInterval, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
@@ -18,6 +18,22 @@ export interface Client {
 }
 
 const FLUSH_MS = 100;
+/** 지난 시간봉을 이만큼(1년) 채워요. 한국투자증권은 분봉을 1년까지 보관해요 */
+const HOUR_HISTORY_SEC = 365 * 86400;
+/** 시간봉 사이가 이만큼(6일) 비면 빈 곳으로 보고 채워요(주말·짧은 연휴보다 길게) */
+const HOUR_HOLE_SEC = 6 * 86400;
+
+/**
+ * 다음에 채울 자리(이 시각보다 오래된 시간봉을 받아요): 위에서부터 빈 곳의 위쪽 봉, 없으면 가장 오래된 봉(floor보다 새것일 때).
+ * 이미 받아 본 자리(checked)는 건너뛰어요. 긴 연휴는 빈 곳처럼 보여도 한 번 받아 보고 넘어가요
+ */
+export function nextBackfillPoint(bars: Bar[], floor: number, checked: (t: number) => boolean): number | undefined {
+  for (let i = bars.length - 1; i > 0; i--) {
+    if (bars[i].t - bars[i - 1].t > HOUR_HOLE_SEC && !checked(bars[i].t)) return bars[i].t;
+  }
+  if (bars.length > 0 && bars[0].t > floor && !checked(bars[0].t)) return bars[0].t;
+  return undefined;
+}
 
 export class Hub implements AdapterHost {
   instruments = new Map<string, Instrument>();
@@ -36,6 +52,10 @@ export class Hub implements AdapterHost {
   history: History | undefined;
   /** 메모리에 잠시 둔 봉(같은 요청이 몰리지 않게) */
   private barCache = new Map<string, { at: number; series: Promise<BarSeries> }>();
+  /** 지난 시간봉 채우기: 다음에 채울 종목(가장 최근에 연 것), 도는 중인지, 받아 본 자리(종목|시각) */
+  private backfillNext: { inst: Instrument; adapter: Adapter } | null = null;
+  private backfilling = false;
+  private backfillChecked = new Set<string>();
 
   constructor(public log: Logger) {
     // 정해 둔 지수·환율은 마스터를 받기 전에도 알아요(켜자마자 WEI·환율 차트가 뜨게)
@@ -230,8 +250,17 @@ export class Hub implements AdapterHost {
       inst = this.instruments.get(id);
     }
     if (!inst) throw new Error(`종목 ${id}를 찾을 수 없어요`);
+    if (isHourInterval(interval)) {
+      if (!supportsHourBars(inst)) throw new Error(`${inst.nameKo ?? inst.code}은(는) 시간봉이 없어요`);
+      // 2·4시간봉은 1시간봉을 묶어서 만들어요(국내 09·11·13·15시, 코인은 UTC 정각)
+      if (interval !== '1h') {
+        const base = await this.bars(id, '1h');
+        return { ...base, interval, bars: aggregateBars(inst, base.bars, intervalMinutes(interval)) };
+      }
+    }
     const key = `${id}|${interval}`;
-    const ttl = interval === '1m' || interval === '5m' ? 30_000 : 10 * 60_000;
+    // 분봉 30초, 시간봉 1분(오늘 봉이 자라고 지난 봉이 채워져요), 일·주·월봉 10분
+    const ttl = interval === '1m' || interval === '5m' ? 30_000 : interval === '1h' ? 60_000 : 10 * 60_000;
     const hit = this.barCache.get(key);
     if (hit && Date.now() - hit.at < ttl) return hit.series;
     const series = this.fetchBars(inst, interval);
@@ -245,8 +274,10 @@ export class Hub implements AdapterHost {
     const adapter = this.route(inst);
     const keep = adapter.source !== 'DEMO' && this.history;
     let series: BarSeries;
+    // 시간봉은 저장해 둔 봉의 마지막 날부터만 받아요(그 앞은 저장분과 뒤에서 채운 것)
+    const storedHours = interval === '1h' && keep ? this.history!.load(inst.id, '1h').bars : [];
     try {
-      series = await adapter.bars(inst, interval);
+      series = await adapter.bars(inst, interval, storedHours.length ? { after: storedHours[storedHours.length - 1].t } : undefined);
     } catch (e) {
       const saved = keep ? this.history!.load(inst.id, interval) : undefined;
       if (!saved?.bars.length) throw e;
@@ -264,10 +295,53 @@ export class Hub implements AdapterHost {
         if (live && (bars.length === 0 || live.t > bars[bars.length - 1].t)) bars = [...bars, live];
         series = { ...series, bars: bars.slice(-Math.max(series.bars.length, 2000)) };
       }
+      if (interval === '1h') {
+        series = { ...series, bars: mergeBars(storedHours, series.bars) };
+        this.queueBackfill(inst, adapter);
+      }
     } catch (e) {
       this.log.warn(`봉 저장 실패: ${(e as Error).message}`);
     }
     return { ...series, bars: inSession(inst, interval, series.bars) };
+  }
+
+  /** 지난 시간봉을 뒤에서 조금씩 채워요(한 번에 한 종목, 가장 최근에 연 종목 먼저). 다음 새로 고침 때 차트에 보여요 */
+  private queueBackfill(inst: Instrument, adapter: Adapter) {
+    if (!adapter.olderHourBars || !this.history) return;
+    this.backfillNext = { inst, adapter };
+    if (!this.backfilling) void this.runBackfill();
+  }
+
+  private async runBackfill() {
+    this.backfilling = true;
+    try {
+      while (this.backfillNext && this.history) {
+        const { inst, adapter } = this.backfillNext;
+        // 키를 바꿔 소스가 바뀌었으면 그만해요(다음에 시간봉을 열 때 새 소스로 다시 해요)
+        if (this.route(inst) !== adapter) {
+          this.backfillNext = null;
+          continue;
+        }
+        const stored = this.history.load(inst.id, '1h').bars;
+        const before = nextBackfillPoint(stored, Date.now() / 1000 - HOUR_HISTORY_SEC, (t) => this.backfillChecked.has(`${inst.id}|${t}`));
+        if (before === undefined) {
+          if (this.backfillNext?.inst.id === inst.id) this.backfillNext = null;
+          continue;
+        }
+        this.backfillChecked.add(`${inst.id}|${before}`);
+        try {
+          const older = (await adapter.olderHourBars!(inst, before)).filter((b) => b.t < before);
+          if (older.length) this.history.save(inst.id, '1h', older);
+        } catch (e) {
+          // 다음에 이 종목 시간봉을 열 때 다시 해요
+          this.backfillChecked.delete(`${inst.id}|${before}`);
+          this.log.warn(`${inst.id} 지난 시간봉을 받지 못했어요: ${(e as Error).message}`);
+          if (this.backfillNext?.inst.id === inst.id) this.backfillNext = null;
+        }
+      }
+    } finally {
+      this.backfilling = false;
+    }
   }
 
   quoteSnapshot(ids: string[]): Quote[] {

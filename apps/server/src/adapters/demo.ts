@@ -2,7 +2,7 @@
 // 실제 시세가 아니라서 모든 값에 '데모' 배지가 붙어요(02 데이터 신선도 표시).
 // 출발점은 마스터 파일의 기준가(전일 종가)예요.
 
-import type { Bar, BarInterval, BarSeries, Freshness, Instrument, Quote, SourceStatus } from '@bt/shared';
+import { regularSessionOf, type Bar, type BarInterval, type BarSeries, type Freshness, type Instrument, type Quote, type SourceStatus } from '@bt/shared';
 import { hash32, seededRandom } from '../util';
 import type { Adapter, AdapterHost } from './types';
 
@@ -148,6 +148,24 @@ export class DemoAdapter implements Adapter {
       last.c = s.last;
       last.h = Math.max(last.h, s.last);
       last.l = Math.min(last.l, s.last);
+    } else if (interval === '1h') {
+      // 최근 90일의 평일 정규장 1시간봉(끝 값이 지금 시세가 되도록 거꾸로 만들어요)
+      const nowSec = Math.floor(now / 1000);
+      const times: number[] = [];
+      for (let back = 90; back >= 0; back--) {
+        const ses = regularSessionOf(inst, nowSec - back * 86400);
+        if (!ses || ses.weekday === 0 || ses.weekday === 6) continue;
+        for (let t = ses.open; t < ses.close && t <= nowSec; t += 3600) times.push(t);
+      }
+      const closes: number[] = [s.last];
+      for (let i = 1; i < times.length; i++) closes.unshift(closes[0] / (1 + (rnd() - 0.49) * 0.008));
+      for (let i = 0; i < times.length; i++) {
+        const c = round(inst, closes[i]);
+        const o = round(inst, i > 0 ? closes[i - 1] : c);
+        const h = round(inst, Math.max(o, c) * (1 + rnd() * 0.004));
+        const l = round(inst, Math.min(o, c) * (1 - rnd() * 0.004));
+        bars.push({ t: times[i], o, h, l, c, v: Math.floor(rnd() * 2e6) });
+      }
     } else {
       const day = 86400;
       const n = interval === '1d' ? 400 : interval === '1w' ? 260 : 120;

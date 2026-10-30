@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import WebSocket from 'ws';
 import {
+  aggregateBars,
   EXCHANGES,
   exchangeOf,
   INDICES,
@@ -12,6 +13,7 @@ import {
   sessionState,
   tradingNow,
   usesRealtimeSlot,
+  zonedParts,
   type Bar,
   type BarInterval,
   type BarSeries,
@@ -22,7 +24,7 @@ import {
 } from '@bt/shared';
 import { fetchJson, HttpError, sleep, withTimeout } from '../util';
 import { RequestBudget, SlotAllocator, type Priority } from './kis-budget';
-import type { Adapter, AdapterHost } from './types';
+import type { Adapter, AdapterHost, BarsOptions } from './types';
 
 export interface KisCredentials {
   appKey: string;
@@ -73,6 +75,10 @@ const H0STCNT0_FIELDS = 47;
 const HDFSCNT0_FIELDS = 26;
 /** 구독 요청 사이 간격. 공식 예제는 요청마다 0.05초 쉬어요 */
 const WS_SEND_GAP_MS = 50;
+/** 국내 시간봉을 처음 열 때 바로 받는 거래일 수. 그 앞은 허브가 뒤에서 조금씩 채워요 */
+const KR_HOUR_RECENT_DAYS = 5;
+/** 지난 국내 시간봉을 한 번에 채우는 거래일 수(1분봉 약 35번 조회) */
+const KR_HOUR_CHUNK_DAYS = 10;
 /** 장이 닫힌 종목은 이 간격으로만 다시 확인해요(값이 바뀌지 않아요) */
 const CLOSED_POLL_MS = 5 * 60_000;
 /** 정규장이 끝난 뒤에도 종가가 확정될 때까지 이만큼은 장중처럼 다뤄요 */
@@ -850,11 +856,15 @@ export class KisAdapter implements Adapter {
 
   // ── 봉 ──
 
-  async bars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
+  async bars(inst: Instrument, interval: BarInterval, opts?: BarsOptions): Promise<BarSeries> {
     const now = Date.now();
     let bars: Bar[] = [];
     if (interval === '1m' || interval === '5m') {
       bars = inst.market === 'US' ? await this.usMinute(inst) : await this.krMinute(inst);
+    } else if (interval === '1h' || interval === '2h' || interval === '4h') {
+      // 시간봉은 주식만(지수 분봉은 확인 전). 2·4시간봉은 허브가 1시간봉을 묶어서 만들어요
+      if (inst.assetClass !== 'EQUITY') throw new Error('지수는 아직 시간봉이 없어요');
+      bars = inst.market === 'US' ? await this.usBars(inst, 60, 2, '', 0) : await this.krHours(inst, opts?.after);
     } else if (inst.assetClass === 'INDEX') {
       bars = await this.indexDaily(inst, interval);
     } else if (inst.market === 'US') {
@@ -940,15 +950,22 @@ export class KisAdapter implements Adapter {
   }
 
   private async usMinute(inst: Instrument): Promise<Bar[]> {
+    return this.usBars(inst, 1, 4, '', 0);
+  }
+
+  /**
+   * 미국 N분봉(해외주식분봉조회, 한 번에 120건). 다음 조회는 NEXT=1과 KEYB(가장 오래된 봉의 N분 전, 현지 시각)로 이어 받아요.
+   * keyb를 주면 그 시각부터 거꾸로 받아요(지난 시간봉 채우기)
+   */
+  private async usBars(inst: Instrument, nmin: number, pages: number, keyb: string, pri: Priority): Promise<Bar[]> {
     const out: Bar[] = [];
-    let next = '';
-    let keyb = '';
-    for (let page = 0; page < 4; page++) {
+    let next = keyb ? '1' : '';
+    for (let page = 0; page < pages; page++) {
       const r = await this.get(
         '/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice',
         'HHDFS76950200',
-        { AUTH: '', EXCD: inst.exchange ?? 'NAS', SYMB: inst.code, NMIN: '1', PINC: '1', NEXT: next, NREC: '120', FILL: '', KEYB: keyb },
-        0,
+        { AUTH: '', EXCD: inst.exchange ?? 'NAS', SYMB: inst.code, NMIN: String(nmin), PINC: '1', NEXT: next, NREC: '120', FILL: '', KEYB: keyb },
+        pri,
       );
       const rows = (r.output2 ?? []).filter((x) => x.xymd && x.xhms);
       if (rows.length === 0) break;
@@ -957,9 +974,92 @@ export class KisAdapter implements Adapter {
         const t = x.kymd && x.khms ? kstSec(x.kymd, x.khms) : kstSec(x.xymd, x.xhms);
         out.push({ t, o: +x.open, h: +x.high, l: +x.low, c: +x.last, v: +x.evol });
       }
-      const oldest = rows[rows.length - 1];
+      const oldest = rows.reduce((a, b) => (`${b.xymd}${b.xhms}` < `${a.xymd}${a.xhms}` ? b : a));
       next = '1';
-      keyb = `${oldest.xymd}${oldest.xhms}`;
+      keyb = minusMinutes(oldest.xymd, oldest.xhms, nmin);
+    }
+    return dedupe(out);
+  }
+
+  /**
+   * 국내 1시간봉: 주식일별분봉조회(FHKST03010230, 1분봉 120건씩, 최대 1년)로 받은 1분봉을 묶어요(09·10·…·15시 칸).
+   * 처음에는 최근 5거래일, 저장해 둔 봉이 있으면(after) 그날부터만 받아요. 그 앞은 olderHourBars로 뒤에서 채워요
+   */
+  private async krHours(inst: Instrument, after?: number): Promise<Bar[]> {
+    const now = Date.now();
+    const today = ymdKst(now);
+    const hms = hmsKst(now);
+    // 오늘 장이 시작했으면 지금부터, 아니면 앞 거래일 15:30부터 거꾸로
+    const started = isWeekday(today) && hms >= '090000';
+    const date = started ? today : prevWeekday(today);
+    const hour = started && hms < '153000' ? hms : '153000';
+    const recent = weekdaysBack(date, KR_HOUR_RECENT_DAYS - 1);
+    const stored = after ? ymdKst(after * 1000) : '';
+    const until = stored > recent ? stored : recent;
+    return aggregateBars(inst, await this.krMinutesBack(inst, date, hour, until, 40, 0), 60);
+  }
+
+  /** before(초)보다 오래된 1시간봉 한 묶음: 국내는 10거래일, 미국은 240개. 화면 요청보다 뒤로 미뤄요(우선순위 2) */
+  async olderHourBars(inst: Instrument, before: number): Promise<Bar[]> {
+    if (inst.assetClass !== 'EQUITY') return [];
+    let bars: Bar[];
+    if (inst.market === 'US') {
+      // KEYB는 현지 시각이에요
+      const p = zonedParts((before - 3600) * 1000, EXCHANGES.US.timeZone);
+      const keyb = `${p.year}${pad2(p.month)}${pad2(p.day)}${pad2(p.hour)}${pad2(p.minute)}${pad2(p.second)}`;
+      bars = await this.usBars(inst, 60, 2, keyb, 2);
+    } else {
+      let date = ymdKst(before * 1000);
+      let hour = minusMinute(hmsKst(before * 1000));
+      if (hour < '090000') {
+        date = prevWeekday(date);
+        hour = '153000';
+      }
+      const until = weekdaysBack(date, KR_HOUR_CHUNK_DAYS - 1);
+      bars = aggregateBars(inst, await this.krMinutesBack(inst, date, hour, until, 50, 2), 60);
+    }
+    return bars.filter((b) => b.t < before);
+  }
+
+  /**
+   * 국내 1분봉을 (date, hour)부터 거꾸로 이어 받아요(한 번에 120건). until 날짜(YYYYMMDD)의 09:00까지 받거나 maxCalls에서 멈춰요.
+   * 다음 요청은 가장 오래된 봉의 1분 전이고, 09:00에 닿으면 앞 평일 15:30부터예요. 휴장일(빈 응답)은 7일까지 건너뛰어요
+   */
+  private async krMinutesBack(inst: Instrument, date: string, hour: string, until: string, maxCalls: number, pri: Priority): Promise<Bar[]> {
+    const out: Bar[] = [];
+    let empties = 0;
+    for (let call = 0; call < maxCalls && date >= until; call++) {
+      const r = await this.get(
+        '/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice',
+        'FHKST03010230',
+        { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: inst.code, FID_INPUT_HOUR_1: hour, FID_INPUT_DATE_1: date, FID_PW_DATA_INCU_YN: 'Y', FID_FAKE_TICK_INCU_YN: '' },
+        pri,
+      );
+      const at = date + hour;
+      // 요청한 시각과 그 앞의 봉만(새것부터)
+      const rows = (r.output2 ?? [])
+        .filter((x) => x.stck_bsop_date && x.stck_cntg_hour && Number(x.stck_prpr) > 0 && x.stck_bsop_date + x.stck_cntg_hour <= at)
+        .sort((a, b) => (b.stck_bsop_date + b.stck_cntg_hour).localeCompare(a.stck_bsop_date + a.stck_cntg_hour));
+      if (rows.length === 0) {
+        if (++empties > 7) break;
+        date = prevWeekday(date);
+        hour = '153000';
+        continue;
+      }
+      empties = 0;
+      for (const x of rows) {
+        // 정규장(09:00~15:30) 봉만 써요
+        if (x.stck_bsop_date < until || x.stck_cntg_hour < '090000' || x.stck_cntg_hour > '153000') continue;
+        out.push({ t: kstSec(x.stck_bsop_date, x.stck_cntg_hour), o: +x.stck_oprc, h: +x.stck_hgpr, l: +x.stck_lwpr, c: +x.stck_prpr, v: +x.cntg_vol });
+      }
+      const oldest = rows[rows.length - 1];
+      if (oldest.stck_cntg_hour <= '090000') {
+        date = prevWeekday(oldest.stck_bsop_date);
+        hour = '153000';
+      } else {
+        date = oldest.stck_bsop_date;
+        hour = minusMinute(oldest.stck_cntg_hour);
+      }
     }
     return dedupe(out);
   }
@@ -1042,6 +1142,36 @@ function kstAt(ymd: string | undefined, hms: string | undefined): number | undef
 /** 오늘(한국) HHMMSS → ms */
 function kstTodayAt(hms: string, now: number): number {
   return kstSec(ymdKst(now), hms) * 1000;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** 'YYYYMMDD'가 평일인지 */
+function isWeekday(ymd: string): boolean {
+  const d = new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(4, 6) - 1, +ymd.slice(6, 8))).getUTCDay();
+  return d !== 0 && d !== 6;
+}
+
+/** 앞 평일('YYYYMMDD'). 휴장일은 모르고 주말만 건너뛰어요 */
+function prevWeekday(ymd: string): string {
+  let t = Date.UTC(+ymd.slice(0, 4), +ymd.slice(4, 6) - 1, +ymd.slice(6, 8));
+  do t -= 86400_000;
+  while ([0, 6].includes(new Date(t).getUTCDay()));
+  const d = new Date(t);
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}`;
+}
+
+/** n평일 앞('YYYYMMDD') */
+function weekdaysBack(ymd: string, n: number): string {
+  let d = ymd;
+  for (let i = 0; i < n; i++) d = prevWeekday(d);
+  return d;
+}
+
+/** 현지 날짜·시각에서 n분 앞(YYYYMMDDHHMMSS). 해외 분봉의 다음 조회 KEYB */
+function minusMinutes(ymd: string, hms: string, n: number): string {
+  const d = new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(4, 6) - 1, +ymd.slice(6, 8), +hms.slice(0, 2), +hms.slice(2, 4), +hms.slice(4, 6)) - n * 60_000);
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}`;
 }
 
 function minusMinute(hms: string): string {

@@ -20,7 +20,21 @@ export interface Quote {
   fresh: Freshness;
 }
 
-export type BarInterval = '1m' | '5m' | '1d' | '1w' | '1M';
+/** 봉 단위. 1m·5m는 GIP 분봉, 1h·2h·4h는 GP 시간봉(과거까지 이어서), 1d·1w·1M은 GP 일·주·월봉 */
+export type BarInterval = '1m' | '5m' | '1h' | '2h' | '4h' | '1d' | '1w' | '1M';
+
+/** GP 시간봉 */
+export const HOUR_INTERVALS = ['1h', '2h', '4h'] as const;
+export type HourInterval = (typeof HOUR_INTERVALS)[number];
+
+export function isHourInterval(iv: BarInterval | undefined): iv is HourInterval {
+  return iv === '1h' || iv === '2h' || iv === '4h';
+}
+
+/** 봉 하나의 길이(분). 시간봉까지만 써요 */
+export function intervalMinutes(iv: '1m' | '5m' | HourInterval): number {
+  return { '1m': 1, '5m': 5, '1h': 60, '2h': 120, '4h': 240 }[iv];
+}
 
 export interface Bar {
   /** 봉 시작 시각(초, UTC) */

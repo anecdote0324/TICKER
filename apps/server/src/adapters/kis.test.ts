@@ -283,3 +283,75 @@ describe('장이 닫힌 종목', () => {
     expect(logs.join('\n')).toContain('값이 없어요');
   });
 });
+
+describe('시간봉(GP)', () => {
+  /** 가짜 주식일별분봉조회: 그날 09:00~15:30 1분봉 391개 중 요청 시각과 그 앞 120개(새것부터). holidays는 빈 응답 */
+  function dailyMinutes(holidays: string[] = []) {
+    custom.set('/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice', (q) => {
+      const date = q.get('FID_INPUT_DATE_1')!;
+      const hour = q.get('FID_INPUT_HOUR_1')!;
+      const wd = new Date(Date.UTC(+date.slice(0, 4), +date.slice(4, 6) - 1, +date.slice(6, 8))).getUTCDay();
+      if (holidays.includes(date) || wd === 0 || wd === 6) return { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: {}, output2: [] };
+      const rows = [];
+      for (let m = 9 * 60; m <= 15 * 60 + 30; m++) {
+        const hms = `${String(Math.floor(m / 60)).padStart(2, '0')}${String(m % 60).padStart(2, '0')}00`;
+        if (hms <= hour) rows.push({ stck_bsop_date: date, stck_cntg_hour: hms, stck_prpr: '100', stck_oprc: '100', stck_hgpr: '101', stck_lwpr: '99', cntg_vol: '1' });
+      }
+      return { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: {}, output2: rows.reverse().slice(0, 120) };
+    });
+  }
+  const kst = (d: number, h: number, m = 0) => Date.UTC(2026, 9, d, h - 9, m) / 1000;
+
+  it('국내 1시간봉: 1분봉을 120개씩 거꾸로 받아 09~15시 칸으로 묶고, 처음에는 최근 5거래일(휴장일은 건너뜀)', async () => {
+    mode.token = 'ok';
+    // 조회가 15건을 넘어서 시계가 흘러야 해요(초당 호출 수를 세요)
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    vi.setSystemTime(Date.UTC(2026, 9, 30, 15, 30)); // 한국 토요일 00:30
+    dailyMinutes(['20261028']);
+    const { kis } = adapter(memoryStore());
+    const s = await kis.bars(kr('005930'), '1h');
+    // 26·27·29·30일(28일 휴장) × 7칸
+    expect(s.bars).toHaveLength(28);
+    expect(s.bars[0].t).toBe(kst(26, 9));
+    expect(s.bars.slice(0, 7).map((b) => b.v)).toEqual([60, 60, 60, 60, 60, 60, 31]);
+    const first = requests.find((r) => r.path.endsWith('inquire-time-dailychartprice'))!;
+    expect([first.q.get('FID_INPUT_DATE_1'), first.q.get('FID_INPUT_HOUR_1'), first.q.get('FID_PW_DATA_INCU_YN')]).toEqual(['20261030', '153000', 'Y']);
+  });
+
+  it('국내 1시간봉: 저장해 둔 봉이 있으면 그날부터만 받아요', async () => {
+    mode.token = 'ok';
+    // 조회가 15건을 넘어서 시계가 흘러야 해요(초당 호출 수를 세요)
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    vi.setSystemTime(Date.UTC(2026, 9, 30, 15, 30));
+    dailyMinutes();
+    const { kis } = adapter(memoryStore());
+    const s = await kis.bars(kr('005930'), '1h', { after: kst(29, 14) });
+    expect(s.bars.map((b) => b.t)[0]).toBe(kst(29, 9));
+    expect(s.bars).toHaveLength(14);
+    // 하루 4번(120·120·120·31개)씩 이틀
+    expect(requests.filter((r) => r.path.endsWith('inquire-time-dailychartprice'))).toHaveLength(8);
+  });
+
+  it('지난 국내 시간봉은 before 앞의 10거래일씩 채워요', async () => {
+    mode.token = 'ok';
+    dailyMinutes();
+    const { kis } = adapter(memoryStore());
+    const older = await kis.olderHourBars(kr('005930'), kst(26, 9));
+    expect(older).toHaveLength(70);
+    expect(older[older.length - 1].t).toBe(kst(23, 15));
+    expect(older[0].t).toBe(kst(12, 9));
+  });
+
+  it('미국 1시간봉은 60분봉으로 받고, 다음 조회 KEYB는 가장 오래된 봉의 60분 전(현지 시각)이에요', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice';
+    const row = (xhms: string, khms: string) => ({ xymd: '20261030', xhms, kymd: '20261031', khms, open: '1', high: '2', low: '1', last: '1.5', evol: '10' });
+    custom.set(path, (q) => ({ rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: {}, output2: q.get('NEXT') ? [] : [row('153000', '043000'), row('143000', '033000'), row('133000', '023000')] }));
+    const { kis } = adapter(memoryStore());
+    const s = await kis.bars(us('AAPL'), '1h');
+    expect(s.bars).toHaveLength(3);
+    const reqs = requests.filter((r) => r.path === path);
+    expect(reqs[0].q.get('NMIN')).toBe('60');
+    expect([reqs[1].q.get('NEXT'), reqs[1].q.get('KEYB')]).toEqual(['1', '20261030123000']);
+  });
+});
