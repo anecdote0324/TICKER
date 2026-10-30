@@ -87,4 +87,15 @@ describe('켜자마자 들어온 봉 요청', () => {
     hub.setInstruments([sam]);
     await expect(later).resolves.toMatchObject({ id: 'EQ:KS:005930' });
   });
+
+  it('값이 0인 시세는 실제 값처럼 보이지 않게 버려요', async () => {
+    const { hub, client, sent } = setup();
+    hub.setInstruments([btc]);
+    hub.subscribe(client, ['CRY:BTC']);
+    const at = Date.now();
+    hub.emitQuote({ id: 'CRY:BTC', last: 0, fresh: { source: 'BINANCE', mode: 'realtime', asOf: at, receivedAt: at } });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(sent.filter((m) => m.type === 'quotes')).toEqual([]);
+    expect(hub.quoteSnapshot(['CRY:BTC'])).toEqual([]);
+  });
 });

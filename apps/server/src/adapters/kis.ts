@@ -6,9 +6,11 @@ import { createHash } from 'node:crypto';
 import WebSocket from 'ws';
 import {
   EXCHANGES,
+  exchangeOf,
   INDICES,
   lastRegularClose,
   sessionState,
+  tradingNow,
   usesRealtimeSlot,
   type Bar,
   type BarInterval,
@@ -71,6 +73,32 @@ const H0STCNT0_FIELDS = 47;
 const HDFSCNT0_FIELDS = 26;
 /** 구독 요청 사이 간격. 공식 예제는 요청마다 0.05초 쉬어요 */
 const WS_SEND_GAP_MS = 50;
+/** 장이 닫힌 종목은 이 간격으로만 다시 확인해요(값이 바뀌지 않아요) */
+const CLOSED_POLL_MS = 5 * 60_000;
+/** 정규장이 끝난 뒤에도 종가가 확정될 때까지 이만큼은 장중처럼 다뤄요 */
+const CLOSE_GRACE_MS = 10 * 60_000;
+/** 장이 열리고 닫힘에 맞춰 실시간 구독을 다시 나누는 간격 */
+const REPLAN_MS = 30_000;
+
+/**
+ * 값이 움직이는 시간인지. 장이 닫힌 종목은 실시간 슬롯을 쓰지 않고 몇 분 간격으로만 확인해요(04 KIS).
+ * 국내 주식은 장 시작 전(동시호가)부터, 미국 주식은 프리·애프터마켓에도 받아요. 정규장이 끝난 뒤 10분은 종가 확정을 기다려요
+ */
+export function marketActive(inst: Instrument, now: number): boolean {
+  if (tradingNow(inst, now) !== false) return true;
+  const exId = exchangeOf(inst);
+  const ex = exId ? EXCHANGES[exId] : undefined;
+  if (!ex) return true;
+  if (inst.assetClass === 'EQUITY' && inst.market !== 'US' && sessionState(ex, now) === 'pre') return true;
+  return now - lastRegularClose(ex, now) < CLOSE_GRACE_MS;
+}
+
+/** 장이 닫혔을 때 값의 기준 시각(가장 최근 정규장 마감) */
+function closeTime(inst: Instrument, now: number): number {
+  const exId = exchangeOf(inst);
+  const ex = exId ? EXCHANGES[exId] : undefined;
+  return ex ? lastRegularClose(ex, now) : now;
+}
 
 export class KisAdapter implements Adapter {
   /** 단계마다 기다리는 시간(테스트에서 줄여 써요) */
@@ -108,6 +136,7 @@ export class KisAdapter implements Adapter {
   private wsRejected = new Set<string>();
   private retryTimer: NodeJS.Timeout | null = null;
   private retryDelay = 60_000;
+  private lastPlanAt = 0;
   /** 보낼 구독 요청(간격을 두고 보내요) */
   private wsOut: string[] = [];
   private wsOutTimer: NodeJS.Timeout | null = null;
@@ -329,8 +358,9 @@ export class KisAdapter implements Adapter {
         if (!(r instanceof Error)) return r;
         // 초당 거래건수 초과(EGW00201): 모든 조회를 잠깐 멈추고 이 자리에서 다시 해요.
         // 대기줄에 다시 서면 자리를 잡은 채 자기 차례를 기다려서, 자리가 다 차면 대기줄 전체가 멈춰요
-        if (attempt < 2 && r.message.includes('EGW00201')) {
-          this.budget.pause(1000);
+        // 초과를 받으면 초당 호출 수도 줄여요. 화면에서 바로 한 요청(차트 열기)은 한 번 더 기다려 봐요
+        if (attempt < (pri === 0 ? 3 : 2) && r.message.includes('EGW00201')) {
+          this.budget.throttled();
           await sleep(1100 + attempt * 400);
           continue;
         }
@@ -461,19 +491,33 @@ export class KisAdapter implements Adapter {
     return ['H0STCNT0', inst.code];
   }
 
-  /** 슬롯 배분 결과에 맞춰 구독을 더하고 빼요 */
+  /** 실시간 구독을 쓸 키인지: 장이 열린 종목만 슬롯을 써요 */
+  private wsEligible(key: string, now: number): boolean {
+    const inst = this.byKey.get(key);
+    return !!inst && marketActive(inst, now);
+  }
+
+  /** 슬롯 배분 결과에 맞춰 구독을 더하고 빼요. 장이 닫힌 종목은 구독을 풀고 몇 분 간격 조회로 돌려요 */
   private syncWs() {
-    const plan = this.slots.plan();
+    const now = Date.now();
+    this.lastPlanAt = now;
+    const plan = this.slots.plan((k) => this.wsEligible(k, now));
+    const planned = new Set(plan.ws);
+    // 장이 닫혀 구독하지 않을 키는 거절 목록에서도 빼요
+    for (const k of [...this.wsRejected]) if (!planned.has(k)) this.wsRejected.delete(k);
     // 거절된 키는 다시 시도할 때까지 구독하지 않고 조회로 받아요
     const want = new Set(plan.ws.filter((k) => !this.wsRejected.has(k)));
+    let freed = false;
     for (const k of [...this.wsSubs]) {
       if (!want.has(k)) {
         const [tr, key] = k.split('|');
         this.sendWs(tr, key, false);
         this.wsSubs.delete(k);
-        this.wsAccepted.delete(k);
+        if (this.wsAccepted.delete(k)) freed = true;
       }
     }
+    // 자리가 나면(장이 닫힌 종목의 구독을 풀었으면) 거절된 구독을 곧 다시 시도해요
+    if (freed && this.wsRejected.size > 0) this.scheduleResubscribe(2000);
     for (const k of want) {
       if (!this.wsSubs.has(k)) {
         const [tr, key] = k.split('|');
@@ -507,13 +551,19 @@ export class KisAdapter implements Adapter {
     this.noteError(`실시간 구독 거절(${trId}): ${msg} · 몇 초 간격 조회로 받고 ${Math.round(this.retryDelay / 1000)}초 뒤 다시 시도해요`);
     this.host.emitStatus();
     if (!this.retryTimer) {
-      this.retryTimer = setTimeout(() => {
-        this.retryTimer = null;
-        this.wsRejected.clear();
-        this.syncWs();
-      }, this.retryDelay);
+      this.scheduleResubscribe(this.retryDelay);
       this.retryDelay = Math.min(this.retryDelay * 2, 10 * 60_000);
     }
+  }
+
+  /** 거절된 구독을 잠시 뒤 다시 시도해요 */
+  private scheduleResubscribe(delay: number) {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.wsRejected.clear();
+      this.syncWs();
+    }, delay);
   }
 
   /** 이 종목을 지금 실시간으로 받고 있는지(구독이 받아들여졌거나 답을 기다리는 중) */
@@ -640,11 +690,22 @@ export class KisAdapter implements Adapter {
 
   // ── 조회(실시간 슬롯 밖 종목과 지수) ──
 
-  /** 조회 간격: 남는 예산을 조회할 종목 수로 나눠요(최소 3초) */
-  private pollInterval(): number {
-    const n = this.pollTargets().length;
+  /**
+   * 장이 열린 종목의 조회 간격: 남는 예산을 조회할 종목 수로 나눠요(최소 3초).
+   * 장이 닫힌 종목과 해외 지수는 몇 분·1분 간격이라 거의 쓰지 않아서 세지 않아요
+   */
+  private pollInterval(now = Date.now(), targets = this.pollTargets()): number {
+    const n = targets.filter((i) => !isOverseasIndex(i) && marketActive(i, now)).length;
     if (n === 0) return 5000;
     return Math.max(3000, Math.ceil((n / this.budget.spare()) * 1000));
+  }
+
+  /** 이 종목의 조회 간격. interval은 장이 열린 종목의 조회 간격(pollInterval)이에요 */
+  private intervalFor(inst: Instrument, now = Date.now(), interval?: number): number {
+    if (!marketActive(inst, now)) return CLOSED_POLL_MS;
+    const itv = interval ?? this.pollInterval(now);
+    // 해외 지수는 1분마다(04 KIS)
+    return isOverseasIndex(inst) ? Math.max(itv, 60_000) : itv;
   }
 
   private pollTargets(): Instrument[] {
@@ -653,13 +714,15 @@ export class KisAdapter implements Adapter {
   }
 
   private pollTick() {
+    const now = Date.now();
+    // 장이 열리고 닫히면 실시간 구독을 다시 나눠요
+    if (now - this.lastPlanAt >= REPLAN_MS && this.state === 'connected') this.syncWs();
     const targets = this.pollTargets();
     if (targets.length === 0) return;
-    const interval = this.pollInterval();
-    const now = Date.now();
+    const interval = this.pollInterval(now, targets);
     for (let i = 0; i < targets.length; i++) {
       const inst = targets[(this.pollCursor + i) % targets.length];
-      const itv = inst.assetClass === 'INDEX' && !isDomesticIndex(inst) ? Math.max(interval, 60_000) : interval;
+      const itv = this.intervalFor(inst, now, interval);
       if (now - (this.lastPoll.get(inst.id) ?? 0) >= itv) {
         this.lastPoll.set(inst.id, now);
         void this.pollOne(inst, 1, itv);
@@ -669,7 +732,7 @@ export class KisAdapter implements Adapter {
     }
   }
 
-  private async pollOne(inst: Instrument, pri: Priority, intervalMs = this.pollInterval()) {
+  private async pollOne(inst: Instrument, pri: Priority, intervalMs = this.intervalFor(inst)) {
     try {
       const q = await this.fetchQuote(inst, pri, intervalMs);
       if (q) this.host.emitQuote(q);
@@ -680,15 +743,18 @@ export class KisAdapter implements Adapter {
 
   private async fetchQuote(inst: Instrument, pri: Priority, intervalMs: number): Promise<Quote | undefined> {
     const now = () => Date.now();
-    const fresh = (): Freshness => ({ source: 'KIS', mode: 'poll', asOf: now(), receivedAt: now(), intervalMs, asOfFromReceipt: true });
-    // 실시간으로 받는 종목의 처음 값(조회)은 실시간 값으로 다뤄요. 체결이 없으면(장 마감, 거래 드문 종목) 이 값이 최신이에요.
-    // 주기 조회로 다루면 다시 조회하지 않아서 1분 뒤 `⚠ 멈춤`이 붙었어요. 장이 끝났으면 기준 시각을 마감 시각으로 둬요
+    // 장이 끝난 뒤 조회한 값은 마감 값이라 기준 시각을 마감 시각으로 둬요(`마감 15:30`, `마감 10/30`)
+    const fresh = (): Freshness => {
+      const t = now();
+      if (tradingNow(inst, t) === false) return { source: 'KIS', mode: 'poll', asOf: closeTime(inst, t), receivedAt: t, intervalMs };
+      return { source: 'KIS', mode: 'poll', asOf: t, receivedAt: t, intervalMs, asOfFromReceipt: true };
+    };
+    // 실시간으로 받는 종목의 처음 값(조회)은 실시간 값으로 다뤄요. 체결이 없으면(거래 드문 종목) 이 값이 최신이에요.
+    // 주기 조회로 다루면 다시 조회하지 않아서 1분 뒤 `⚠ 멈춤`이 붙었어요
     const snapshot = (): Freshness => {
       if (!this.isLive(inst)) return fresh();
-      const ex = EXCHANGES[inst.market === 'US' ? 'US' : 'KRX'];
       const t = now();
-      const open = sessionState(ex, t) === 'open' || (inst.market === 'US' && sessionState(ex, t) !== 'closed');
-      return { source: 'KIS', mode: 'realtime', asOf: open ? t : lastRegularClose(ex, t), receivedAt: t };
+      return { source: 'KIS', mode: 'realtime', asOf: tradingNow(inst, t) === false ? closeTime(inst, t) : t, receivedAt: t };
     };
     if (inst.assetClass === 'EQUITY' && inst.market !== 'US') {
       const r = await this.get('/uapi/domestic-stock/v1/quotations/inquire-price', 'FHKST01010100', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: inst.code }, pri);
@@ -746,17 +812,38 @@ export class KisAdapter implements Adapter {
           fresh: fresh(),
         };
       }
-      const today = ymdKst(Date.now());
+      // 기간을 열흘로 잡아서, 현재가 칸이 비면(다우존스) 가장 최근 일봉으로 대신해요
+      const t = Date.now();
       const r = await this.get(
         '/uapi/overseas-price/v1/quotations/inquire-daily-chartprice',
         'FHKST03030100',
-        { FID_COND_MRKT_DIV_CODE: 'N', FID_INPUT_ISCD: def.kis.code, FID_INPUT_DATE_1: today, FID_INPUT_DATE_2: today, FID_PERIOD_DIV_CODE: 'D' },
+        { FID_COND_MRKT_DIV_CODE: 'N', FID_INPUT_ISCD: def.kis.code, FID_INPUT_DATE_1: ymdKst(t - 10 * 86400_000), FID_INPUT_DATE_2: ymdKst(t), FID_PERIOD_DIV_CODE: 'D' },
         pri,
       );
-      const o = (Array.isArray(r.output1) ? r.output1[0] : r.output1) as KisRow;
-      const last = Number(o.ovrs_nmix_prpr);
-      const change = Number(o.ovrs_nmix_prdy_vrss);
-      return { id: inst.id, last, change, changePct: Number(o.prdy_ctrt), prevClose: last - change, fresh: fresh() };
+      const o = (Array.isArray(r.output1) ? r.output1[0] : r.output1) as KisRow | undefined;
+      const last = Number(o?.ovrs_nmix_prpr);
+      if (last > 0) {
+        const change = Number(o!.ovrs_nmix_prdy_vrss);
+        return { id: inst.id, last, change, changePct: Number(o!.prdy_ctrt), prevClose: last - change, fresh: fresh() };
+      }
+      const days = (r.output2 ?? []).filter((x) => x.stck_bsop_date && Number(x.ovrs_nmix_prpr) > 0).sort((a, b) => b.stck_bsop_date.localeCompare(a.stck_bsop_date));
+      // 값이 없으면 0으로 보여 주지 않고 비워 둬요(코드가 틀렸거나 제공하지 않는 지수)
+      if (days.length === 0) throw new Error(`해외 지수 ${def.kis.code}의 값이 없어요`);
+      const d = days[0];
+      const close = Number(d.ovrs_nmix_prpr);
+      const prev = days[1] ? Number(days[1].ovrs_nmix_prpr) : undefined;
+      const ymd = d.stck_bsop_date;
+      return {
+        id: inst.id,
+        last: close,
+        prevClose: prev,
+        change: prev !== undefined ? close - prev : undefined,
+        changePct: prev ? ((close - prev) / prev) * 100 : undefined,
+        open: Number(d.ovrs_nmix_oprc) || undefined,
+        high: Number(d.ovrs_nmix_hgpr) || undefined,
+        low: Number(d.ovrs_nmix_lwpr) || undefined,
+        fresh: { source: 'KIS', mode: 'daily', asOf: dateSec(ymd) * 1000, receivedAt: t, asOfDate: `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}` },
+      };
     }
     return undefined;
   }
@@ -804,8 +891,11 @@ export class KisAdapter implements Adapter {
 
   private async krMinute(inst: Instrument): Promise<Bar[]> {
     const out: Bar[] = [];
-    let hour = hmsKst(Date.now());
-    if (hour > '153000') hour = '153000';
+    const now = Date.now();
+    // 당일 분봉만 와요. 장중이 아니면(장 전·마감 뒤·주말) 15:30부터 거꾸로 받아요.
+    // 지금 시각(예: 00:34)으로 요청하면 정규장 밖의 봉이 와서 차트가 깨졌어요
+    let hour = sessionState(EXCHANGES.KRX, now) === 'open' ? hmsKst(now) : '153000';
+    let day: string | undefined;
     // 한 번에 30개(30분)씩 거꾸로 와요. 장 전체는 약 13번
     for (let page = 0; page < 14; page++) {
       const r = await this.get(
@@ -814,14 +904,22 @@ export class KisAdapter implements Adapter {
         { FID_ETC_CLS_CODE: '', FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: inst.code, FID_INPUT_HOUR_1: hour, FID_PW_DATA_INCU_YN: 'Y' },
         0,
       );
-      const rows = (r.output2 ?? []).filter((x) => x.stck_cntg_hour);
+      const rows = (r.output2 ?? []).filter((x) => x.stck_cntg_hour && x.stck_bsop_date);
       if (rows.length === 0) break;
-      for (const x of rows) {
+      // 가장 최근 하루의 정규장(09:00~15:30) 봉만 써요
+      const regular = rows.filter((x) => x.stck_cntg_hour >= '090000' && x.stck_cntg_hour <= '153000');
+      day ??= regular[0]?.stck_bsop_date;
+      for (const x of regular) {
+        if (x.stck_bsop_date !== day) continue;
         out.push({ t: kstSec(x.stck_bsop_date, x.stck_cntg_hour), o: +x.stck_oprc, h: +x.stck_hgpr, l: +x.stck_lwpr, c: +x.stck_prpr, v: +x.cntg_vol });
       }
-      const oldest = rows[rows.length - 1].stck_cntg_hour;
-      if (oldest <= '090000') break;
-      hour = minusMinute(oldest);
+      const oldest = rows[rows.length - 1];
+      if ((day && oldest.stck_bsop_date !== day) || oldest.stck_cntg_hour <= '090000') break;
+      const prev = minusMinute(oldest.stck_cntg_hour);
+      const next = prev > '153000' ? '153000' : prev;
+      // 같은 시각을 다시 요청하게 되면(정규장 밖 봉만 옴) 그만해요
+      if (next === hour) break;
+      hour = next;
     }
     return dedupe(out);
   }
@@ -902,7 +1000,7 @@ export class KisAdapter implements Adapter {
       message: this.message || (rejected ? `실시간 구독 ${rejected}개가 거절돼 몇 초 간격 조회로 받고 있어요` : ''),
       wsUsed: Math.max(0, this.wsSubs.size),
       wsLimit: WS_LIMIT,
-      wsOverflow: this.slots.overflow + rejected,
+      wsOverflow: this.slots.overflow((k) => this.wsEligible(k, Date.now())) + rejected,
       updatedAt: Date.now(),
     };
   }
@@ -959,6 +1057,6 @@ function dedupe(bars: Bar[]): Bar[] {
   return [...m.values()].sort((a, b) => a.t - b.t);
 }
 
-function isDomesticIndex(inst: Instrument) {
-  return INDICES.find((d) => d.code === inst.code)?.kis?.kind === 'domestic';
+function isOverseasIndex(inst: Instrument) {
+  return inst.assetClass === 'INDEX' && INDICES.find((d) => d.code === inst.code)?.kis?.kind === 'overseas';
 }

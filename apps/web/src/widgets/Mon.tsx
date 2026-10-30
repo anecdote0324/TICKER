@@ -6,7 +6,7 @@ import { slowestFreshness, type Instrument } from '@bt/shared';
 import { useQuotes } from '../stores/feed';
 import { indexState } from '../stores/instruments';
 import { getInstrument, index } from '../stores/instruments';
-import { setPanelSecurity, type PanelState } from '../stores/panels';
+import { patchPanel, setPanelSecurity, type PanelState } from '../stores/panels';
 import { checkSlots } from '../stores/slots';
 import { appState, updateState } from '../stores/state';
 import { useStore } from '../stores/store';
@@ -16,7 +16,9 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
   const groups = useStore(appState, (s) => s.watchlists);
   useStore(indexState, (s) => s.count);
   const shown = panel.watchGroups ? groups.filter((g) => panel.watchGroups!.includes(g.id)) : groups;
-  const [tab, setTab] = useState<string>('all');
+  // 고른 탭은 패널에 기억해요(지운 묶음이면 전체로)
+  const tab = panel.monTab && (panel.monTab === 'all' || shown.some((g) => g.id === panel.monTab)) ? panel.monTab : 'all';
+  const setTab = (t: string) => patchPanel(panel.id, { monTab: t });
   const [sel, setSel] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const visible = tab === 'all' ? shown : shown.filter((g) => g.id === tab);

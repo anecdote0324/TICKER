@@ -14,7 +14,17 @@ async function tmpHistory() {
 }
 
 const MIN = 60_000;
-const base = Math.floor(Date.now() / MIN) * MIN - 10 * MIN;
+/** 가장 최근 평일 오전 10시(한국 시간). 분봉은 장중 봉만 보여 줘서 시험 시각을 국내 장중으로 잡아요 */
+function lastKrMorning(now = Date.now()): number {
+  const KST = 9 * 3600_000;
+  for (let back = 0; ; back++) {
+    const d = new Date(now + KST - back * 86400_000);
+    const at = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 10) - KST;
+    const wd = new Date(at + KST).getUTCDay();
+    if (at <= now - 10 * MIN && wd !== 0 && wd !== 6) return at;
+  }
+}
+const base = lastKrMorning();
 
 function quote(id: string, last: number, at: number, volume?: number, fresh: Partial<Freshness> = {}): Quote {
   return { id, last, volume, fresh: { source: 'KIS', mode: 'realtime', asOf: at, receivedAt: at, ...fresh } };

@@ -1,6 +1,6 @@
 // 설정 화면(06). 바꾸면 바로 적용되고 저장 버튼은 없어요(키 입력만 '저장하고 연결 테스트').
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis } from '@bt/command';
 import {
   ACCENT_CHOICES,
@@ -46,9 +46,21 @@ export function SettingsModal() {
     if (u.settingsSection) setSection(u.settingsSection);
   }, [u.settingsSection]);
   const close = () => ui.set((s) => ({ ...s, settings: false, settingsSection: undefined }));
+  const boxRef = useRef<HTMLDivElement>(null);
+  // Esc로 닫아요. 단추를 누른 뒤 포커스가 창 밖(body)으로 빠져도(진단 정보 복사) 닫히게 창 전체에서 들어요
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const t = e.target as Node | null;
+      if (t && t !== document.body && !boxRef.current?.contains(t)) return;
+      close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="overlay" style={{ paddingTop: '6vh' }} onMouseDown={close} onKeyDown={(e) => e.key === 'Escape' && close()}>
-      <div className="modal" role="dialog" aria-label="설정" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="overlay" style={{ paddingTop: '6vh' }} onMouseDown={close}>
+      <div className="modal" ref={boxRef} role="dialog" aria-label="설정" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>설정</h2>
           <span className="label">바꾸면 바로 적용돼요 · 모든 패널과 떼어낸 창에 함께</span>

@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AdapterHost } from './types';
 import { KisAdapter, type KisTokenStore } from './kis';
 
@@ -9,11 +9,23 @@ type Mode = 'ok' | 'hang' | 'reject' | 'rate';
 const mode: Record<'token' | 'price', Mode> = { token: 'ok', price: 'ok' };
 /** 'rate'일 때 앞의 몇 번을 초당 거래건수 초과(EGW00201)로 답할지 */
 let rateLeft = 0;
+/** 경로별로 따로 정한 답(시험마다 넣고 지워요) */
+const custom = new Map<string, (q: URLSearchParams) => unknown>();
+/** 받은 요청의 경로와 변수 */
+const requests: Array<{ path: string; q: URLSearchParams }> = [];
 let server: Server;
 let rest = '';
 
 beforeAll(async () => {
   server = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://x');
+    requests.push({ path: url.pathname, q: url.searchParams });
+    const fixed = custom.get(url.pathname);
+    if (fixed) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(fixed(url.searchParams)));
+      return;
+    }
     const kind = req.url?.startsWith('/oauth2/tokenP') ? 'token' : 'price';
     const m = mode[kind];
     if (m === 'hang') return;
@@ -34,6 +46,12 @@ beforeAll(async () => {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   rest = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   KisAdapter.timeouts = { step: 600, tokenStore: 200 };
+});
+
+afterEach(() => {
+  custom.clear();
+  requests.length = 0;
+  vi.useRealTimers();
 });
 
 afterAll(() => {
@@ -120,6 +138,9 @@ describe('한국투자증권 연결 테스트', () => {
 
 describe('한국투자증권 실시간 구독 거절', () => {
   it('MAX SUBSCRIBE OVER로 거절된 종목은 조회로 받고, 받아들여진 종목은 실시간으로 받아요', async () => {
+    // 국내 장중(목요일 10:00)
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.UTC(2026, 9, 29, 1, 0));
     const { kis } = adapter(memoryStore());
     // 실시간 연결이 열린 상태를 흉내 내요
     const sent: string[] = [];
@@ -179,5 +200,86 @@ describe('한국투자증권 실시간 메시지', () => {
     };
     k.onWsMessage(`0|H0STCNT0|002|${rec('71000')}^${rec('71100')}`);
     expect(quotes.map((q) => q.last)).toEqual([71000, 71100]);
+  });
+});
+
+/** 실시간 연결이 열린 상태를 흉내 내요 */
+function openWs(kis: KisAdapter) {
+  const sent: string[] = [];
+  const k = kis as unknown as { ws: unknown; state: string; approvalKey: string };
+  k.ws = { readyState: WebSocket.OPEN, send: (x: string) => sent.push(x), close: () => undefined };
+  k.state = 'connected';
+  k.approvalKey = 'a';
+  return sent;
+}
+
+const kr = (code: string) => ({ id: `EQ:KS:${code}`, assetClass: 'EQUITY', market: 'KS', code, exchange: 'KRX', currency: 'KRW' }) as never;
+const us = (code: string) => ({ id: `EQ:US:${code}`, assetClass: 'EQUITY', market: 'US', code, exchange: 'NAS', currency: 'USD' }) as never;
+const until = async (ok: () => boolean) => {
+  for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 20));
+};
+
+describe('장이 닫힌 종목', () => {
+  it('국내 장이 닫히고 미국 장이 열려 있으면, 미국 종목만 실시간 슬롯을 쓰고 국내 종목은 5분 간격으로 마감 값을 확인해요', async () => {
+    mode.token = 'ok';
+    mode.price = 'ok';
+    // 한국 토요일 00:30 = 뉴욕 금요일 11:30(장중)
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.UTC(2026, 9, 30, 15, 30));
+    const quotes: Array<{ id: string; last: number; fresh?: { mode: string; asOf: number; intervalMs?: number } }> = [];
+    const { kis } = adapter(memoryStore(), quotes);
+    const sent = openWs(kis);
+    kis.subscribe([kr('005930'), us('AAPL')]);
+    await new Promise((r) => setTimeout(r, 80));
+    const subs = sent.filter((x) => x.includes('"tr_type":"1"'));
+    expect(subs).toHaveLength(1);
+    expect(subs[0]).toContain('DNASAAPL');
+    const k = kis as unknown as { pollTargets: () => Array<{ code: string }>; intervalFor: (i: unknown) => number };
+    expect(k.pollTargets().map((i) => i.code)).toEqual(['005930']);
+    expect(k.intervalFor(kr('005930'))).toBe(5 * 60_000);
+    // 국내 종목의 값은 마감 값이라 기준 시각이 금요일 15:30(한국)이에요
+    await until(() => quotes.some((q) => q.id === 'EQ:KS:005930'));
+    const q = quotes.find((x) => x.id === 'EQ:KS:005930')!;
+    expect(q.fresh?.mode).toBe('poll');
+    expect(q.fresh?.asOf).toBe(Date.UTC(2026, 9, 30, 6, 30));
+    expect(q.fresh?.intervalMs).toBe(5 * 60_000);
+    kis.stop();
+  });
+
+  it('국내 분봉은 장이 닫힌 때 15:30부터 받고, 정규장 밖의 봉은 버려요', async () => {
+    mode.token = 'ok';
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.UTC(2026, 9, 30, 15, 34)); // 한국 토요일 00:34
+    const row = (hour: string, c: string) => ({ stck_bsop_date: '20261030', stck_cntg_hour: hour, stck_oprc: c, stck_hgpr: c, stck_lwpr: c, stck_prpr: c, cntg_vol: '1' });
+    custom.set('/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice', (q) => ({
+      rt_cd: '0',
+      msg_cd: 'MCA00000',
+      msg1: '정상',
+      output2: q.get('FID_INPUT_HOUR_1') === '153000' ? [row('192500', '1'), row('153000', '278500'), row('152900', '278000'), row('090000', '277000')] : [],
+    }));
+    const { kis } = adapter(memoryStore());
+    const s = await kis.bars(kr('005380'), '1m');
+    expect(requests.find((r) => r.path.endsWith('inquire-time-itemchartprice'))?.q.get('FID_INPUT_HOUR_1')).toBe('153000');
+    expect(s.bars.map((b) => b.c)).toEqual([277000, 278000, 278500]);
+  });
+
+  it('해외 지수의 현재가 칸이 비면 가장 최근 일봉으로 보여 주고, 값이 없으면 0을 보내지 않아요', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/overseas-price/v1/quotations/inquire-daily-chartprice';
+    const day = (ymd: string, c: string) => ({ stck_bsop_date: ymd, ovrs_nmix_prpr: c, ovrs_nmix_oprc: c, ovrs_nmix_hgpr: c, ovrs_nmix_lwpr: c });
+    custom.set(path, () => ({ rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: { ovrs_nmix_prpr: '0.00', ovrs_nmix_prdy_vrss: '0.00', prdy_ctrt: '0.00' }, output2: [day('20261029', '47000'), day('20261030', '47500')] }));
+    const quotes: Array<{ id: string; last: number; change?: number; fresh?: { mode: string; asOfDate?: string } }> = [];
+    const { kis, logs } = adapter(memoryStore(), quotes);
+    const dow = { id: 'IDX:INDU', assetClass: 'INDEX', code: 'INDU', market: 'US', exchange: 'US', currency: 'USD' } as never;
+    const k = kis as unknown as { pollOne: (i: unknown, pri: number) => Promise<void> };
+    await k.pollOne(dow, 0);
+    expect(quotes).toHaveLength(1);
+    expect([quotes[0].last, quotes[0].change, quotes[0].fresh?.mode, quotes[0].fresh?.asOfDate]).toEqual([47500, 500, 'daily', '2026-10-30']);
+    // 해외 지수 마스터의 코드를 써요(요청 변수)
+    expect(requests.find((r) => r.path === path)?.q.get('FID_INPUT_ISCD')).toBe('.DJI');
+    custom.set(path, () => ({ rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: { ovrs_nmix_prpr: '0.00' }, output2: [] }));
+    await k.pollOne(dow, 0);
+    expect(quotes).toHaveLength(1);
+    expect(logs.join('\n')).toContain('값이 없어요');
   });
 });

@@ -122,6 +122,15 @@ describe('(d) 한글 모드로 친 GP', () => {
   });
 });
 
+describe('시장까지 다 친 줄', () => {
+  it("AAPL US: 목록에 '일치 없음' 대신 알아들은 시장 줄이 나와요", () => {
+    const a = run('AAPL US');
+    expect(a.plan.kind).toBe('execute');
+    expect(a.rows[0]).toMatchObject({ id: 'mkt:US', name: '미국', disabled: true });
+    expect(a.rows.some((r) => r.kind === 'nomatch')).toBe(false);
+  });
+});
+
 describe('(e) 종목 없이 GP', () => {
   const aapl = ctx({ security: inst('EQ:US:AAPL'), fn: 'GIP' });
   it('2글자 정확한 기능 코드는 바로 실행, 같은 글자 종목은 2번 줄', () => {

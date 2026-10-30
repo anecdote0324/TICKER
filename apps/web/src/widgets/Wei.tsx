@@ -41,7 +41,9 @@ export function Wei({ panel }: { panel: PanelState }) {
               if (!inst) return null;
               const q = quotes.get(inst.id);
               const ses = instSession(inst, now);
-              return <WeiRow key={d.code} inst={inst} q={q} session={ses ? SESSION_LABEL[ses] : ''} onPick={() => setPanelSecurity(panel.id, inst.id)} />;
+              // 장이 닫혔으면 값 옆 배지가 '마감'을 보여 줘서 장 상태 글자는 빼요(`마감 마감`이 되지 않게)
+              const label = ses && !(ses === 'closed' && q) ? SESSION_LABEL[ses] : '';
+              return <WeiRow key={d.code} inst={inst} q={q} session={label} onPick={() => setPanelSecurity(panel.id, inst.id)} />;
             })}
           </div>
         ))}

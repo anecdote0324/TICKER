@@ -2,6 +2,7 @@
 // 왼쪽 위에 시가·고가·저가·종가와 신선도 배지를 붙여요(02).
 // 보이는 범위: 기간 버튼(GP 1M~MAX, GIP 1H~MAX)으로 배율을 정하고, 종목만 바꾸면 그 배율 그대로 가장 최근 봉으로 가요.
 // 가격 축은 종목·기간이 바뀔 때마다 보이는 봉에 다시 맞춰요(손으로 당긴 가격 축이 다음 종목에 남지 않게).
+// 종목을 바꾸면 새 봉이 올 때까지 앞 종목의 봉과 시고저종을 지우고 '불러오는 중'을 보여 줘요.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -17,7 +18,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import type { Bar, BarInterval, BarSeries, Instrument } from '@bt/shared';
+import { intradayAt, type Bar, type BarInterval, type BarSeries, type Instrument } from '@bt/shared';
 import { FreshBadge } from '../components/FreshBadge';
 import { fmtPrice, fmtBig, priceDigits } from '../format';
 import { getBars } from '../stores/bars';
@@ -109,7 +110,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const el = boxRef.current;
     if (!el) return;
     const chart = createChart(el, {
-      autoSize: true,
+      width: el.clientWidth,
+      height: el.clientHeight,
       layout: { background: { type: ColorType.Solid, color: '#0A0A0A' }, textColor: '#8C8C8C', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, attributionLogo: false },
       grid: { vertLines: { color: '#141414' }, horzLines: { color: '#141414' } },
       rightPriceScale: { borderColor: '#242424' },
@@ -157,8 +159,17 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       }
     };
     chart.timeScale().subscribeSizeChange(onSize);
+    // 크기는 차트가 놓인 창의 ResizeObserver로 따라가요. 떼어낸 창에서는 메인 창의 것이 크기 변화를 알려 주지 않아요
+    const Observer = (el.ownerDocument.defaultView as (Window & typeof globalThis) | null)?.ResizeObserver ?? ResizeObserver;
+    const ro = new Observer((entries) => {
+      const r = entries[entries.length - 1]?.contentRect;
+      if (r) chart.resize(Math.floor(r.width), Math.floor(r.height));
+    });
+    ro.observe(el);
     viewRef.current = null;
+    barsIdRef.current = null;
     return () => {
+      ro.disconnect();
       crossListeners.delete(listener);
       chart.timeScale().unsubscribeSizeChange(onSize);
       chart.remove();
@@ -191,15 +202,27 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     };
   }, [inst?.id, interval, intraday, noIntraday]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 지금 종목·봉 단위의 봉(종목을 바꾼 직후에는 아직 없어요)
+  const ready = series && inst && series.id === inst.id && series.interval === interval ? series : null;
+
   // 데이터 넣기
   useEffect(() => {
     const c = candleRef.current;
     const chart = chartRef.current;
-    // 종목을 바꾼 직전에는 앞 종목의 봉이 남아 있어요. 새 봉이 올 때까지 기다려요
-    if (!c || !chart || !series || !inst || series.id !== inst.id || series.interval !== interval) return;
-    const bars = series.bars;
+    if (!c || !chart) return;
+    if (!ready) {
+      // 종목을 바꾼 직후: 앞 종목의 봉을 지우고 새 봉을 기다려요(제목만 바뀌고 앞 종목의 차트가 남지 않게)
+      if (barsIdRef.current !== null) {
+        for (const x of [c, volRef.current, ma20Ref.current, ma60Ref.current, closeRef.current]) x?.setData([]);
+        barsRef.current = [];
+        barsIdRef.current = null;
+        setHover(null);
+      }
+      return;
+    }
+    const bars = ready.bars;
     barsRef.current = bars.slice();
-    barsIdRef.current = series.id;
+    barsIdRef.current = ready.id;
     const d = priceDigits(inst, bars[bars.length - 1]?.c);
     c.applyOptions({ priceFormat: { type: 'price', precision: d, minMove: Math.pow(10, -d) } });
     const closeOnly = bars.length > 0 && bars.every((b) => b.o === b.c && b.h === b.c && b.l === b.c);
@@ -218,7 +241,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const ts = chart.timeScale();
     const key = `${interval}|${range}|${fitTick}`;
     const view = viewRef.current;
-    const idChanged = view?.id !== series.id;
+    const idChanged = view?.id !== ready.id;
     if (!view || view.key !== key) {
       // 처음이거나 봉 단위·기간 버튼이 바뀌었으면 그 기간에 맞춰요
       const n = visibleBarCount(bars, intraday, interval, range);
@@ -233,8 +256,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       // 가격 축은 보이는 봉에 다시 맞춰요(손으로 당겨 꺼진 자동 맞춤을 다시 켜요)
       chart.priceScale('right').applyOptions({ autoScale: true });
     }
-    viewRef.current = { id: series.id, key };
-  }, [series, range, interval, intraday, inst, fitTick]);
+    viewRef.current = { id: ready.id, key };
+  }, [ready, range, interval, intraday, inst, fitTick]);
 
   // 실시간 시세로 마지막 봉 고치기
   useEffect(() => {
@@ -245,7 +268,9 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const last = bars[bars.length - 1];
     if (intraday) {
       const t = Math.floor(quote.fresh.asOf / 60_000) * 60;
+      // 새 봉은 장중 체결로만 만들어요(장이 닫힌 뒤 조회한 값으로 봉을 더하면 가로축이 건너뛰어요)
       if (t > last.t) {
+        if (!inst || !intradayAt(inst, quote.fresh.asOf)) return;
         const nb: Bar = { t, o: quote.last, h: quote.last, l: quote.last, c: quote.last, v: 0 };
         bars.push(nb);
         c.update({ time: t as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
@@ -256,10 +281,12 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     last.h = Math.max(last.h, quote.last);
     last.l = Math.min(last.l, quote.last);
     c.update({ time: last.t as UTCTimestamp, open: last.o, high: last.h, low: last.l, close: last.c });
-  }, [quote, intraday]);
+  }, [quote, intraday]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = hover ?? series?.bars[series.bars.length - 1];
-  const fresh = quote?.fresh ?? series?.fresh;
+  const shown = hover ?? ready?.bars[ready.bars.length - 1];
+  const fresh = quote?.fresh ?? ready?.fresh;
+  const loading = !!inst && !noIntraday && !error && !ready;
+  const empty = !!ready && ready.bars.length === 0;
   const name = inst ? (inst.nameKo ?? inst.nameEn ?? inst.code) : '';
   const fnCode = intraday ? 'GIP' : 'GP';
   const tools = useMemo(
@@ -333,6 +360,17 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         {error && inst && (
           <div className="empty-body" style={{ position: 'absolute', inset: 0 }}>
             <span className="err">{error}</span>
+          </div>
+        )}
+        {loading && (
+          <div className="empty-body" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+            <span className="label">불러오는 중…</span>
+          </div>
+        )}
+        {empty && !error && (
+          <div className="empty-body" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+            <div>{intraday ? '아직 장중 분봉이 없어요' : '봉 데이터가 없어요'}</div>
+            {intraday && <div className="label">장이 열리면 1분마다 봉이 생겨요</div>}
           </div>
         )}
         {noIntraday && (

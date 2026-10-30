@@ -1,7 +1,7 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { staticInstruments, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
+import { intradayAt, staticInstruments, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
@@ -181,8 +181,12 @@ export class Hub implements AdapterHost {
   emitQuote(q: Quote) {
     // 구독이 끝난 종목의 늦게 온 값은 버려요
     if (!this.refs.has(q.id)) return;
+    // 값이 없는 응답(0)은 실제 값처럼 보이지 않게 버려요. 화면은 —로 남아요
+    if (!Number.isFinite(q.last) || q.last <= 0) return;
     this.quotes.set(q.id, q);
-    this.history?.onQuote(q);
+    // 분봉은 지금 체결된 값으로만 만들어요. 장이 닫힌 뒤 조회한 마감 값으로 봉을 만들면 정규장 밖에 봉이 생겨요
+    const inst = this.instruments.get(q.id);
+    if (q.fresh.receivedAt - q.fresh.asOf < 120_000 && (!inst || intradayAt(inst, q.fresh.asOf))) this.history?.onQuote(q);
     this.pending.add(q.id);
     if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(), FLUSH_MS);
   }
@@ -248,7 +252,7 @@ export class Hub implements AdapterHost {
       if (!saved?.bars.length) throw e;
       this.log.warn(`${inst.id} 봉을 소스에서 받지 못해 저장해 둔 봉을 써요: ${(e as Error).message}`);
       const at = saved.savedAt ?? saved.bars[saved.bars.length - 1].t * 1000;
-      return { id: inst.id, interval, bars: saved.bars, fresh: { source: adapter.source, mode: 'poll', asOf: at, receivedAt: at, intervalMs: 60_000 } };
+      return { id: inst.id, interval, bars: inSession(inst, interval, saved.bars), fresh: { source: adapter.source, mode: 'poll', asOf: at, receivedAt: at, intervalMs: 60_000 } };
     }
     if (!keep) return series;
     try {
@@ -263,10 +267,16 @@ export class Hub implements AdapterHost {
     } catch (e) {
       this.log.warn(`봉 저장 실패: ${(e as Error).message}`);
     }
-    return series;
+    return { ...series, bars: inSession(inst, interval, series.bars) };
   }
 
   quoteSnapshot(ids: string[]): Quote[] {
     return ids.map((id) => this.quotes.get(id)).filter((q): q is Quote => !!q);
   }
+}
+
+/** 분봉은 장중 봉만 보여 줘요. 예전에 장이 닫힌 뒤 만든 봉이나 정규장 밖의 봉이 저장돼 있어도 차트에 섞지 않아요 */
+function inSession(inst: Instrument, interval: BarInterval, bars: Bar[]): Bar[] {
+  if (interval !== '1m' && interval !== '5m') return bars;
+  return bars.filter((b) => intradayAt(inst, b.t * 1000));
 }

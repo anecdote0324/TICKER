@@ -7,4 +7,5 @@ export * from './static-instruments';
 export * from './settings';
 export * from './shortcuts';
 export * from './slots';
+export * from './session';
 export type { CatalogEntry } from './function-catalog.generated';

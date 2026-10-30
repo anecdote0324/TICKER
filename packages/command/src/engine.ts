@@ -1075,6 +1075,9 @@ export class CommandEngine {
         } else {
           rows.push(...this.closedRows(seg, ctx, after, sec));
         }
+        // 다 친 시장·자산군(AAPL US): 알아들었다는 줄을 보여 줘요('US'와 일치하는 것이 없다고 하지 않게)
+        if (rows.length === 0 && seg.slot === 'market' && seg.market) rows.push(recognizedRow('market', seg.text.toUpperCase(), MARKET_LABEL[seg.market], '시장'));
+        if (rows.length === 0 && seg.slot === 'asset' && seg.asset) rows.push(recognizedRow('asset', seg.asset, ASSET_LABEL[seg.asset], '자산군'));
         if (rows.length === 0) rows.push(noMatchRow(seg.text));
         break;
       }
@@ -1398,6 +1401,23 @@ export function reservedShape(key: string): string | undefined {
     return `${key}는 선물 월물 코드 모양이에요 — 지수선물 v0.6, 국채선물 v0.7, 원자재 v0.11에서 제공 예정`;
   }
   return undefined;
+}
+
+/** 알아들은 시장·자산군 줄(✓). 이미 다 쳤으니 고를 것은 없어요 */
+function recognizedRow(kind: 'market' | 'asset', code: string, label: string, info: string): Row {
+  return {
+    id: `${kind === 'market' ? 'mkt' : 'asset'}:${code}`,
+    kind,
+    badge: kind === 'market' ? 'MKT' : code,
+    code,
+    name: label,
+    info: `${info} ✓`,
+    flags: [],
+    canonical: code,
+    tier: 0,
+    insert: code,
+    disabled: true,
+  };
 }
 
 function noMatchRow(text: string): Row {

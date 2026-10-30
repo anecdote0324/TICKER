@@ -9,7 +9,7 @@ export interface IndexDef {
   region: '한국' | '미주' | '유럽' | '아시아';
   /** 장 시간 판정에 쓰는 거래소(time.ts EXCHANGES) */
   exchange: string;
-  /** KIS 조회 코드. 국내 업종지수는 업종코드, 해외는 해외지수 코드(확인 필요) */
+  /** KIS 조회 코드. 국내 업종지수는 업종코드, 해외는 해외지수 마스터(frgn_code.mst)의 코드(04). 다우존스는 마스터에 없어서 공식 예제의 .DJI를 써요 */
   kis?: { kind: 'domestic' | 'overseas'; code: string };
   aliasesKo?: string[];
 }
@@ -23,14 +23,14 @@ export const INDICES: IndexDef[] = [
   { code: 'CCMP', nameKo: '나스닥 종합', nameEn: 'NASDAQ Composite', region: '미주', exchange: 'US', kis: { kind: 'overseas', code: 'COMP' }, aliasesKo: ['나스닥'] },
   { code: 'NDX', nameKo: '나스닥 100', nameEn: 'NASDAQ 100', region: '미주', exchange: 'US', kis: { kind: 'overseas', code: 'NDX' } },
   { code: 'SOX', nameKo: '필라델피아 반도체', nameEn: 'PHLX Semiconductor', region: '미주', exchange: 'US', kis: { kind: 'overseas', code: 'SOX' } },
-  { code: 'UKX', nameKo: 'FTSE 100', nameEn: 'FTSE 100', region: '유럽', exchange: 'LSE', kis: { kind: 'overseas', code: 'FTSE100' } },
-  { code: 'DAX', nameKo: '독일 DAX', nameEn: 'DAX', region: '유럽', exchange: 'LSE', kis: { kind: 'overseas', code: 'DAX' } },
-  { code: 'CAC', nameKo: '프랑스 CAC 40', nameEn: 'CAC 40', region: '유럽', exchange: 'LSE', kis: { kind: 'overseas', code: 'CAC40' } },
+  { code: 'UKX', nameKo: 'FTSE 100', nameEn: 'FTSE 100', region: '유럽', exchange: 'LSE', kis: { kind: 'overseas', code: 'GB#FTSE' } },
+  { code: 'DAX', nameKo: '독일 DAX', nameEn: 'DAX', region: '유럽', exchange: 'LSE', kis: { kind: 'overseas', code: 'GR#DAX' } },
+  { code: 'CAC', nameKo: '프랑스 CAC 40', nameEn: 'CAC 40', region: '유럽', exchange: 'LSE', kis: { kind: 'overseas', code: 'FR#CAC' } },
   { code: 'SX5E', nameKo: '유로스톡스 50', nameEn: 'Euro Stoxx 50', region: '유럽', exchange: 'LSE', kis: { kind: 'overseas', code: 'SX5E' } },
-  { code: 'NKY', nameKo: '니케이 225', nameEn: 'Nikkei 225', region: '아시아', exchange: 'TSE', kis: { kind: 'overseas', code: 'N225' }, aliasesKo: ['닛케이'] },
-  { code: 'HSI', nameKo: '항셍', nameEn: 'Hang Seng', region: '아시아', exchange: 'TSE', kis: { kind: 'overseas', code: 'HSI' } },
+  { code: 'NKY', nameKo: '니케이 225', nameEn: 'Nikkei 225', region: '아시아', exchange: 'TSE', kis: { kind: 'overseas', code: 'JP#NI225' }, aliasesKo: ['닛케이'] },
+  { code: 'HSI', nameKo: '항셍', nameEn: 'Hang Seng', region: '아시아', exchange: 'TSE', kis: { kind: 'overseas', code: 'HK#HS' } },
   { code: 'SHCOMP', nameKo: '상하이 종합', nameEn: 'Shanghai Composite', region: '아시아', exchange: 'TSE', kis: { kind: 'overseas', code: 'SHANG' } },
-  { code: 'TWSE', nameKo: '대만 가권', nameEn: 'TAIEX', region: '아시아', exchange: 'TSE', kis: { kind: 'overseas', code: 'TWII' } },
+  { code: 'TWSE', nameKo: '대만 가권', nameEn: 'TAIEX', region: '아시아', exchange: 'TSE', kis: { kind: 'overseas', code: 'TW#WT' } },
 ];
 
 export const FX_CURRENCIES = ['USD', 'EUR', 'JPY', 'GBP', 'CNY', 'AUD', 'KRW'] as const;
