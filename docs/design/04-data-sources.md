@@ -51,7 +51,7 @@
 | 시장 | 실시간 체결 | 실시간 호가 | 비고 |
 |---|---|---|---|
 | 국내 (KRX, NXT) | ✓ | ✓ (10호가) | NXT는 시장 코드 `NX`. KRX·NXT·통합 호가를 고를 수 있어요 |
-| 미국 | ✓ 무료(0분 지연)로 안내됨, 확인 필요 | 1호가만 무료로 안내됨 | 주간거래 시세도 조회 가능 |
+| 미국 | ✓ 무료(0분 지연). 공식 예제(해외주식 실시간지연체결가) 설명으로 확인 | 1호가만 무료로 안내됨 | 주간거래(10:00~16:00) 시세도 받을 수 있어요(시장 코드 나스닥 `BAQ`, 뉴욕 `BAY`, 아멕스 `BAA`) |
 | 홍콩·중국·일본·베트남 | 무료는 15분 지연 | | 실시간은 유료 신청 |
 | 국내 선물옵션 | ✓ | ✓ | KOSPI200 선물·옵션, 야간 시장 포함. 국채선물이 포함되는지는 확인 필요 |
 | 장내채권 | ✓ | | KRX 일반채권시장만이라 국고채 지표물 체결은 드물어요(아래 "채권" 참고) |
@@ -200,11 +200,29 @@
 
 설정의 "데이터 연결"에서 입력해요: KIS 앱키·앱시크릿, DART, ECOS, FRED, KOSIS, KRX Open API, 공공데이터포털, 네이버, EIA 키, 그리고 SEC EDGAR 요청에 넣을 연락처. 모두 PC 안에 암호화해서 저장해요.
 
+## 한국투자증권 공식 저장소에서 확인한 것
+
+[koreainvestment/open-trading-api](https://github.com/koreainvestment/open-trading-api)의 README와 예제(`examples_llm/`, `examples_user/`, 2026-10 기준)에서 확인했어요. 한국투자증권 쪽을 고칠 때는 이 저장소를 기준으로 봐요(사용자 결정).
+
+| 항목 | 공식 내용 | 앱에서 |
+|---|---|---|
+| 접근 토큰 | 유효기간 1일. 6시간 안에 다시 신청하면 같은 토큰을 돌려줘요. 1분에 1번만 발급. **발급할 때마다 카카오 알림톡이 가요** | 받은 토큰을 보안 저장소에 두고 만료 10분 전까지 다시 써요. 앱키·서버가 바뀌면 새로 받아요 |
+| 실시간 등록 한도 | **앱키 1개당 41건**(연결 하나당이 아니에요). 예제는 40개로 막아 둠 | 40개까지. 이전 연결을 먼저 닫고, 거절되면 조회로 받다가 다시 구독해요 |
+| 실시간 구독 요청 | 요청마다 0.05초 쉬어요 | 0.05초 간격으로 보내요 |
+| PINGPONG | 받은 내용을 WebSocket pong(제어 프레임)으로 돌려줘요 | 같게(`ws` 패키지). 처음에는 일반 메시지로 돌려보냈어요 |
+| REST 호출 간격 | 실전 0.05초(초당 20건), 모의 0.5초(초당 2건). `EGW00201`은 초당 거래건수 초과 | 실전 초당 15건, 모의 2건. 초과를 받으면 1초 멈추고 자리를 지킨 채 다시 해요 |
+| 국내 실시간 체결(H0STCNT0) | 47칸 | 47칸. 여러 건이 묶여 오면 전체 칸 수를 건수로 나눠요 |
+| 해외 실시간 체결(HDFSCNT0) | 맨 앞 실시간 종목코드(`DNASAAPL`) + 25칸. 미국은 0분 지연 무료, 홍콩·베트남·중국·일본은 15분 지연. HTS [7781]에서 유료 신청하면 실시간 | 26칸 |
+| 국내 분봉(FHKST03010200) | 당일 분봉만, 한 번에 30건 | 30분씩 거꾸로 이어 받아요 |
+| 국내 일봉(FHKST03010100) | 한 번에 100건 | 100건씩 이어 받아요 |
+| 해외 분봉(HHDFS76950200) | 한 번에 120건, 다음 조회는 `PINC=1`과 `KEYB`(마지막 분봉 시각) | 같게 |
+| WebSocket `No close frame received` | HTS ID가 정확한지 확인(체결통보용) | 체결통보는 쓰지 않아요 |
+
 ## 참고 자료
 
 - [KIS Developers 서비스 신청 안내 (WikiDocs)](https://wikidocs.net/159301)
 - [KIS API 포털](https://apiportal.koreainvestment.com/apiservice-apiservice)
-- [KIS open-trading-api GitHub](https://github.com/koreainvestment/open-trading-api)
+- [KIS open-trading-api GitHub](https://github.com/koreainvestment/open-trading-api) (공식 예제. 한국투자증권 쪽을 고칠 때의 기준)
 - [KIS 해외주식 WebSocket 예제](https://github.com/koreainvestment/open-trading-api/blob/main/examples_user/overseas_stock/overseas_stock_functions_ws.py)
 - [한국 증권사 REST API 비교 (2026-04)](https://soosoo.life/2026-04-19-%ED%95%9C%EA%B5%AD_%EC%A6%9D%EA%B6%8C%EC%82%AC_REST_API_%EB%B9%84%EA%B5%90_%EC%9E%90%EB%8F%99%EB%A7%A4%EB%A7%A4_%EA%B0%9C%EB%B0%9C%EC%9E%90_%EA%B0%80%EC%9D%B4%EB%93%9C/)
 - [신한i인디 소개 (WikiDocs)](https://wikidocs.net/21911)

@@ -3,6 +3,7 @@
 // 실제 계정으로 붙여 볼 때 07의 "확인할 것"을 함께 확인해요.
 
 import { createHash } from 'node:crypto';
+import WebSocket from 'ws';
 import {
   EXCHANGES,
   INDICES,
@@ -64,10 +65,12 @@ interface KisResponse {
   output2?: KisRow[];
 }
 
-/** 국내 주식 실시간 체결(H0STCNT0) 한 건의 칸 수 */
-const H0STCNT0_FIELDS = 46;
-/** 해외 주식 실시간 체결(HDFSCNT0) 한 건의 칸 수 */
+/** 국내 주식 실시간 체결(H0STCNT0) 한 건의 칸 수(공식 예제 ccnl_krx는 47칸. 묶여 오면 전체 칸 수를 건수로 나눠 써요) */
+const H0STCNT0_FIELDS = 47;
+/** 해외 주식 실시간 체결(HDFSCNT0) 한 건의 칸 수(맨 앞 RSYM 포함) */
 const HDFSCNT0_FIELDS = 26;
+/** 구독 요청 사이 간격. 공식 예제는 요청마다 0.05초 쉬어요 */
+const WS_SEND_GAP_MS = 50;
 
 export class KisAdapter implements Adapter {
   /** 단계마다 기다리는 시간(테스트에서 줄여 써요) */
@@ -105,6 +108,9 @@ export class KisAdapter implements Adapter {
   private wsRejected = new Set<string>();
   private retryTimer: NodeJS.Timeout | null = null;
   private retryDelay = 60_000;
+  /** 보낼 구독 요청(간격을 두고 보내요) */
+  private wsOut: string[] = [];
+  private wsOutTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private host: AdapterHost,
@@ -155,9 +161,12 @@ export class KisAdapter implements Adapter {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.retryTimer) clearTimeout(this.retryTimer);
     // 한국투자증권은 키마다 실시간 등록 수를 세요. 닫기 전에 등록을 풀어서 다음 연결이 한도에 걸리지 않게 해요
+    this.wsOut = [];
+    if (this.wsOutTimer) clearTimeout(this.wsOutTimer);
+    this.wsOutTimer = null;
     for (const k of this.wsSubs) {
       const [tr, key] = k.split('|');
-      this.sendWs(tr, key, false);
+      this.sendWs(tr, key, false, true);
     }
     this.wsSubs.clear();
     this.ws?.close();
@@ -392,6 +401,7 @@ export class KisAdapter implements Adapter {
       this.wsSubs.clear();
       this.wsPending = [];
       this.wsAccepted.clear();
+      this.wsOut = [];
       this.host.log.info('KIS 실시간 연결');
       this.setState('connected');
       this.syncWs();
@@ -419,14 +429,30 @@ export class KisAdapter implements Adapter {
     this.backoff = Math.min(this.backoff * 2, 60_000);
   }
 
-  private sendWs(trId: string, trKey: string, subscribe: boolean) {
+  private sendWs(trId: string, trKey: string, subscribe: boolean, now = false) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.approvalKey) return;
-    this.ws.send(
-      JSON.stringify({
-        header: { approval_key: this.approvalKey, custtype: 'P', tr_type: subscribe ? '1' : '2', 'content-type': 'utf-8' },
-        body: { input: { tr_id: trId, tr_key: trKey } },
-      }),
-    );
+    const msg = JSON.stringify({
+      header: { approval_key: this.approvalKey, custtype: 'P', tr_type: subscribe ? '1' : '2', 'content-type': 'utf-8' },
+      body: { input: { tr_id: trId, tr_key: trKey } },
+    });
+    if (now) {
+      this.ws.send(msg);
+      return;
+    }
+    this.wsOut.push(msg);
+    this.drainWs();
+  }
+
+  /** 구독 요청을 0.05초 간격으로 보내요(공식 예제와 같게) */
+  private drainWs() {
+    if (this.wsOutTimer) return;
+    const next = this.wsOut.shift();
+    if (!next) return;
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(next);
+    this.wsOutTimer = setTimeout(() => {
+      this.wsOutTimer = null;
+      this.drainWs();
+    }, WS_SEND_GAP_MS);
   }
 
   private wsKey(inst: Instrument): [string, string] | undefined {
@@ -505,7 +531,8 @@ export class KisAdapter implements Adapter {
         const trId = j.header?.tr_id;
         // 연결 확인 신호는 그대로 돌려보내요
         if (trId === 'PINGPONG') {
-          if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(raw);
+          // 공식 예제처럼 받은 내용을 pong 프레임으로 돌려줘요(일반 메시지로 보내면 요청으로 읽힐 수 있어요)
+          if (this.ws?.readyState === WebSocket.OPEN) this.ws.pong(Buffer.from(raw));
         } else if (trId && j.body?.rt_cd !== undefined) {
           if (trId === 'H0STCNT0' || trId === 'HDFSCNT0') this.onSubscribeReply(trId, j.header?.tr_key || undefined, j.body.rt_cd === '0', j.body.msg1 ?? '');
           else if (j.body.rt_cd !== '0') this.noteError(`실시간(${trId}): ${j.body.msg1}`);
@@ -521,8 +548,10 @@ export class KisAdapter implements Adapter {
     const trId = parts[1];
     const count = Number(parts[2]) || 1;
     const fields = parts[3].split('^');
-    const size = trId === 'H0STCNT0' ? H0STCNT0_FIELDS : trId === 'HDFSCNT0' ? HDFSCNT0_FIELDS : 0;
-    if (!size) return;
+    const known = trId === 'H0STCNT0' ? H0STCNT0_FIELDS : trId === 'HDFSCNT0' ? HDFSCNT0_FIELDS : 0;
+    if (!known) return;
+    // 여러 건이 묶여 오면 전체 칸 수를 건수로 나눠요(칸이 늘어도 다음 건이 어긋나지 않게)
+    const size = count > 1 && fields.length % count === 0 ? fields.length / count : known;
     const now = Date.now();
     for (let i = 0; i < count; i++) {
       const f = fields.slice(i * size, (i + 1) * size);

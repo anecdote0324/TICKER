@@ -16,6 +16,7 @@
 - pnpm 모노레포예요: `apps/desktop`(Electron), `apps/web`(화면), `apps/server`(내장 서버), `packages/shared`(공통 형식), `packages/command`(커맨드 라인 해석기·완성기).
 - 커밋 전에 `pnpm typecheck`와 `pnpm test`를 통과시켜요.
 - 커맨드 라인 동작을 바꾸면 [05](docs/design/05-command-line.md)의 걸어 보기 예시를 테스트로 남겨요.
+- 한국투자증권 API를 고치거나 새로 붙일 때는 공식 저장소 [koreainvestment/open-trading-api](https://github.com/koreainvestment/open-trading-api)의 README와 기능별 예제(`examples_llm/`)를 기준으로 확인해요(사용자 결정). 요청 변수, 응답 칸 순서, 한도, 실시간 처리 방식을 예제와 맞춰요. 정리한 내용은 [04](docs/design/04-data-sources.md)의 "한국투자증권 공식 저장소에서 확인한 것"에 있어요.
 
 # 릴리스
 

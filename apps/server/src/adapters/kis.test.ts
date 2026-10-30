@@ -41,10 +41,10 @@ afterAll(() => {
   server.close();
 });
 
-function adapter(store: KisTokenStore) {
+function adapter(store: KisTokenStore, quotes: Array<{ id: string; last: number }> = []) {
   const logs: string[] = [];
   const host = {
-    emitQuote: () => undefined,
+    emitQuote: (q: { id: string; last: number }) => quotes.push(q),
     emitStatus: () => undefined,
     log: { debug: () => undefined, info: (m: string) => logs.push(m), warn: (m: string) => logs.push(m), error: (m: string) => logs.push(m) },
   } as unknown as AdapterHost;
@@ -119,7 +119,7 @@ describe('한국투자증권 연결 테스트', () => {
 });
 
 describe('한국투자증권 실시간 구독 거절', () => {
-  it('MAX SUBSCRIBE OVER로 거절된 종목은 조회로 받고, 받아들여진 종목은 실시간으로 받아요', () => {
+  it('MAX SUBSCRIBE OVER로 거절된 종목은 조회로 받고, 받아들여진 종목은 실시간으로 받아요', async () => {
     const { kis } = adapter(memoryStore());
     // 실시간 연결이 열린 상태를 흉내 내요
     const sent: string[] = [];
@@ -135,6 +135,9 @@ describe('한국투자증권 실시간 구독 거절', () => {
     k.approvalKey = 'a';
     const inst = (code: string) => ({ id: `EQ:KS:${code}`, assetClass: 'EQUITY', market: 'KS', code, exchange: 'KRX', currency: 'KRW' }) as never;
     kis.subscribe([inst('005930'), inst('000660')]);
+    // 구독 요청은 공식 예제처럼 0.05초 간격으로 나가요
+    expect(sent.filter((s) => s.includes('"tr_type":"1"'))).toHaveLength(1);
+    await new Promise((r) => setTimeout(r, 80));
     expect(sent.filter((s) => s.includes('"tr_type":"1"'))).toHaveLength(2);
     const reply = (key: string, ok: boolean, msg: string) => JSON.stringify({ header: { tr_id: 'H0STCNT0', tr_key: key, encrypt: 'N' }, body: { rt_cd: ok ? '0' : '1', msg_cd: ok ? 'OPSP0000' : 'OPSP0008', msg1: msg } });
     k.onWsMessage(reply('005930', true, 'SUBSCRIBE SUCCESS'));
@@ -146,5 +149,35 @@ describe('한국투자증권 실시간 구독 거절', () => {
     kis.stop();
     // 닫을 때 받아 둔 구독을 풀어요
     expect(sent.filter((s) => s.includes('"tr_type":"2"')).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('한국투자증권 실시간 메시지', () => {
+  it('PINGPONG에는 공식 예제처럼 pong 프레임으로 답해요', () => {
+    const { kis } = adapter(memoryStore());
+    const pongs: string[] = [];
+    const sent: string[] = [];
+    const k = kis as unknown as { ws: unknown; onWsMessage: (raw: string) => void };
+    k.ws = { readyState: 1, send: (x: string) => sent.push(x), pong: (b: Buffer) => pongs.push(b.toString()), close: () => undefined };
+    const ping = JSON.stringify({ header: { tr_id: 'PINGPONG', datetime: '20261030233000' } });
+    k.onWsMessage(ping);
+    expect(pongs).toEqual([ping]);
+    expect(sent).toEqual([]);
+  });
+
+  it('여러 건이 묶여 온 국내 체결을 건마다 나눠 읽어요(47칸)', () => {
+    const quotes: Array<{ id: string; last: number }> = [];
+    const { kis } = adapter(memoryStore(), quotes);
+    const k = kis as unknown as { onWsMessage: (raw: string) => void; byKey: Map<string, unknown> };
+    k.byKey.set('H0STCNT0|005930', { id: 'EQ:KS:005930', assetClass: 'EQUITY', market: 'KS', code: '005930' });
+    const rec = (price: string) => {
+      const f = Array(47).fill('0');
+      f[0] = '005930';
+      f[1] = '101500';
+      f[2] = price;
+      return f.join('^');
+    };
+    k.onWsMessage(`0|H0STCNT0|002|${rec('71000')}^${rec('71100')}`);
+    expect(quotes.map((q) => q.last)).toEqual([71000, 71100]);
   });
 });
