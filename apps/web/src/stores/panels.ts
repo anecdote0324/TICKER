@@ -30,10 +30,12 @@ export interface PanelState {
   fwd: NavEntry[];
   /** MON이 보여 줄 관심종목 묶음 */
   watchGroups?: string[];
-  /** GP에서 고른 봉 단위와 보이는 기간, GIP에서 고른 보이는 기간(패널마다 기억) */
+  /** GP에서 고른 봉 단위와 보이는 기간, GIP에서 고른 보이는 기간과 봉 크기(패널마다 기억) */
   gpInterval?: '1d' | '1w' | '1M';
   gpRange?: string;
   gipRange?: string;
+  /** GIP 봉 크기(분: 1·5·15·60) */
+  gipMinutes?: number;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;
 }
