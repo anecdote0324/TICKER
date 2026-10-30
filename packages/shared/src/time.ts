@@ -165,6 +165,22 @@ export function sessionState(ex: ExchangeHours, now: number): SessionState {
   return 'closed';
 }
 
+/**
+ * 가장 최근 정규장이 끝난 시각(주말은 건너뛰어요. 휴장일은 모르고, 서머타임이 바뀌는 날은 1시간 어긋날 수 있어요).
+ * 장이 끝난 뒤 받은 값의 기준 시각으로 써서 `마감 15:30`처럼 보여 줘요
+ */
+export function lastRegularClose(ex: ExchangeHours, now: number): number {
+  const closeMin = ex.regular[ex.regular.length - 1][1];
+  for (let back = 0; back < 8; back++) {
+    const t = now - back * 86400_000;
+    const p = zonedParts(t, ex.timeZone);
+    if (p.weekday === 0 || p.weekday === 6) continue;
+    const closeAt = t - ((p.hour * 60 + p.minute - closeMin) * 60 + p.second) * 1000 - (t % 1000);
+    if (closeAt <= now) return closeAt;
+  }
+  return now;
+}
+
 export const SESSION_LABEL: Record<SessionState, string> = {
   open: '장중',
   pre: '개장전',

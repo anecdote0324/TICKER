@@ -19,6 +19,8 @@ export class RequestBudget {
   private seq = 0;
   private timer: NodeJS.Timeout | null = null;
   private running = 0;
+  /** 이때까지는 새 호출을 내보내지 않아요(초당 거래건수 초과를 받았을 때) */
+  private pausedUntil = 0;
 
   constructor(
     /** 초당 최대 호출 수. 한도보다 조금 낮게 잡아요 */
@@ -33,11 +35,16 @@ export class RequestBudget {
     });
   }
 
-  /** 지난 1초 동안 쓴 호출 수와 기다리는 수 */
+  /** 지난 1초 동안 쓴 호출 수, 기다리는 수, 나가 있는 수 */
   usage() {
     const now = Date.now();
     this.stamps = this.stamps.filter((t) => now - t < 1000);
-    return { lastSecond: this.stamps.length, queued: this.queue.length, perSecond: this.perSecond };
+    return { lastSecond: this.stamps.length, queued: this.queue.length, running: this.running, perSecond: this.perSecond };
+  }
+
+  /** 한도를 넘었다는 답을 받으면 모든 호출을 잠깐 멈춰요 */
+  pause(ms: number) {
+    this.pausedUntil = Math.max(this.pausedUntil, Date.now() + ms);
   }
 
   /** 주기 조회에 쓸 수 있는 여유(초당 호출 수) */
@@ -48,6 +55,15 @@ export class RequestBudget {
   private pump() {
     if (this.timer) return;
     const now = Date.now();
+    if (now < this.pausedUntil) {
+      if (this.queue.length > 0) {
+        this.timer = setTimeout(() => {
+          this.timer = null;
+          this.pump();
+        }, this.pausedUntil - now);
+      }
+      return;
+    }
     this.stamps = this.stamps.filter((t) => now - t < 1000);
     while (this.queue.length > 0 && this.stamps.length < this.perSecond && this.running < this.maxConcurrent) {
       this.queue.sort((a, b) => a.pri - b.pri || a.seq - b.seq);

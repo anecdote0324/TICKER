@@ -157,6 +157,9 @@ export class Hub implements AdapterHost {
   /** 한국투자증권 키를 넣거나 지우면 주식·지수 구독을 새 소스로 옮겨요 */
   async setKis(kis: KisAdapter | undefined) {
     const old = this.kis;
+    if (old === kis) return;
+    // 이전 연결을 먼저 닫아요. 한국투자증권은 키마다 실시간 등록 수를 세서, 두 연결이 겹치면 새 연결의 구독이 거절돼요(MAX SUBSCRIBE OVER)
+    old?.stop();
     this.kis = kis;
     if (kis) await kis.start().catch((e) => this.log.warn(`KIS 시작 실패: ${(e as Error).message}`));
     const moving: Instrument[] = [];
@@ -170,7 +173,6 @@ export class Hub implements AdapterHost {
         moving.push(inst);
       }
     }
-    old?.stop();
     this.barCache.clear();
     this.routeSubscribe(moving);
     this.emitStatus();

@@ -191,9 +191,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const cred: KisCredentials = { appKey: appKey.trim(), appSecret: appSecret.trim(), env: env === 'virtual' ? 'virtual' : 'real' };
     const t0 = Date.now();
     log.info(`한국투자증권 키 저장·연결 테스트 시작(${envName(cred)}, 앱키 …${cred.appKey.slice(-4)}, 앱키 ${cred.appKey.length}자·앱시크릿 ${cred.appSecret.length}자)`);
-    const kis = deps.makeKis(cred);
+    // 같은 키를 다시 저장하면 지금 연결로 테스트만 해요(새 연결을 겹쳐 만들지 않아요)
+    const current = hub.kis?.sameCredentials(cred) ? hub.kis : undefined;
+    const kis = current ?? deps.makeKis(cred);
     const test = await kis.test();
-    log.info(`한국투자증권 연결 테스트 ${test.ok ? '성공' : '실패'}(${Date.now() - t0}ms): ${test.message}`);
+    log.info(`한국투자증권 연결 테스트 ${test.ok ? '성공' : '실패'}(${Date.now() - t0}ms${current ? ', 지금 연결' : ''}): ${test.message}`);
     try {
       await saveSecret('kis', JSON.stringify({ ...cred, lastTest: { ...test, at: Date.now() } }));
     } catch (e) {
@@ -201,7 +203,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return reply.code(500).send({ error: `키를 저장하지 못했어요: ${(e as Error).message}` });
     }
     if (test.ok) await switchToKis(kis);
-    else kis.stop();
+    else if (!current) kis.stop();
     return { test, status: await credentialStatus().catch(() => ({ kis: { configured: true, env: cred.env }, secretKind: store.secretKind })) };
   });
 

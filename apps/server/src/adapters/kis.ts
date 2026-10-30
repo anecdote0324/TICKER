@@ -4,7 +4,10 @@
 
 import { createHash } from 'node:crypto';
 import {
+  EXCHANGES,
   INDICES,
+  lastRegularClose,
+  sessionState,
   usesRealtimeSlot,
   type Bar,
   type BarInterval,
@@ -37,7 +40,8 @@ export interface KisTokenStore {
 }
 
 const ENDPOINTS = {
-  real: { rest: 'https://openapi.koreainvestment.com:9443', ws: 'ws://ops.koreainvestment.com:21000', perSecond: 18 },
+  // 실전 한도는 초당 20건으로 안내돼요. 보내는 시각과 받는 시각이 어긋나도 넘지 않게 여유를 둬요(실제로 18건에서 초과를 받았어요)
+  real: { rest: 'https://openapi.koreainvestment.com:9443', ws: 'ws://ops.koreainvestment.com:21000', perSecond: 15 },
   virtual: { rest: 'https://openapivts.koreainvestment.com:29443', ws: 'ws://ops.koreainvestment.com:31000', perSecond: 2 },
 };
 
@@ -93,6 +97,14 @@ export class KisAdapter implements Adapter {
   private recentErrors: string[] = [];
   private wsOpenedAt = 0;
   private lastWsMessageAt = 0;
+  /** 구독을 보냈지만 아직 답이 없는 키(보낸 순서) */
+  private wsPending: string[] = [];
+  /** 한국투자증권이 받아 준 실시간 구독 */
+  private wsAccepted = new Set<string>();
+  /** 거절된 구독(MAX SUBSCRIBE OVER 등). 다시 시도할 때까지 몇 초 간격 조회로 받아요 */
+  private wsRejected = new Set<string>();
+  private retryTimer: NodeJS.Timeout | null = null;
+  private retryDelay = 60_000;
 
   constructor(
     private host: AdapterHost,
@@ -101,6 +113,11 @@ export class KisAdapter implements Adapter {
     private endpoints?: KisEndpoints,
   ) {
     this.budget = new RequestBudget(ENDPOINTS[cred.env].perSecond);
+  }
+
+  /** 같은 키(앱키·앱시크릿·서버)인지. 같은 키를 다시 저장하면 실시간 연결을 새로 만들지 않아요 */
+  sameCredentials(c: KisCredentials) {
+    return c.appKey === this.cred.appKey && c.appSecret === this.cred.appSecret && c.env === this.cred.env;
   }
 
   /** 이 키로 받은 토큰인지 알아보는 값(앱키·서버의 해시 앞부분). 키 자체는 남기지 않아요 */
@@ -136,6 +153,13 @@ export class KisAdapter implements Adapter {
     this.stopped = true;
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    // 한국투자증권은 키마다 실시간 등록 수를 세요. 닫기 전에 등록을 풀어서 다음 연결이 한도에 걸리지 않게 해요
+    for (const k of this.wsSubs) {
+      const [tr, key] = k.split('|');
+      this.sendWs(tr, key, false);
+    }
+    this.wsSubs.clear();
     this.ws?.close();
     this.ws = null;
   }
@@ -245,6 +269,9 @@ export class KisAdapter implements Adapter {
       wsOpenSec: this.wsOpenedAt ? Math.round((Date.now() - this.wsOpenedAt) / 1000) : null,
       lastWsMessageSecAgo: this.lastWsMessageAt ? Math.round((Date.now() - this.lastWsMessageAt) / 1000) : null,
       wsSubscribed: this.wsSubs.size,
+      wsAccepted: this.wsAccepted.size,
+      wsRejected: this.wsRejected.size,
+      wsPending: this.wsPending.length,
       subscribed: this.subscribed.size,
       budget: this.budget.usage(),
       recentErrors: this.recentErrors.slice(-10),
@@ -286,8 +313,25 @@ export class KisAdapter implements Adapter {
 
   // ── REST ──
 
-  private async get(path: string, trId: string, params: Record<string, string>, pri: Priority, retry = 1): Promise<KisResponse> {
+  private async get(path: string, trId: string, params: Record<string, string>, pri: Priority): Promise<KisResponse> {
     return this.budget.schedule(pri, async () => {
+      for (let attempt = 0; ; attempt++) {
+        const r = await this.fetchOnce(path, trId, params).catch((e: Error) => e);
+        if (!(r instanceof Error)) return r;
+        // 초당 거래건수 초과(EGW00201): 모든 조회를 잠깐 멈추고 이 자리에서 다시 해요.
+        // 대기줄에 다시 서면 자리를 잡은 채 자기 차례를 기다려서, 자리가 다 차면 대기줄 전체가 멈춰요
+        if (attempt < 2 && r.message.includes('EGW00201')) {
+          this.budget.pause(1000);
+          await sleep(1100 + attempt * 400);
+          continue;
+        }
+        throw r;
+      }
+    });
+  }
+
+  private async fetchOnce(path: string, trId: string, params: Record<string, string>): Promise<KisResponse> {
+    {
       const token = await this.getToken();
       const qs = new URLSearchParams(params).toString();
       try {
@@ -302,20 +346,14 @@ export class KisAdapter implements Adapter {
           },
           timeoutMs: 10_000,
         });
-        if (r.rt_cd !== '0') throw new Error(`${r.msg_cd} ${r.msg1}`.trim());
+        if (r.rt_cd !== '0') throw new Error(`${trId} ${r.msg_cd} ${r.msg1}`.trim());
         return r;
       } catch (e) {
-        // 초당 거래건수 초과(EGW00201)면 잠깐 쉬고 한 번 더
-        const msg = (e as Error).message + (e instanceof HttpError ? (e.body ?? '') : '');
-        if (retry > 0 && msg.includes('EGW00201')) {
-          await sleep(1100);
-          return this.get(path, trId, params, pri, retry - 1);
-        }
         // 한국투자증권의 오류 내용(msg_cd·msg1)이 응답 본문에 있어서 함께 알려 줘요
         if (e instanceof HttpError) throw new Error(`${trId} ${e.message}${e.body ? ` · ${e.body.slice(0, 200)}` : ''}`);
         throw e;
       }
-    });
+    }
   }
 
   // ── 실시간 ──
@@ -352,6 +390,8 @@ export class KisAdapter implements Adapter {
       this.backoff = 2000;
       this.wsOpenedAt = Date.now();
       this.wsSubs.clear();
+      this.wsPending = [];
+      this.wsAccepted.clear();
       this.host.log.info('KIS 실시간 연결');
       this.setState('connected');
       this.syncWs();
@@ -398,17 +438,20 @@ export class KisAdapter implements Adapter {
   /** 슬롯 배분 결과에 맞춰 구독을 더하고 빼요 */
   private syncWs() {
     const plan = this.slots.plan();
-    const want = new Set(plan.ws);
+    // 거절된 키는 다시 시도할 때까지 구독하지 않고 조회로 받아요
+    const want = new Set(plan.ws.filter((k) => !this.wsRejected.has(k)));
     for (const k of [...this.wsSubs]) {
       if (!want.has(k)) {
         const [tr, key] = k.split('|');
         this.sendWs(tr, key, false);
         this.wsSubs.delete(k);
+        this.wsAccepted.delete(k);
       }
     }
     for (const k of want) {
       if (!this.wsSubs.has(k)) {
         const [tr, key] = k.split('|');
+        if (this.ws?.readyState === WebSocket.OPEN) this.wsPending.push(k);
         this.sendWs(tr, key, true);
         this.wsSubs.add(k);
       }
@@ -416,14 +459,57 @@ export class KisAdapter implements Adapter {
     this.host.emitStatus();
   }
 
+  /** 구독 요청에 대한 답(성공·거절). 답에 종목이 없으면 보낸 순서로 맞춰요 */
+  private onSubscribeReply(trId: string, trKey: string | undefined, ok: boolean, msg: string) {
+    let k = trKey ? `${trId}|${trKey}` : undefined;
+    const i = this.wsPending.findIndex((p) => (k ? p === k : p.startsWith(`${trId}|`)));
+    if (i >= 0) {
+      k ??= this.wsPending[i];
+      this.wsPending.splice(i, 1);
+    }
+    if (!k || !this.wsSubs.has(k)) return;
+    if (/UNSUBSCRIBE/i.test(msg)) return;
+    if (ok) {
+      this.wsAccepted.add(k);
+      if (this.wsRejected.size === 0) this.retryDelay = 60_000;
+      return;
+    }
+    // 거절: 이 종목은 몇 초 간격 조회로 받고, 잠시 뒤 다시 구독해 봐요(한국투자증권 쪽에 이전 연결의 등록이 남아 있을 수 있어요)
+    this.wsSubs.delete(k);
+    this.wsAccepted.delete(k);
+    this.wsRejected.add(k);
+    this.noteError(`실시간 구독 거절(${trId}): ${msg} · 몇 초 간격 조회로 받고 ${Math.round(this.retryDelay / 1000)}초 뒤 다시 시도해요`);
+    this.host.emitStatus();
+    if (!this.retryTimer) {
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = null;
+        this.wsRejected.clear();
+        this.syncWs();
+      }, this.retryDelay);
+      this.retryDelay = Math.min(this.retryDelay * 2, 10 * 60_000);
+    }
+  }
+
+  /** 이 종목을 지금 실시간으로 받고 있는지(구독이 받아들여졌거나 답을 기다리는 중) */
+  private isLive(inst: Instrument): boolean {
+    const k = this.wsKey(inst);
+    if (!k || this.state !== 'connected') return false;
+    const key = `${k[0]}|${k[1]}`;
+    return this.wsSubs.has(key) && !this.wsRejected.has(key);
+  }
+
   private onWsMessage(raw: string) {
     if (raw.startsWith('{')) {
       try {
-        const j = JSON.parse(raw) as { header?: { tr_id?: string }; body?: { msg1?: string; rt_cd?: string } };
+        const j = JSON.parse(raw) as { header?: { tr_id?: string; tr_key?: string }; body?: { msg1?: string; rt_cd?: string } };
+        const trId = j.header?.tr_id;
         // 연결 확인 신호는 그대로 돌려보내요
-        if (j.header?.tr_id === 'PINGPONG') {
+        if (trId === 'PINGPONG') {
           if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(raw);
-        } else if (j.body?.rt_cd && j.body.rt_cd !== '0') this.noteError(`실시간 구독 거절(${j.header?.tr_id ?? ''}): ${j.body.msg1}`);
+        } else if (trId && j.body?.rt_cd !== undefined) {
+          if (trId === 'H0STCNT0' || trId === 'HDFSCNT0') this.onSubscribeReply(trId, j.header?.tr_key || undefined, j.body.rt_cd === '0', j.body.msg1 ?? '');
+          else if (j.body.rt_cd !== '0') this.noteError(`실시간(${trId}): ${j.body.msg1}`);
+        }
       } catch {
         // 무시
       }
@@ -533,12 +619,8 @@ export class KisAdapter implements Adapter {
   }
 
   private pollTargets(): Instrument[] {
-    const plan = new Set(this.slots.plan().ws);
-    const wsConnected = this.state === 'connected';
-    return [...this.subscribed.values()].filter((inst) => {
-      const k = this.wsKey(inst);
-      return !k || !wsConnected || !plan.has(`${k[0]}|${k[1]}`);
-    });
+    // 실시간으로 받지 못하는 종목(지수, 슬롯 밖, 거절됨, 실시간 연결 끊김)을 조회해요
+    return [...this.subscribed.values()].filter((inst) => !this.isLive(inst));
   }
 
   private pollTick() {
@@ -570,6 +652,15 @@ export class KisAdapter implements Adapter {
   private async fetchQuote(inst: Instrument, pri: Priority, intervalMs: number): Promise<Quote | undefined> {
     const now = () => Date.now();
     const fresh = (): Freshness => ({ source: 'KIS', mode: 'poll', asOf: now(), receivedAt: now(), intervalMs, asOfFromReceipt: true });
+    // 실시간으로 받는 종목의 처음 값(조회)은 실시간 값으로 다뤄요. 체결이 없으면(장 마감, 거래 드문 종목) 이 값이 최신이에요.
+    // 주기 조회로 다루면 다시 조회하지 않아서 1분 뒤 `⚠ 멈춤`이 붙었어요. 장이 끝났으면 기준 시각을 마감 시각으로 둬요
+    const snapshot = (): Freshness => {
+      if (!this.isLive(inst)) return fresh();
+      const ex = EXCHANGES[inst.market === 'US' ? 'US' : 'KRX'];
+      const t = now();
+      const open = sessionState(ex, t) === 'open' || (inst.market === 'US' && sessionState(ex, t) !== 'closed');
+      return { source: 'KIS', mode: 'realtime', asOf: open ? t : lastRegularClose(ex, t), receivedAt: t };
+    };
     if (inst.assetClass === 'EQUITY' && inst.market !== 'US') {
       const r = await this.get('/uapi/domestic-stock/v1/quotations/inquire-price', 'FHKST01010100', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: inst.code }, pri);
       const o = r.output as KisRow;
@@ -586,7 +677,7 @@ export class KisAdapter implements Adapter {
         low: Number(o.stck_lwpr),
         volume: Number(o.acml_vol),
         turnover: Number(o.acml_tr_pbmn),
-        fresh: fresh(),
+        fresh: snapshot(),
       };
     }
     if (inst.assetClass === 'EQUITY' && inst.market === 'US') {
@@ -602,7 +693,7 @@ export class KisAdapter implements Adapter {
         changePct: prev ? ((last - prev) / prev) * 100 : 0,
         volume: Number(o.tvol),
         turnover: Number(o.tamt),
-        fresh: fresh(),
+        fresh: snapshot(),
       };
     }
     if (inst.assetClass === 'INDEX') {
@@ -775,13 +866,14 @@ export class KisAdapter implements Adapter {
   }
 
   status(): SourceStatus {
+    const rejected = this.wsRejected.size;
     return {
       source: 'KIS',
       state: this.state,
-      message: this.message,
-      wsUsed: this.slots.used,
+      message: this.message || (rejected ? `실시간 구독 ${rejected}개가 거절돼 몇 초 간격 조회로 받고 있어요` : ''),
+      wsUsed: Math.max(0, this.wsSubs.size),
       wsLimit: WS_LIMIT,
-      wsOverflow: this.slots.overflow,
+      wsOverflow: this.slots.overflow + rejected,
       updatedAt: Date.now(),
     };
   }

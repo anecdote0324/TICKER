@@ -5,8 +5,10 @@ import type { AdapterHost } from './types';
 import { KisAdapter, type KisTokenStore } from './kis';
 
 // 가짜 한국투자증권 서버: 경로마다 정한 대로 답해요(hang이면 끝까지 답하지 않아요)
-type Mode = 'ok' | 'hang' | 'reject';
+type Mode = 'ok' | 'hang' | 'reject' | 'rate';
 const mode: Record<'token' | 'price', Mode> = { token: 'ok', price: 'ok' };
+/** 'rate'일 때 앞의 몇 번을 초당 거래건수 초과(EGW00201)로 답할지 */
+let rateLeft = 0;
 let server: Server;
 let rest = '';
 
@@ -15,13 +17,19 @@ beforeAll(async () => {
     const kind = req.url?.startsWith('/oauth2/tokenP') ? 'token' : 'price';
     const m = mode[kind];
     if (m === 'hang') return;
+    if (m === 'rate' && rateLeft > 0) {
+      rateLeft--;
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ rt_cd: '1', msg_cd: 'EGW00201', msg1: '초당 거래건수를 초과하였습니다.' }));
+      return;
+    }
     if (m === 'reject') {
       res.writeHead(403, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error_code: 'EGW00103', error_description: '유효하지 않은 AppKey입니다.' }));
       return;
     }
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(kind === 'token' ? { access_token: 't', expires_in: 86400 } : { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output: { stck_prpr: '71200' } }));
+    res.end(JSON.stringify(kind === 'token' ? { access_token: 't', expires_in: 86400 } : { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output: { stck_prpr: '71200', prdt_abrv_name: '삼성전자', mket_id_cd: 'STK' } }));
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   rest = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -90,11 +98,53 @@ describe('한국투자증권 연결 테스트', () => {
     expect(again.logs.join('\n')).toContain('저장해 둔 토큰을 써요');
   });
 
+  it('초당 한도 초과가 몰려도 조회 대기줄이 멈추지 않아요(동시 8자리가 모두 재시도를 기다리던 문제)', async () => {
+    mode.token = 'ok';
+    mode.price = 'rate';
+    rateLeft = 12;
+    const { kis } = adapter(memoryStore());
+    const all = Promise.all(Array.from({ length: 20 }, () => kis.lookup('005930', 'KR')));
+    const done = await Promise.race([all.then(() => 'done'), new Promise((r) => setTimeout(() => r('stuck'), 8000))]);
+    expect(done).toBe('done');
+    mode.price = 'ok';
+  }, 15_000);
+
   it('키가 틀리면 한국투자증권의 오류 내용을 함께 보여 줘요', async () => {
     mode.token = 'reject';
     const r = await adapter(memoryStore()).kis.test();
     expect(r.ok).toBe(false);
     expect(r.message).toContain('토큰 받기');
     expect(r.message).toContain('EGW00103');
+  });
+});
+
+describe('한국투자증권 실시간 구독 거절', () => {
+  it('MAX SUBSCRIBE OVER로 거절된 종목은 조회로 받고, 받아들여진 종목은 실시간으로 받아요', () => {
+    const { kis } = adapter(memoryStore());
+    // 실시간 연결이 열린 상태를 흉내 내요
+    const sent: string[] = [];
+    const k = kis as unknown as {
+      ws: { readyState: number; send: (s: string) => void; close: () => void };
+      state: string;
+      onWsMessage: (raw: string) => void;
+      pollTargets: () => Array<{ code: string }>;
+      approvalKey: string;
+    };
+    k.ws = { readyState: WebSocket.OPEN, send: (s) => sent.push(s), close: () => undefined };
+    k.state = 'connected';
+    k.approvalKey = 'a';
+    const inst = (code: string) => ({ id: `EQ:KS:${code}`, assetClass: 'EQUITY', market: 'KS', code, exchange: 'KRX', currency: 'KRW' }) as never;
+    kis.subscribe([inst('005930'), inst('000660')]);
+    expect(sent.filter((s) => s.includes('"tr_type":"1"'))).toHaveLength(2);
+    const reply = (key: string, ok: boolean, msg: string) => JSON.stringify({ header: { tr_id: 'H0STCNT0', tr_key: key, encrypt: 'N' }, body: { rt_cd: ok ? '0' : '1', msg_cd: ok ? 'OPSP0000' : 'OPSP0008', msg1: msg } });
+    k.onWsMessage(reply('005930', true, 'SUBSCRIBE SUCCESS'));
+    k.onWsMessage(reply('000660', false, 'MAX SUBSCRIBE OVER'));
+    expect(k.pollTargets().map((i) => i.code)).toEqual(['000660']);
+    const d = kis.diagnostics();
+    expect([d.wsAccepted, d.wsRejected]).toEqual([1, 1]);
+    expect(kis.status().message).toContain('거절');
+    kis.stop();
+    // 닫을 때 받아 둔 구독을 풀어요
+    expect(sent.filter((s) => s.includes('"tr_type":"2"')).length).toBeGreaterThanOrEqual(1);
   });
 });
