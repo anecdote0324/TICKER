@@ -246,21 +246,31 @@ describe('장이 닫힌 종목', () => {
     kis.stop();
   });
 
-  it('국내 분봉은 장이 닫힌 때 15:30부터 받고, 정규장 밖의 봉은 버려요', async () => {
+  it('국내 GIP 분봉은 장이 닫힌 때 주식일별분봉조회로 가장 최근 하루를 15:30부터 받고, 정규장 밖의 봉은 버려요', async () => {
     mode.token = 'ok';
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.UTC(2026, 9, 30, 15, 34)); // 한국 토요일 00:34
-    const row = (hour: string, c: string) => ({ stck_bsop_date: '20261030', stck_cntg_hour: hour, stck_oprc: c, stck_hgpr: c, stck_lwpr: c, stck_prpr: c, cntg_vol: '1' });
-    custom.set('/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice', (q) => ({
+    const row = (date: string, hour: string, c: string) => ({ stck_bsop_date: date, stck_cntg_hour: hour, stck_oprc: c, stck_hgpr: c, stck_lwpr: c, stck_prpr: c, cntg_vol: '1' });
+    custom.set('/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice', (q) => ({
       rt_cd: '0',
       msg_cd: 'MCA00000',
       msg1: '정상',
-      output2: q.get('FID_INPUT_HOUR_1') === '153000' ? [row('192500', '1'), row('153000', '278500'), row('152900', '278000'), row('090000', '277000')] : [],
+      output2:
+        q.get('FID_INPUT_DATE_1') === '20261030' && q.get('FID_INPUT_HOUR_1') === '153000'
+          ? [row('20261030', '192500', '1'), row('20261030', '153000', '278500'), row('20261030', '152900', '278000'), row('20261030', '090000', '277000'), row('20261029', '153000', '1')]
+          : [],
     }));
     const { kis } = adapter(memoryStore());
     const s = await kis.bars(kr('005380'), '1m');
-    expect(requests.find((r) => r.path.endsWith('inquire-time-itemchartprice'))?.q.get('FID_INPUT_HOUR_1')).toBe('153000');
+    const reqs = requests.filter((r) => r.path.endsWith('inquire-time-dailychartprice'));
+    expect([reqs[0].q.get('FID_INPUT_DATE_1'), reqs[0].q.get('FID_INPUT_HOUR_1')]).toEqual(['20261030', '153000']);
+    // 하루치(10/30)만, 정규장 봉만. 09:00에 닿으면 앞 날로 넘어가지 않아요
     expect(s.bars.map((b) => b.c)).toEqual([277000, 278000, 278500]);
+    expect(reqs).toHaveLength(1);
+    expect(requests.some((r) => r.path.endsWith('inquire-time-itemchartprice'))).toBe(false);
+    // 진단 정보에 거르기 전 응답 견본이 남아요(15:30 뒤 봉 포함)
+    const sample = (kis.diagnostics().barSamples as Record<string, { newest: string[][] }>).FHKST03010230;
+    expect(sample.newest[0]).toEqual(['20261030', '192500', '1', '1', '1', '1', '1']);
   });
 
   it('해외 지수의 현재가 칸이 비면 가장 최근 일봉으로 보여 주고, 값이 없으면 0을 보내지 않아요', async () => {
@@ -340,7 +350,7 @@ describe('시간봉(GP)', () => {
     expect(older).toHaveLength(70);
     expect(older[older.length - 1].t).toBe(kst(23, 15));
     expect(older[0].t).toBe(kst(12, 9));
-  });
+  }, 15_000);
 
   it('미국 1시간봉은 60분봉으로 받고, 다음 조회 KEYB는 가장 오래된 봉의 60분 전(현지 시각)이에요', async () => {
     mode.token = 'ok';

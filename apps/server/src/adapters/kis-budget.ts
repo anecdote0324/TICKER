@@ -20,6 +20,8 @@ export class RequestBudget {
   private seq = 0;
   private timer: NodeJS.Timeout | null = null;
   private running = 0;
+  /** 나가 있는 백그라운드 작업 수(우선순위 2) */
+  private runningBg = 0;
   /** 이때까지는 새 호출을 내보내지 않아요(초당 거래건수 초과를 받았을 때) */
   private pausedUntil = 0;
   /** 지금 쓰는 초당 호출 수. 초과를 받으면 줄였다가 조용하면 하나씩 올려요 */
@@ -58,17 +60,37 @@ export class RequestBudget {
   }
 
   /**
-   * 초당 거래건수 초과(EGW00201)를 받았어요: 잠깐 멈추고 초당 호출 수를 0.7배로 줄여요.
+   * 초당 거래건수 초과(EGW00201)를 받았어요: 1초 멈추고 초당 호출 수를 0.7배로 줄여요.
    * 한도는 한국투자증권이 받은 시각으로 세서, 보내는 쪽에서 맞춰도 몰려 도착하면 넘을 수 있어요.
    * 같은 순간에 여러 건이 함께 실패하므로 2초 안의 초과는 한 번으로 쳐요
    */
   throttled(now = Date.now()) {
-    this.pause(1000);
     this.throttles++;
+    // 멈춤과 줄이기는 2초에 한 번만. 초과가 연달아 올 때마다 1초씩 멈추면 다시 보내는 요청이 1초에 한 건씩만 나갔어요
     if (now - this.lastCut < 2000) return;
+    this.pause(1000);
     this.lastCut = now;
     this.lastRaise = now;
     this.perSecond = Math.max(this.minPerSecond, Math.floor(this.perSecond * 0.7));
+  }
+
+  /**
+   * 이미 자리를 잡은 작업이 같은 요청을 다시 보낼 때(초과를 받은 뒤): 초당 호출 수만 지켜서 차례를 기다려요(자리는 그대로).
+   * 다시 보내는 요청도 한도에 세야 해요. 세지 않으면 여러 작업이 같은 순간에 다시 보내서 또 초과를 받아요(v0.1.0-beta.11까지)
+   */
+  async waitTurn(): Promise<void> {
+    for (;;) {
+      const now = Date.now();
+      this.recover(now);
+      this.stamps = this.stamps.filter((t) => now - t < 1000);
+      if (now >= this.pausedUntil && this.stamps.length < this.perSecond) {
+        this.stamps.push(now);
+        return;
+      }
+      const wait = now < this.pausedUntil ? this.pausedUntil - now : Math.max(5, 1000 - (now - this.stamps[0]));
+      // 여러 작업이 같은 순간에 깨어나지 않게 조금씩 흩어요
+      await new Promise((r) => setTimeout(r, wait + Math.random() * 150));
+    }
   }
 
   /** 30초 동안 초과가 없으면 초당 호출 수를 하나씩 되돌려요 */
@@ -85,7 +107,11 @@ export class RequestBudget {
   }
 
   private pump() {
-    if (this.timer) return;
+    // 새 요청이 오거나 작업이 끝나면 기다리던 타이머를 지우고 바로 다시 봐요(화면 요청이 백그라운드 대기에 묶이지 않게)
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
     const now = Date.now();
     this.recover(now);
     if (now < this.pausedUntil) {
@@ -98,21 +124,31 @@ export class RequestBudget {
       return;
     }
     this.stamps = this.stamps.filter((t) => now - t < 1000);
+    // 백그라운드 수집(지난 시간봉 채우기 등)은 초당 호출 수의 절반, 동시 2개까지만 써요. 화면 요청·주기 조회 몫을 남겨요
+    const bgRate = Math.max(1, Math.floor(this.perSecond / 2));
     while (this.queue.length > 0 && this.stamps.length < this.perSecond && this.running < this.maxConcurrent) {
       this.queue.sort((a, b) => a.pri - b.pri || a.seq - b.seq);
-      const job = this.queue.shift()!;
+      const i = this.queue.findIndex((j) => j.pri < 2 || (this.stamps.length < bgRate && this.runningBg < 2));
+      if (i < 0) break;
+      const job = this.queue.splice(i, 1)[0];
+      const bg = job.pri === 2;
       this.stamps.push(Date.now());
       this.running++;
+      if (bg) this.runningBg++;
       job
         .run()
         .then(job.resolve, job.reject)
         .finally(() => {
           this.running--;
+          if (bg) this.runningBg--;
           this.pump();
         });
     }
     if (this.queue.length > 0 && !this.timer) {
-      const wait = this.stamps.length >= this.perSecond ? Math.max(5, 1000 - (Date.now() - this.stamps[0])) : 20;
+      // 초당 호출 수에 막혔으면 가장 오래된 호출이 1초를 넘길 때까지, 동시 실행 수에 막혔으면 잠깐 뒤에 다시 봐요
+      const fgWaiting = this.queue.some((j) => j.pri < 2);
+      const rateBound = this.stamps.length >= this.perSecond || (!fgWaiting && this.stamps.length >= bgRate);
+      const wait = rateBound && this.stamps.length > 0 ? Math.max(5, 1000 - (Date.now() - this.stamps[0])) : 20;
       this.timer = setTimeout(() => {
         this.timer = null;
         this.pump();

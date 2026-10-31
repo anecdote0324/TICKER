@@ -38,8 +38,11 @@ export class EcbAdapter implements Adapter {
   private subscribed = new Map<string, Instrument>();
   private live: LiveFxSource | undefined;
   private liveTimer: NodeJS.Timeout | null = null;
-  /** 한국투자증권에서 받은 1달러당 값 */
-  private liveRates: { cur: Record<string, number>; prev: Record<string, number>; at: number } | null = null;
+  /**
+   * 한국투자증권에서 받은 통화별 1달러당 값과 받은 시각. 통화마다 따로 둬서, 한 통화가 한 번 실패해도(초당 한도 초과 등)
+   * 그 통화만 앞 값을 1분까지 계속 써요. 통째로 바꾸면 그 통화가 든 칸만 ECB 값으로 바뀌었다 돌아오길 되풀이했어요
+   */
+  private liveRates = new Map<string, { cur: number; prev?: number; at: number }>();
   private liveWarnedAt = 0;
 
   constructor(private host: AdapterHost) {}
@@ -66,7 +69,7 @@ export class EcbAdapter implements Adapter {
   /** 한국투자증권 키를 넣거나 지우면 환율 소스를 바꿔요 */
   setLive(src: LiveFxSource | undefined) {
     this.live = src;
-    this.liveRates = null;
+    this.liveRates.clear();
     if (this.liveTimer) clearInterval(this.liveTimer);
     this.liveTimer = null;
     if (src) {
@@ -88,8 +91,9 @@ export class EcbAdapter implements Adapter {
     try {
       const r = await src.fxPerUsd([...need]);
       if (this.live !== src) return;
+      const at = Date.now();
+      for (const [c, v] of Object.entries(r.cur)) this.liveRates.set(c, { cur: v, prev: r.prev[c], at });
       if (Object.keys(r.cur).length === 0) throw new Error('한국투자증권 환율 응답에 값이 없어요');
-      this.liveRates = { cur: { ...r.cur, USD: 1 }, prev: { ...r.prev, USD: 1 }, at: Date.now() };
     } catch (e) {
       // 1분 동안 못 받으면 ECB 기준환율로 돌아가요(quote에서). 기록은 1분에 한 번만
       if (Date.now() - this.liveWarnedAt > 60_000) {
@@ -134,20 +138,30 @@ export class EcbAdapter implements Adapter {
     return q / b;
   }
 
-  /** 한국투자증권 환율이 1분 안에 받은 것이면 그 값 */
+  /** 한 통화의 한국투자증권 1달러당 값(1분 안에 받은 것만). 달러는 늘 1 */
+  private liveRate(c: string): { cur: number; prev?: number; at: number } | undefined {
+    if (c === 'USD') return { cur: 1, prev: 1, at: Infinity };
+    const r = this.liveRates.get(c);
+    return r && Date.now() - r.at <= LIVE_STALE_MS ? r : undefined;
+  }
+
+  /** 두 통화 모두 한국투자증권 값이 1분 안에 받은 것이면 그 값으로 계산해요 */
   private liveQuote(inst: Instrument, base: string, quote: string): Quote | undefined {
-    const r = this.liveRates;
-    if (!this.live || !r || Date.now() - r.at > LIVE_STALE_MS) return undefined;
-    const last = this.rate(r.cur, base, quote);
-    if (last === undefined) return undefined;
-    const prevClose = this.rate(r.prev, base, quote);
+    if (!this.live) return undefined;
+    const b = this.liveRate(base);
+    const q = this.liveRate(quote);
+    if (!b || !q) return undefined;
+    const last = q.cur / b.cur;
+    const prevClose = b.prev && q.prev ? q.prev / b.prev : undefined;
+    // 기준 시각은 두 값 중 오래된 쪽
+    const at = Math.min(b.at, q.at);
     return {
       id: inst.id,
       last,
       prevClose,
       change: prevClose !== undefined ? last - prevClose : undefined,
       changePct: prevClose ? ((last - prevClose) / prevClose) * 100 : undefined,
-      fresh: { source: 'KIS', mode: 'poll', asOf: r.at, receivedAt: r.at, intervalMs: LIVE_MS, asOfFromReceipt: true },
+      fresh: { source: 'KIS', mode: 'poll', asOf: at, receivedAt: at, intervalMs: LIVE_MS, asOfFromReceipt: true },
     };
   }
 
@@ -221,7 +235,7 @@ export class EcbAdapter implements Adapter {
   }
 
   status(): SourceStatus {
-    const live = !!this.live && !!this.liveRates && Date.now() - this.liveRates.at <= LIVE_STALE_MS;
+    const live = !!this.live && [...this.liveRates.keys()].some((c) => this.liveRate(c));
     if (live) return { source: 'ECB', state: 'connected', message: '한국투자증권 환율 10초마다(차트 일봉은 ECB 기준환율)', intervalMs: LIVE_MS, updatedAt: Date.now() };
     return { source: 'ECB', state: this.state, message: this.message, intervalMs: POLL_MS, updatedAt: Date.now() };
   }

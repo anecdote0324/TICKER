@@ -159,6 +159,8 @@ export class KisAdapter implements Adapter {
   /** 보낼 구독 요청(간격을 두고 보내요) */
   private wsOut: string[] = [];
   private wsOutTimer: NodeJS.Timeout | null = null;
+  /** 분봉 응답 견본(진단 정보) */
+  private barSamples: Record<string, unknown> = {};
 
   constructor(
     private host: AdapterHost,
@@ -332,7 +334,16 @@ export class KisAdapter implements Adapter {
       subscribed: this.subscribed.size,
       budget: this.budget.usage(),
       recentErrors: this.recentErrors.slice(-10),
+      barSamples: this.barSamples,
     };
+  }
+
+  /**
+   * 분봉 응답의 첫 줄과 마지막 줄 몇 개를 진단 정보에 남겨요(TR마다 마지막 한 번).
+   * 장 마감 단일가(15:30) 봉이 오는지, 봉 시각이 시작인지 끝인지 같은 것을 실제 응답으로 확인하려고요
+   */
+  private sampleRows(tr: string, code: string, request: string, rows: KisRow[], pick: (x: KisRow) => string[]) {
+    this.barSamples[tr] = { code, request, at: new Date().toISOString(), count: rows.length, newest: rows.slice(0, 3).map(pick), oldest: rows.slice(-3).map(pick) };
   }
 
   // ── 목록에 없는 코드 직접 조회(05 §4.5, §13) ──
@@ -377,10 +388,12 @@ export class KisAdapter implements Adapter {
         if (!(r instanceof Error)) return r;
         // 초당 거래건수 초과(EGW00201): 모든 조회를 잠깐 멈추고 이 자리에서 다시 해요.
         // 대기줄에 다시 서면 자리를 잡은 채 자기 차례를 기다려서, 자리가 다 차면 대기줄 전체가 멈춰요
-        // 초과를 받으면 초당 호출 수도 줄여요. 화면에서 바로 한 요청(차트 열기)은 한 번 더 기다려 봐요
+        // 초과를 받으면 초당 호출 수도 줄여요. 화면에서 바로 한 요청(차트 열기)은 한 번 더 기다려 봐요.
+        // 다시 보낼 때도 초당 호출 수 안에서 차례를 기다려요(그냥 보내면 여러 요청이 한꺼번에 다시 나가서 또 초과를 받아요)
         if (attempt < (pri === 0 ? 3 : 2) && r.message.includes('EGW00201')) {
           this.budget.throttled();
-          await sleep(1100 + attempt * 400);
+          await sleep(300 + Math.random() * 300 + attempt * 400);
+          await this.budget.waitTurn();
           continue;
         }
         throw r;
@@ -952,7 +965,25 @@ export class KisAdapter implements Adapter {
     return dedupe(out);
   }
 
+  /**
+   * 국내 GIP 1분봉: 가장 최근 하루. 주식일별분봉조회(한 번에 120건)로 받아요. 당일분봉조회(30건)로 받으면 장 하루에 13번이라
+   * 초당 한도에 걸려 차트가 10~15초 늦게 떴어요(v0.1.0-beta.11). 장중인데 오늘 봉이 안 오면 당일분봉조회로 받아요
+   */
   private async krMinute(inst: Instrument): Promise<Bar[]> {
+    const now = Date.now();
+    const today = ymdKst(now);
+    const hms = hmsKst(now);
+    const started = isWeekday(today) && hms >= '090000';
+    const date = started ? today : prevWeekday(today);
+    const hour = started && hms < '153000' ? hms : '153000';
+    // 휴장일이면 앞 거래일로 넘어가되, 하루치를 받으면 멈춰요
+    const bars = await this.krMinutesBack(inst, date, hour, weekdaysBack(date, 7), 8, 0, true);
+    if (bars.length === 0 && sessionState(EXCHANGES.KRX, now) === 'open') return this.krMinuteToday(inst);
+    return bars;
+  }
+
+  /** 당일분봉조회(FHKST03010200, 한 번에 30건). 일별분봉조회가 오늘 봉을 주지 않을 때만 써요 */
+  private async krMinuteToday(inst: Instrument): Promise<Bar[]> {
     const out: Bar[] = [];
     const now = Date.now();
     // 당일 분봉만 와요. 장중이 아니면(장 전·마감 뒤·주말) 15:30부터 거꾸로 받아요.
@@ -1078,9 +1109,11 @@ export class KisAdapter implements Adapter {
    * 국내 1분봉을 (date, hour)부터 거꾸로 이어 받아요(한 번에 120건). until 날짜(YYYYMMDD)의 09:00까지 받거나 maxCalls에서 멈춰요.
    * 다음 요청은 가장 오래된 봉의 1분 전이고, 09:00에 닿으면 앞 평일 15:30부터예요. 휴장일(빈 응답)은 7일까지 건너뛰어요
    */
-  private async krMinutesBack(inst: Instrument, date: string, hour: string, until: string, maxCalls: number, pri: Priority): Promise<Bar[]> {
+  private async krMinutesBack(inst: Instrument, date: string, hour: string, until: string, maxCalls: number, pri: Priority, oneDay = false): Promise<Bar[]> {
     const out: Bar[] = [];
     let empties = 0;
+    let sampled = false;
+    let day: string | undefined;
     for (let call = 0; call < maxCalls && date >= until; call++) {
       const r = await this.get(
         '/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice',
@@ -1093,6 +1126,12 @@ export class KisAdapter implements Adapter {
       const rows = (r.output2 ?? [])
         .filter((x) => x.stck_bsop_date && x.stck_cntg_hour && Number(x.stck_prpr) > 0 && x.stck_bsop_date + x.stck_cntg_hour <= at)
         .sort((a, b) => (b.stck_bsop_date + b.stck_cntg_hour).localeCompare(a.stck_bsop_date + a.stck_cntg_hour));
+      if (!sampled) {
+        // 거르기 전의 응답 그대로(15:30 뒤 봉이 오는지도 보이게)
+        sampled = true;
+        const raw = [...(r.output2 ?? [])].sort((a, b) => `${b.stck_bsop_date}${b.stck_cntg_hour}`.localeCompare(`${a.stck_bsop_date}${a.stck_cntg_hour}`));
+        this.sampleRows('FHKST03010230', inst.code, at, raw, (x) => [x.stck_bsop_date, x.stck_cntg_hour, x.stck_prpr, x.stck_oprc, x.stck_hgpr, x.stck_lwpr, x.cntg_vol]);
+      }
       if (rows.length === 0) {
         if (++empties > 7) break;
         date = prevWeekday(date);
@@ -1100,13 +1139,19 @@ export class KisAdapter implements Adapter {
         continue;
       }
       empties = 0;
+      // 하루치만 받을 때는 처음 받은 날(가장 최근 거래일)의 봉만 써요. 응답에 앞 날 봉이 섞여 와도요
+      day ??= rows[0].stck_bsop_date;
       for (const x of rows) {
         // 정규장(09:00~15:30) 봉만 써요
         if (x.stck_bsop_date < until || x.stck_cntg_hour < '090000' || x.stck_cntg_hour > '153000') continue;
+        if (oneDay && x.stck_bsop_date !== day) continue;
         out.push({ t: kstSec(x.stck_bsop_date, x.stck_cntg_hour), o: +x.stck_oprc, h: +x.stck_hgpr, l: +x.stck_lwpr, c: +x.stck_prpr, v: +x.cntg_vol });
       }
       const oldest = rows[rows.length - 1];
+      if (oneDay && oldest.stck_bsop_date !== day) break;
       if (oldest.stck_cntg_hour <= '090000') {
+        // 하루치만 받을 때(GIP)는 그날 09:00에 닿으면 멈춰요
+        if (oneDay && out.length > 0) break;
         date = prevWeekday(oldest.stck_bsop_date);
         hour = '153000';
       } else {

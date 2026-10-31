@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Instrument, Quote } from '@bt/shared';
 import { EcbAdapter, type LiveFxSource } from './ecb';
 import type { AdapterHost } from './types';
@@ -58,5 +58,34 @@ describe('환율', () => {
     fx.setLive(undefined);
     expect(quotes[quotes.length - 1].fresh.source).toBe('ECB');
     fx.stop();
+  });
+
+  it('한 통화를 한 번 못 받아도 그 통화의 앞 값을 1분까지 써서, ECB 값과 번갈아 바뀌지 않아요', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(1_000_000);
+      const { fx, quotes, refresh } = setup();
+      let eur = true;
+      fx.subscribe([eurkrw]);
+      fx.setLive({ fxPerUsd: async () => ({ cur: (eur ? { KRW: 1410, EUR: 1 / 1.1 } : { KRW: 1411 }) as Record<string, number>, prev: {} }) });
+      await refresh();
+      expect(quotes[quotes.length - 1].fresh.source).toBe('KIS');
+      // 유로를 이번에 못 받았어요(초당 한도 초과 등): 앞 유로 값과 새 원화 값으로 계산해요
+      eur = false;
+      vi.setSystemTime(1_010_000);
+      await refresh();
+      const q = quotes[quotes.length - 1];
+      expect(q.fresh.source).toBe('KIS');
+      expect(q.last).toBeCloseTo(1411 * 1.1, 6);
+      // 기준 시각은 오래된 쪽(유로를 받은 때)
+      expect(q.fresh.asOf).toBe(1_000_000);
+      // 1분 넘게 유로를 못 받으면 ECB로 돌아가요
+      vi.setSystemTime(1_070_001);
+      await refresh();
+      expect(quotes[quotes.length - 1].fresh.source).toBe('ECB');
+      fx.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

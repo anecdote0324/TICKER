@@ -102,6 +102,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const [series, setSeries] = useState<BarSeries | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hover, setHover] = useState<Bar | null>(null);
+  // 실시간 시세로 고친 마지막 봉(시고저종 머리줄이 차트와 같은 값을 보이게)
+  const [liveBar, setLiveBar] = useState<Bar | null>(null);
   const quote = useQuote(inst?.id);
   const upDown = useStore(settings, (s) => s.display.upDown);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -239,9 +241,14 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         barsRef.current = [];
         barsIdRef.current = null;
         setHover(null);
+        setLiveBar(null);
+        // 빈 차트에 앞 종목의 가격 눈금이 남지 않게 가격 축을 잠깐 숨겨요
+        chart.applyOptions({ rightPriceScale: { visible: false } });
       }
       return;
     }
+    chart.applyOptions({ rightPriceScale: { visible: true } });
+    setLiveBar(null);
     const bars = viewBars;
     barsRef.current = bars.slice();
     barsIdRef.current = ready.id;
@@ -298,6 +305,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         const nb: Bar = { t, o: quote.last, h: quote.last, l: quote.last, c: quote.last, v: 0 };
         bars.push(nb);
         c.update({ time: t as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
+        setLiveBar({ ...nb });
         return;
       }
     }
@@ -305,9 +313,10 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     last.h = Math.max(last.h, quote.last);
     last.l = Math.min(last.l, quote.last);
     c.update({ time: last.t as UTCTimestamp, open: last.o, high: last.h, low: last.l, close: last.c });
+    setLiveBar({ ...last });
   }, [quote, intraday, hourly]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = hover ?? viewBars?.[viewBars.length - 1];
+  const shown = hover ?? liveBar ?? viewBars?.[viewBars.length - 1];
   const fresh = quote?.fresh ?? ready?.fresh;
   const loading = !!inst && !noIntraday && !error && !ready;
   const empty = !!ready && ready.bars.length === 0;
@@ -390,17 +399,17 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         </div>
         <div className="chart-box" ref={boxRef} />
         {error && inst && (
-          <div className="empty-body" style={{ position: 'absolute', inset: 0 }}>
+          <div className="empty-body" style={{ position: 'absolute', inset: 0, zIndex: 4 }}>
             <span className="err">{error}</span>
           </div>
         )}
         {loading && (
-          <div className="empty-body" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+          <div className="empty-body" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
             <span className="label">불러오는 중…</span>
           </div>
         )}
         {empty && !error && (
-          <div className="empty-body" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+          <div className="empty-body" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
             <div>{intraday ? '아직 장중 분봉이 없어요' : '봉 데이터가 없어요'}</div>
             {intraday && <div className="label">장이 열리면 1분마다 봉이 생겨요</div>}
           </div>

@@ -56,9 +56,10 @@ export function regularSessionOf(inst: Instrument, t: number): { open: number; c
 }
 
 /**
- * 봉 칸의 시작 시각(초). 주식·지수는 그날 정규장 시작에 맞추고(국내 09:00, 미국 09:30 뉴욕),
+ * 봉 칸의 시작 시각(초). 주식·지수는 그날 정규장이 시작하는 정각에 맞추고(국내 09:00, 미국 뉴욕 09:00),
  * 코인처럼 장 시간이 없는 종목은 UTC 정각에 맞춰요(Binance의 4시간봉과 같아요: 한국 시간 09·13·17·21·01·05시).
- * 국내 2시간봉은 09·11·13·15시, 4시간봉은 09·13시에 시작해요
+ * 국내 2시간봉은 09·11·13·15시, 4시간봉은 09·13시에 시작해요. 미국은 한국투자증권 60분봉이 정각에 와서(10:00·11:00)
+ * 09:30이 아니라 정각에 맞춰요(2시간봉 09·11·13·15시, 4시간봉 09·13·17시, 프리마켓은 그 앞으로)
  */
 export function bucketStart(inst: Instrument, t: number, minutes: number): number {
   const size = minutes * 60;
@@ -67,7 +68,7 @@ export function bucketStart(inst: Instrument, t: number, minutes: number): numbe
   if (!hours) return Math.floor(t / size) * size;
   const p = zonedParts(t * 1000, hours.timeZone);
   const sinceMidnight = p.hour * 3600 + p.minute * 60 + p.second;
-  const open = hours.regular[0][0] * 60;
+  const open = Math.floor(hours.regular[0][0] / 60) * 3600;
   return t - sinceMidnight + open + Math.floor((sinceMidnight - open) / size) * size;
 }
 

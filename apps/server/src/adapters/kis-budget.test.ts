@@ -55,4 +55,43 @@ describe('요청 예산', () => {
       vi.useRealTimers();
     }
   });
+
+  it('초과를 받고 다시 보내는 요청도 초당 호출 수에 세요(한꺼번에 다시 나가지 않게)', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000_000);
+      const b = new RequestBudget(2);
+      await b.waitTurn();
+      await b.waitTurn();
+      let third = false;
+      void b.waitTurn().then(() => (third = true));
+      await vi.advanceTimersByTimeAsync(500);
+      expect(third).toBe(false);
+      await vi.advanceTimersByTimeAsync(800);
+      expect(third).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('백그라운드 작업(우선순위 2)은 초당 호출 수의 절반까지만 써요', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000_000);
+      const b = new RequestBudget(6);
+      let bg = 0;
+      for (let i = 0; i < 6; i++) void b.schedule(2, async () => void bg++);
+      await vi.advanceTimersByTimeAsync(900);
+      expect(bg).toBe(3);
+      // 화면 요청은 남은 몫으로 바로 나가요
+      let fg = 0;
+      for (let i = 0; i < 3; i++) void b.schedule(0, async () => void fg++);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(fg).toBe(3);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(bg).toBe(6);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
