@@ -1,5 +1,6 @@
 // FXC 환율 매트릭스: 각 칸은 왼쪽(행) 통화 1단위가 위쪽(열) 통화로 얼마인지 보여 줘요. 셀 배경은 등락 색(02).
 // 교차 환율은 두 원화 환율로 계산해서, 신선도는 두 입력 중 늦은 쪽을 따라가요.
+// 한국투자증권 키가 있으면 10초마다 받은 환율, 없으면 ECB 기준환율(하루 한 번)이에요(04 환율).
 
 import { FX_CURRENCIES, slowestFreshness, type Quote } from '@bt/shared';
 import { useQuotes } from '../stores/feed';
@@ -18,9 +19,13 @@ export function Fxc({ panel }: { panel: PanelState }) {
     return { v: q?.last, pct: q?.changePct, q };
   };
   const fresh = slowestFreshness([...quotes.values()].map((q) => q.fresh));
+  // ECB 값이 하나라도 섞여 있으면 출처 표시를 붙여요
+  const ecb = [...quotes.values()].some((q) => q.fresh.source === 'ECB');
+  const kis = [...quotes.values()].some((q) => q.fresh.source === 'KIS');
+  const source = kis && ecb ? '한국투자증권(10초 간격 조회), 일부 ECB 기준환율(Frankfurter)' : kis ? '한국투자증권(10초 간격 조회)' : 'ECB 기준환율(Frankfurter, 하루 한 번). 한국투자증권 키를 넣으면 10초마다 받아요';
   return (
     <>
-      <TitleBar fn="FXC" name="환율 매트릭스" fresh={fresh} attribution="ECB 기준환율 · Frankfurter" />
+      <TitleBar fn="FXC" name="환율 매트릭스" fresh={fresh} attribution={ecb ? 'ECB 기준환율 · Frankfurter' : undefined} />
       <div className="pbody">
         <table className="fxc">
           <thead>
@@ -54,7 +59,7 @@ export function Fxc({ panel }: { panel: PanelState }) {
             ))}
           </tbody>
         </table>
-        <div className="attr">원화 외환시장은 다음 날 02:00까지 열려요. 기준 시각은 배지에 마우스를 올려 확인해요. 환율 출처: ECB 기준환율(Frankfurter)</div>
+        <div className="attr">원화 외환시장은 다음 날 02:00까지 열려요. 기준 시각은 배지에 마우스를 올려 확인해요. 환율 출처: {source}</div>
       </div>
     </>
   );

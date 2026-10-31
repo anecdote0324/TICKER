@@ -181,6 +181,8 @@ export class Hub implements AdapterHost {
     // 이전 연결을 먼저 닫아요. 한국투자증권은 키마다 실시간 등록 수를 세서, 두 연결이 겹치면 새 연결의 구독이 거절돼요(MAX SUBSCRIBE OVER)
     old?.stop();
     this.kis = kis;
+    // 환율도 한국투자증권 키가 있으면 10초마다 받고, 없으면 ECB 기준환율로(04 환율)
+    this.ecb?.setLive?.(kis);
     if (kis) await kis.start().catch((e) => this.log.warn(`KIS 시작 실패: ${(e as Error).message}`));
     const moving: Instrument[] = [];
     for (const [id, a] of this.routes) {

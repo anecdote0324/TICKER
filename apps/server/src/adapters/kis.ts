@@ -75,6 +75,19 @@ const H0STCNT0_FIELDS = 47;
 const HDFSCNT0_FIELDS = 26;
 /** 구독 요청 사이 간격. 공식 예제는 요청마다 0.05초 쉬어요 */
 const WS_SEND_GAP_MS = 50;
+/**
+ * 환율 코드(해외지수 마스터 frgn_code.mst의 X 구분, FHKST03030100 시장 구분 X). 마스터의 이름이 `엔/달러`(1달러당 엔)처럼
+ * 1달러당 값이면 그대로, `달러/유로`(1유로당 달러)처럼 달러로 매긴 값이면 usdPer를 켜고 뒤집어 1달러당 값으로 써요
+ */
+const KIS_FX: Record<string, { code: string; usdPer?: boolean }> = {
+  KRW: { code: 'FX@KRW' },
+  JPY: { code: 'FX@JPY' },
+  CNY: { code: 'FX@CNY' },
+  EUR: { code: 'FX@EUR', usdPer: true },
+  GBP: { code: 'FX@GBP', usdPer: true },
+  AUD: { code: 'FX@AUD', usdPer: true },
+};
+
 /** 국내 시간봉을 처음 열 때 바로 받는 거래일 수. 그 앞은 허브가 뒤에서 조금씩 채워요 */
 const KR_HOUR_RECENT_DAYS = 5;
 /** 지난 국내 시간봉을 한 번에 채우는 거래일 수(1분봉 약 35번 조회) */
@@ -852,6 +865,46 @@ export class KisAdapter implements Adapter {
       };
     }
     return undefined;
+  }
+
+  // ── 환율 ──
+
+  /**
+   * 통화별 1달러당 값(지금·전일). 환율 화면(FXC·MON의 원/달러 등)이 10초마다 불러요(04 환율).
+   * 기간별시세(FHKST03030100)에 시장 구분 X와 마스터의 환율 코드를 넣어요. 현재가가 비면 가장 최근 일봉으로 대신해요
+   */
+  async fxPerUsd(currencies: string[]): Promise<{ cur: Record<string, number>; prev: Record<string, number> }> {
+    const cur: Record<string, number> = {};
+    const prev: Record<string, number> = {};
+    const t = Date.now();
+    await Promise.all(
+      currencies.map(async (c) => {
+        const def = KIS_FX[c];
+        if (!def) return;
+        try {
+          const r = await this.get(
+            '/uapi/overseas-price/v1/quotations/inquire-daily-chartprice',
+            'FHKST03030100',
+            { FID_COND_MRKT_DIV_CODE: 'X', FID_INPUT_ISCD: def.code, FID_INPUT_DATE_1: ymdKst(t - 10 * 86400_000), FID_INPUT_DATE_2: ymdKst(t), FID_PERIOD_DIV_CODE: 'D' },
+            1,
+          );
+          const o = (Array.isArray(r.output1) ? r.output1[0] : r.output1) as KisRow | undefined;
+          let v = Number(o?.ovrs_nmix_prpr);
+          let p = v - Number(o?.ovrs_nmix_prdy_vrss);
+          if (!(v > 0)) {
+            const days = (r.output2 ?? []).filter((x) => x.stck_bsop_date && Number(x.ovrs_nmix_prpr) > 0).sort((a, b) => b.stck_bsop_date.localeCompare(a.stck_bsop_date));
+            v = Number(days[0]?.ovrs_nmix_prpr);
+            p = Number(days[1]?.ovrs_nmix_prpr);
+          }
+          if (!(v > 0)) throw new Error(`${def.code}의 값이 없어요`);
+          cur[c] = def.usdPer ? 1 / v : v;
+          if (p > 0) prev[c] = def.usdPer ? 1 / p : p;
+        } catch (e) {
+          this.noteError(`환율 조회 실패(${def.code}): ${(e as Error).message}`);
+        }
+      }),
+    );
+    return { cur, prev };
   }
 
   // ── 봉 ──

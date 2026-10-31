@@ -355,3 +355,27 @@ describe('시간봉(GP)', () => {
     expect([reqs[1].q.get('NEXT'), reqs[1].q.get('KEYB')]).toEqual(['1', '20261030123000']);
   });
 });
+
+describe('환율(한국투자증권)', () => {
+  it('해외지수 마스터의 환율 코드를 시장 구분 X로 조회하고, 달러로 매긴 값(달러/유로)은 1달러당 값으로 뒤집어요', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/overseas-price/v1/quotations/inquire-daily-chartprice';
+    const values: Record<string, [string, string]> = { 'FX@KRW': ['1410.50', '10.50'], 'FX@EUR': ['1.1000', '0.0100'] };
+    custom.set(path, (q) => {
+      const [v, d] = values[q.get('FID_INPUT_ISCD')!] ?? ['0', '0'];
+      return { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: { ovrs_nmix_prpr: v, ovrs_nmix_prdy_vrss: d, prdy_ctrt: '0' }, output2: [] };
+    });
+    const { kis, logs } = adapter(memoryStore());
+    const r = await kis.fxPerUsd(['KRW', 'EUR', 'JPY']);
+    expect(r.cur.KRW).toBe(1410.5);
+    expect(r.prev.KRW).toBe(1400);
+    expect(r.cur.EUR).toBeCloseTo(1 / 1.1, 10);
+    expect(r.prev.EUR).toBeCloseTo(1 / 1.09, 10);
+    // 값이 없는 통화(JPY)는 빠지고 기록에 남아요
+    expect(r.cur.JPY).toBeUndefined();
+    expect(logs.join('\n')).toContain('FX@JPY');
+    const reqs = requests.filter((x) => x.path === path);
+    expect(reqs.every((x) => x.q.get('FID_COND_MRKT_DIV_CODE') === 'X')).toBe(true);
+    expect(reqs.map((x) => x.q.get('FID_INPUT_ISCD')).sort()).toEqual(['FX@EUR', 'FX@JPY', 'FX@KRW']);
+  });
+});

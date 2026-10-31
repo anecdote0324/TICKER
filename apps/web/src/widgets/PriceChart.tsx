@@ -386,7 +386,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
               <i style={{ display: 'inline-block', width: 10, height: 2, background: '#BDBDBD', verticalAlign: 'middle' }} /> 60
             </span>
           )}
-          <FreshBadge fresh={fresh} inst={inst} attribution={inst?.assetClass === 'CURNCY' ? 'ECB 기준환율 · Frankfurter' : undefined} />
+          <FreshBadge fresh={fresh} inst={inst} attribution={fresh?.source === 'ECB' ? 'ECB 기준환율 · Frankfurter' : undefined} />
         </div>
         <div className="chart-box" ref={boxRef} />
         {error && inst && (
