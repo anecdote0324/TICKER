@@ -92,6 +92,10 @@ const KIS_FX: Record<string, { code: string; usdPer?: boolean }> = {
 const KR_HOUR_RECENT_DAYS = 5;
 /** 지난 국내 시간봉을 한 번에 채우는 거래일 수(1분봉 약 35번 조회) */
 const KR_HOUR_CHUNK_DAYS = 10;
+/** 국내 장이 닫혔을 때 분봉을 거꾸로 받기 시작하는 시각. 15:30 장 마감 단일가 봉에 초가 붙어 와도 빠지지 않게 15:30:59부터 */
+const KR_CLOSE_HMS = '153059';
+/** 장중인데 지수 값이 이만큼 그대로면 장중에 갱신되지 않는 지수로 봐요 */
+const STUCK_MS = 15 * 60_000;
 /** 장이 닫힌 종목은 이 간격으로만 다시 확인해요(값이 바뀌지 않아요) */
 const CLOSED_POLL_MS = 5 * 60_000;
 /** 정규장이 끝난 뒤에도 종가가 확정될 때까지 이만큼은 장중처럼 다뤄요 */
@@ -161,6 +165,8 @@ export class KisAdapter implements Adapter {
   private wsOutTimer: NodeJS.Timeout | null = null;
   /** 분봉 응답 견본(진단 정보) */
   private barSamples: Record<string, unknown> = {};
+  /** 종목별로 같은 값이 이어진 시작 시각(장중에 갱신되지 않는 지수 찾기) */
+  private sameValue = new Map<string, { v: number; since: number }>();
 
   constructor(
     private host: AdapterHost,
@@ -854,11 +860,17 @@ export class KisAdapter implements Adapter {
       );
       const o = (Array.isArray(r.output1) ? r.output1[0] : r.output1) as KisRow | undefined;
       const last = Number(o?.ovrs_nmix_prpr);
+      const days = (r.output2 ?? []).filter((x) => x.stck_bsop_date && Number(x.ovrs_nmix_prpr) > 0).sort((a, b) => b.stck_bsop_date.localeCompare(a.stck_bsop_date));
       if (last > 0) {
         const change = Number(o!.ovrs_nmix_prdy_vrss);
-        return { id: inst.id, last, change, changePct: Number(o!.prdy_ctrt), prevClose: last - change, fresh: fresh() };
+        // 장중인데 값이 15분 넘게 그대로면 한국투자증권이 그 지수를 장중에 갱신하지 않는 거예요(CAC 40이 월요일에 금요일 값 그대로였어요).
+        // 실시간처럼 보이지 않게 가장 최근 일봉 날짜로 '일별'을 붙여요
+        const since = this.unchangedSince(inst.id, last, t);
+        const stuck = tradingNow(inst, t) === true && t - since > STUCK_MS;
+        const ymd = days[0]?.stck_bsop_date ?? ymdKst(since);
+        const fr: Freshness = stuck ? { source: 'KIS', mode: 'daily', asOf: dateSec(ymd) * 1000, receivedAt: t, asOfDate: `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}` } : fresh();
+        return { id: inst.id, last, change, changePct: Number(o!.prdy_ctrt), prevClose: last - change, fresh: fr };
       }
-      const days = (r.output2 ?? []).filter((x) => x.stck_bsop_date && Number(x.ovrs_nmix_prpr) > 0).sort((a, b) => b.stck_bsop_date.localeCompare(a.stck_bsop_date));
       // 값이 없으면 0으로 보여 주지 않고 비워 둬요(코드가 틀렸거나 제공하지 않는 지수)
       if (days.length === 0) throw new Error(`해외 지수 ${def.kis.code}의 값이 없어요`);
       const d = days[0];
@@ -878,6 +890,49 @@ export class KisAdapter implements Adapter {
       };
     }
     return undefined;
+  }
+
+  /**
+   * 환율 일·주·월봉(통화별 1달러당 값, 오래된 것부터). 기간별시세에 시장 구분 X, 한 번에 100건.
+   * 일봉은 150일씩 3번(약 14개월). 환율 차트가 지금 환율(10초)과 같은 출처의 봉을 쓰게 해요
+   */
+  async fxBarsPerUsd(c: string, period: 'D' | 'W' | 'M'): Promise<Bar[]> {
+    const def = KIS_FX[c];
+    if (!def) throw new Error(`${c} 환율 코드가 없어요`);
+    const out: Bar[] = [];
+    let end = Date.now();
+    const span = period === 'D' ? 150 : period === 'W' ? 700 : 3000;
+    for (let page = 0; page < (period === 'D' ? 3 : 1); page++) {
+      const r = await this.get(
+        '/uapi/overseas-price/v1/quotations/inquire-daily-chartprice',
+        'FHKST03030100',
+        { FID_COND_MRKT_DIV_CODE: 'X', FID_INPUT_ISCD: def.code, FID_INPUT_DATE_1: ymdKst(end - span * 86400_000), FID_INPUT_DATE_2: ymdKst(end), FID_PERIOD_DIV_CODE: period },
+        0,
+      );
+      const rows = (r.output2 ?? []).filter((x) => x.stck_bsop_date && Number(x.ovrs_nmix_prpr) > 0);
+      if (rows.length === 0) break;
+      for (const x of rows) {
+        const cl = Number(x.ovrs_nmix_prpr);
+        const o = Number(x.ovrs_nmix_oprc) || cl;
+        const h = Number(x.ovrs_nmix_hgpr) || Math.max(o, cl);
+        const l = Number(x.ovrs_nmix_lwpr) || Math.min(o, cl);
+        const t = dateSec(x.stck_bsop_date);
+        // 달러로 매긴 값(달러/유로)은 뒤집어요. 뒤집으면 고가·저가가 바뀌어요
+        out.push(def.usdPer ? { t, o: 1 / o, h: 1 / l, l: 1 / h, c: 1 / cl, v: 0 } : { t, o, h, l, c: cl, v: 0 });
+      }
+      const oldest = rows.reduce((a, b) => (b.stck_bsop_date < a.stck_bsop_date ? b : a)).stck_bsop_date;
+      end = dateSec(oldest) * 1000 - 86400_000;
+      if (rows.length < 100) break;
+    }
+    return dedupe(out);
+  }
+
+  /** 같은 값이 언제부터 이어졌는지 */
+  private unchangedSince(id: string, v: number, t: number): number {
+    const cur = this.sameValue.get(id);
+    if (cur && cur.v === v) return cur.since;
+    this.sameValue.set(id, { v, since: t });
+    return t;
   }
 
   // ── 환율 ──
@@ -975,7 +1030,7 @@ export class KisAdapter implements Adapter {
     const hms = hmsKst(now);
     const started = isWeekday(today) && hms >= '090000';
     const date = started ? today : prevWeekday(today);
-    const hour = started && hms < '153000' ? hms : '153000';
+    const hour = started && hms < '153000' ? hms : KR_CLOSE_HMS;
     // 휴장일이면 앞 거래일로 넘어가되, 하루치를 받으면 멈춰요
     const bars = await this.krMinutesBack(inst, date, hour, weekdaysBack(date, 7), 8, 0, true);
     if (bars.length === 0 && sessionState(EXCHANGES.KRX, now) === 'open') return this.krMinuteToday(inst);
@@ -1001,11 +1056,11 @@ export class KisAdapter implements Adapter {
       const rows = (r.output2 ?? []).filter((x) => x.stck_cntg_hour && x.stck_bsop_date);
       if (rows.length === 0) break;
       // 가장 최근 하루의 정규장(09:00~15:30) 봉만 써요
-      const regular = rows.filter((x) => x.stck_cntg_hour >= '090000' && x.stck_cntg_hour <= '153000');
+      const regular = rows.filter((x) => x.stck_cntg_hour >= '090000' && x.stck_cntg_hour <= '153059');
       day ??= regular[0]?.stck_bsop_date;
       for (const x of regular) {
         if (x.stck_bsop_date !== day) continue;
-        out.push({ t: kstSec(x.stck_bsop_date, x.stck_cntg_hour), o: +x.stck_oprc, h: +x.stck_hgpr, l: +x.stck_lwpr, c: +x.stck_prpr, v: +x.cntg_vol });
+        out.push({ t: kstSec(x.stck_bsop_date, `${x.stck_cntg_hour.slice(0, 4)}00`), o: +x.stck_oprc, h: +x.stck_hgpr, l: +x.stck_lwpr, c: +x.stck_prpr, v: +x.cntg_vol });
       }
       const oldest = rows[rows.length - 1];
       if ((day && oldest.stck_bsop_date !== day) || oldest.stck_cntg_hour <= '090000') break;
@@ -1076,7 +1131,7 @@ export class KisAdapter implements Adapter {
     // 오늘 장이 시작했으면 지금부터, 아니면 앞 거래일 15:30부터 거꾸로
     const started = isWeekday(today) && hms >= '090000';
     const date = started ? today : prevWeekday(today);
-    const hour = started && hms < '153000' ? hms : '153000';
+    const hour = started && hms < '153000' ? hms : KR_CLOSE_HMS;
     const recent = weekdaysBack(date, KR_HOUR_RECENT_DAYS - 1);
     const stored = after ? ymdKst(after * 1000) : '';
     const until = stored > recent ? stored : recent;
@@ -1097,7 +1152,7 @@ export class KisAdapter implements Adapter {
       let hour = minusMinute(hmsKst(before * 1000));
       if (hour < '090000') {
         date = prevWeekday(date);
-        hour = '153000';
+        hour = KR_CLOSE_HMS;
       }
       const until = weekdaysBack(date, KR_HOUR_CHUNK_DAYS - 1);
       bars = aggregateBars(inst, await this.krMinutesBack(inst, date, hour, until, 50, 2), 60);
@@ -1135,7 +1190,7 @@ export class KisAdapter implements Adapter {
       if (rows.length === 0) {
         if (++empties > 7) break;
         date = prevWeekday(date);
-        hour = '153000';
+        hour = KR_CLOSE_HMS;
         continue;
       }
       empties = 0;
@@ -1143,9 +1198,10 @@ export class KisAdapter implements Adapter {
       day ??= rows[0].stck_bsop_date;
       for (const x of rows) {
         // 정규장(09:00~15:30) 봉만 써요
-        if (x.stck_bsop_date < until || x.stck_cntg_hour < '090000' || x.stck_cntg_hour > '153000') continue;
+        // 15:30대 봉(장 마감 단일가)은 초가 붙어 와도 받아요. 봉 시각은 분으로 맞춰요
+        if (x.stck_bsop_date < until || x.stck_cntg_hour < '090000' || x.stck_cntg_hour > '153059') continue;
         if (oneDay && x.stck_bsop_date !== day) continue;
-        out.push({ t: kstSec(x.stck_bsop_date, x.stck_cntg_hour), o: +x.stck_oprc, h: +x.stck_hgpr, l: +x.stck_lwpr, c: +x.stck_prpr, v: +x.cntg_vol });
+        out.push({ t: kstSec(x.stck_bsop_date, `${x.stck_cntg_hour.slice(0, 4)}00`), o: +x.stck_oprc, h: +x.stck_hgpr, l: +x.stck_lwpr, c: +x.stck_prpr, v: +x.cntg_vol });
       }
       const oldest = rows[rows.length - 1];
       if (oneDay && oldest.stck_bsop_date !== day) break;
@@ -1153,7 +1209,7 @@ export class KisAdapter implements Adapter {
         // 하루치만 받을 때(GIP)는 그날 09:00에 닿으면 멈춰요
         if (oneDay && out.length > 0) break;
         date = prevWeekday(oldest.stck_bsop_date);
-        hour = '153000';
+        hour = KR_CLOSE_HMS;
       } else {
         date = oldest.stck_bsop_date;
         hour = minusMinute(oldest.stck_cntg_hour);

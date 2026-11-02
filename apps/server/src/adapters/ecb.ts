@@ -1,6 +1,6 @@
 // 환율(04). 한국투자증권 키가 있으면 한국투자증권 환율 조회로 10초마다 받고('10초 주기' 배지),
 // 키가 없거나 조회가 실패하면 ECB 기준환율(Frankfurter, 키 없음, 하루 한 번, '일별' 배지)을 써요.
-// 차트의 일봉 이력은 늘 ECB 기준환율이에요(2년치를 한 번에 받을 수 있어요).
+// 차트의 일·주·월봉도 키가 있으면 한국투자증권 것(지금 환율과 같은 출처, 약 14개월), 없거나 실패하면 ECB(2년)예요.
 
 import { FX_PAIRS, isHourInterval, type Bar, type BarInterval, type BarSeries, type Freshness, type Instrument, type Quote, type SourceStatus } from '@bt/shared';
 import { fetchJson, ymdUtc } from '../util';
@@ -16,6 +16,27 @@ const LIVE_STALE_MS = 60_000;
 /** 실시간에 가까운 환율 소스(한국투자증권). 통화별 1달러당 값(지금·전일)을 줘요. 받지 못한 통화는 빠져요 */
 export interface LiveFxSource {
   fxPerUsd(currencies: string[]): Promise<{ cur: Record<string, number>; prev: Record<string, number> }>;
+  /** 통화별 1달러당 일·주·월봉(오래된 것부터) */
+  fxBarsPerUsd?(currency: string, period: 'D' | 'W' | 'M'): Promise<Bar[]>;
+}
+
+/**
+ * 두 통화의 1달러당 봉으로 환율 봉을 만들어요(null은 달러).
+ * 달러가 한쪽이면 그 봉을 그대로(또는 뒤집어서) 쓰고, 교차 환율(원/유로)은 같은 날짜끼리 종가로만 계산해요(선 차트)
+ */
+export function pairBars(base: Bar[] | null, quote: Bar[] | null): Bar[] {
+  if (!base && quote) return quote;
+  if (base && !quote) return base.map((b) => ({ t: b.t, o: 1 / b.o, h: 1 / b.l, l: 1 / b.h, c: 1 / b.c, v: 0 }));
+  if (!base || !quote) return [];
+  const q = new Map(quote.map((b) => [b.t, b]));
+  const out: Bar[] = [];
+  for (const b of base) {
+    const x = q.get(b.t);
+    if (!x) continue;
+    const c = x.c / b.c;
+    out.push({ t: b.t, o: c, h: c, l: c, c, v: 0 });
+  }
+  return out;
 }
 
 interface Latest {
@@ -215,6 +236,20 @@ export class EcbAdapter implements Adapter {
     if (!pair) throw new Error(`환율 ${inst.code}를 찾을 수 없어요`);
     if (interval === '1m' || interval === '5m') throw new Error('환율 소스에 분봉이 없어요');
     if (isHourInterval(interval)) throw new Error('환율 소스에 시간봉이 없어요');
+    const live = this.live;
+    if (live?.fxBarsPerUsd) {
+      try {
+        const period = interval === '1w' ? 'W' : interval === '1M' ? 'M' : 'D';
+        const get = (c: string) => (c === 'USD' ? Promise.resolve(null) : live.fxBarsPerUsd!(c, period));
+        const [b, q] = await Promise.all([get(pair.base), get(pair.quote)]);
+        const bars = pairBars(b, q);
+        if (bars.length === 0) throw new Error('한국투자증권 환율 봉이 비어 있어요');
+        const now = Date.now();
+        return { id: inst.id, interval, bars, fresh: { source: 'KIS', mode: 'poll', asOf: now, receivedAt: now, intervalMs: 60_000, asOfFromReceipt: true } };
+      } catch (e) {
+        this.host.log.warn(`${inst.code} 환율 봉을 한국투자증권에서 받지 못해 ECB 기준환율로 그려요: ${(e as Error).message}`);
+      }
+    }
     const end = new Date();
     const start = new Date(end.getTime() - 2 * 365 * 86400_000);
     const s = await fetchJson<Series>(`${BASE}/${ymdUtc(start)}..${ymdUtc(end)}?base=${pair.base}&symbols=${pair.quote}`, { timeoutMs: 20_000 });
@@ -236,7 +271,7 @@ export class EcbAdapter implements Adapter {
 
   status(): SourceStatus {
     const live = !!this.live && [...this.liveRates.keys()].some((c) => this.liveRate(c));
-    if (live) return { source: 'ECB', state: 'connected', message: '한국투자증권 환율 10초마다(차트 일봉은 ECB 기준환율)', intervalMs: LIVE_MS, updatedAt: Date.now() };
+    if (live) return { source: 'ECB', state: 'connected', message: '한국투자증권 환율 10초마다(차트 봉도 한국투자증권)', intervalMs: LIVE_MS, updatedAt: Date.now() };
     return { source: 'ECB', state: this.state, message: this.message, intervalMs: POLL_MS, updatedAt: Date.now() };
   }
 }

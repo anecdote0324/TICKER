@@ -65,3 +65,10 @@ export function fmtBig(v: number | undefined, currency?: string): string {
   if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
   return v.toFixed(0);
 }
+
+/** 받침에 맞는 조사(은/는, 이/가 등)를 붙여요. 한글로 끝나지 않으면 두 형태를 함께 적어요(AAPL은(는)) */
+export function josa(word: string, withBatchim: string, without: string): string {
+  const ch = word.charCodeAt(word.length - 1);
+  if (ch >= 0xac00 && ch <= 0xd7a3) return word + ((ch - 0xac00) % 28 ? withBatchim : without);
+  return `${word}${withBatchim}(${without})`;
+}

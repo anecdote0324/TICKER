@@ -256,16 +256,18 @@ describe('장이 닫힌 종목', () => {
       msg_cd: 'MCA00000',
       msg1: '정상',
       output2:
-        q.get('FID_INPUT_DATE_1') === '20261030' && q.get('FID_INPUT_HOUR_1') === '153000'
-          ? [row('20261030', '192500', '1'), row('20261030', '153000', '278500'), row('20261030', '152900', '278000'), row('20261030', '090000', '277000'), row('20261029', '153000', '1')]
+        q.get('FID_INPUT_DATE_1') === '20261030' && q.get('FID_INPUT_HOUR_1') === '153059'
+          ? [row('20261030', '192500', '1'), row('20261030', '153012', '278500'), row('20261030', '152900', '278000'), row('20261030', '090000', '277000'), row('20261029', '153000', '1')]
           : [],
     }));
     const { kis } = adapter(memoryStore());
     const s = await kis.bars(kr('005380'), '1m');
     const reqs = requests.filter((r) => r.path.endsWith('inquire-time-dailychartprice'));
-    expect([reqs[0].q.get('FID_INPUT_DATE_1'), reqs[0].q.get('FID_INPUT_HOUR_1')]).toEqual(['20261030', '153000']);
-    // 하루치(10/30)만, 정규장 봉만. 09:00에 닿으면 앞 날로 넘어가지 않아요
+    // 장 마감 단일가 봉에 초가 붙어 와도 빠지지 않게 15:30:59부터 받아요
+    expect([reqs[0].q.get('FID_INPUT_DATE_1'), reqs[0].q.get('FID_INPUT_HOUR_1')]).toEqual(['20261030', '153059']);
+    // 하루치(10/30)만, 정규장 봉만. 09:00에 닿으면 앞 날로 넘어가지 않아요. 15:30:12 봉은 15:30 칸으로
     expect(s.bars.map((b) => b.c)).toEqual([277000, 278000, 278500]);
+    expect(s.bars[2].t).toBe(Date.UTC(2026, 9, 30, 6, 30) / 1000);
     expect(reqs).toHaveLength(1);
     expect(requests.some((r) => r.path.endsWith('inquire-time-itemchartprice'))).toBe(false);
     // 진단 정보에 거르기 전 응답 견본이 남아요(15:30 뒤 봉 포함)
@@ -325,7 +327,7 @@ describe('시간봉(GP)', () => {
     expect(s.bars[0].t).toBe(kst(26, 9));
     expect(s.bars.slice(0, 7).map((b) => b.v)).toEqual([60, 60, 60, 60, 60, 60, 31]);
     const first = requests.find((r) => r.path.endsWith('inquire-time-dailychartprice'))!;
-    expect([first.q.get('FID_INPUT_DATE_1'), first.q.get('FID_INPUT_HOUR_1'), first.q.get('FID_PW_DATA_INCU_YN')]).toEqual(['20261030', '153000', 'Y']);
+    expect([first.q.get('FID_INPUT_DATE_1'), first.q.get('FID_INPUT_HOUR_1'), first.q.get('FID_PW_DATA_INCU_YN')]).toEqual(['20261030', '153059', 'Y']);
   });
 
   it('국내 1시간봉: 저장해 둔 봉이 있으면 그날부터만 받아요', async () => {
@@ -387,5 +389,45 @@ describe('환율(한국투자증권)', () => {
     const reqs = requests.filter((x) => x.path === path);
     expect(reqs.every((x) => x.q.get('FID_COND_MRKT_DIV_CODE') === 'X')).toBe(true);
     expect(reqs.map((x) => x.q.get('FID_INPUT_ISCD')).sort()).toEqual(['FX@EUR', 'FX@JPY', 'FX@KRW']);
+  });
+});
+
+describe('장중에 갱신되지 않는 해외 지수', () => {
+  it('장중인데 15분 넘게 같은 값이면 실시간처럼 보이지 않게 가장 최근 일봉 날짜로 일별을 붙여요', async () => {
+    mode.token = 'ok';
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    vi.setSystemTime(Date.UTC(2026, 10, 2, 14, 0)); // 런던 14:00(장중)
+    const day = (ymd: string, c: string) => ({ stck_bsop_date: ymd, ovrs_nmix_prpr: c });
+    custom.set('/uapi/overseas-price/v1/quotations/inquire-daily-chartprice', () => ({ rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: { ovrs_nmix_prpr: '7969.42', ovrs_nmix_prdy_vrss: '-0.58', prdy_ctrt: '-0.01' }, output2: [day('20261030', '7969.42'), day('20261029', '7970.00')] }));
+    const quotes: Array<{ fresh: { mode: string; asOfDate?: string } }> = [];
+    const { kis } = adapter(memoryStore(), quotes as never);
+    const cac = { id: 'IDX:CAC', assetClass: 'INDEX', code: 'CAC', currency: 'EUR' } as never;
+    const k = kis as unknown as { pollOne: (i: unknown, pri: number) => Promise<void> };
+    await k.pollOne(cac, 0);
+    expect(quotes[0].fresh.mode).toBe('poll');
+    vi.setSystemTime(Date.UTC(2026, 10, 2, 14, 16));
+    await k.pollOne(cac, 0);
+    expect(quotes[1].fresh).toMatchObject({ mode: 'daily', asOfDate: '2026-10-30' });
+  });
+});
+
+describe('환율 봉(한국투자증권)', () => {
+  it('일봉을 시장 구분 X로 받고, 달러로 매긴 값(달러/유로)은 뒤집어 고가·저가를 바꿔요', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/overseas-price/v1/quotations/inquire-daily-chartprice';
+    custom.set(path, (q) => ({
+      rt_cd: '0',
+      msg_cd: 'MCA00000',
+      msg1: '정상',
+      output2: q.get('FID_INPUT_ISCD') === 'FX@EUR' ? [{ stck_bsop_date: '20261030', ovrs_nmix_prpr: '1.10', ovrs_nmix_oprc: '1.08', ovrs_nmix_hgpr: '1.25', ovrs_nmix_lwpr: '1.00' }] : [],
+    }));
+    const { kis } = adapter(memoryStore());
+    const bars = await kis.fxBarsPerUsd('EUR', 'D');
+    expect(bars).toHaveLength(1);
+    expect(bars[0].c).toBeCloseTo(1 / 1.1, 10);
+    expect(bars[0].h).toBeCloseTo(1 / 1.0, 10);
+    expect(bars[0].l).toBeCloseTo(1 / 1.25, 10);
+    const req = requests.find((r) => r.path === path)!;
+    expect([req.q.get('FID_COND_MRKT_DIV_CODE'), req.q.get('FID_PERIOD_DIV_CODE')]).toEqual(['X', 'D']);
   });
 });

@@ -22,7 +22,7 @@ import {
 } from 'lightweight-charts';
 import { bucketStart, intervalMinutes, intradayAt, isHourInterval, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument } from '@bt/shared';
 import { FreshBadge } from '../components/FreshBadge';
-import { fmtPrice, fmtBig, priceDigits } from '../format';
+import { fmtPrice, fmtBig, josa, priceDigits } from '../format';
 import { getBars } from '../stores/bars';
 import { useQuote } from '../stores/feed';
 import { supports, useInstrument } from '../stores/instruments';
@@ -416,7 +416,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         )}
         {noIntraday && (
           <div className="empty-body" style={{ position: 'absolute', inset: 0, background: 'var(--panel)', zIndex: 4 }}>
-            <div>{inst?.nameKo ?? inst?.code}은(는) 데이터 소스가 분봉을 주지 않아서 GIP를 쓸 수 없어요</div>
+            <div>{josa(inst?.nameKo ?? inst?.code ?? '', '은', '는')} 데이터 소스가 분봉을 주지 않아서 GIP를 쓸 수 없어요</div>
             <div className="label">GP(일봉)를 써 보세요 · 예: {inst?.code} GP ⏎</div>
           </div>
         )}

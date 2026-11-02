@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Instrument, Quote } from '@bt/shared';
-import { EcbAdapter, type LiveFxSource } from './ecb';
+import { EcbAdapter, pairBars, type LiveFxSource } from './ecb';
 import type { AdapterHost } from './types';
 
 const usdkrw: Instrument = { id: 'CUR:USDKRW', assetClass: 'CURNCY', code: 'USDKRW' };
@@ -87,5 +87,20 @@ describe('환율', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('환율 차트: 키가 있으면 한국투자증권 봉으로, 달러가 한쪽이면 그대로·뒤집어서, 교차 환율은 같은 날짜 종가로', async () => {
+    const krw = [{ t: 1, o: 1400, h: 1410, l: 1390, c: 1405, v: 0 }, { t: 2, o: 1405, h: 1420, l: 1400, c: 1410, v: 0 }];
+    const eur = [{ t: 2, o: 0.9, h: 0.92, l: 0.88, c: 0.9, v: 0 }];
+    expect(pairBars(null, krw)).toBe(krw);
+    const eurusd = pairBars(eur, null)[0];
+    expect([eurusd.c, eurusd.h, eurusd.l].map((v) => +v.toFixed(4))).toEqual([1.1111, 1.1364, 1.087]);
+    expect(pairBars(eur, krw)).toEqual([{ t: 2, o: 1410 / 0.9, h: 1410 / 0.9, l: 1410 / 0.9, c: 1410 / 0.9, v: 0 }]);
+    const { fx } = setup();
+    fx.setLive({ fxPerUsd: async () => ({ cur: {}, prev: {} }), fxBarsPerUsd: async (c) => (c === 'KRW' ? krw : eur) });
+    const s = await fx.bars(eurkrw, '1d');
+    expect(s.fresh.source).toBe('KIS');
+    expect(s.bars.map((b) => b.c)).toEqual([1410 / 0.9]);
+    fx.stop();
   });
 });
