@@ -34,10 +34,17 @@ describe('설정 저장', () => {
   it('새로 저장한 뒤에 고른 한국식은 유지돼요', async () => {
     const { store, dir } = await storeWith(OLD);
     await store.setSettings({ display: { ...store.getSettings().display, upDown: 'korean' } });
-    expect(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')).schema).toBe(2);
+    expect(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')).schema).toBe(3);
     const again = new Store(dir, await fileSecretBox(dir));
     await again.load();
     expect(again.getSettings().display.upDown).toBe('korean');
+  });
+
+  it('예전 기본 강조 색(#FB8B1E)으로 저장된 파일은 새 기본값(블룸버그 앰버)으로, 고른 다른 색은 그대로', async () => {
+    const { store } = await storeWith({ ...OLD, schema: 2 });
+    expect(store.getSettings().display.accent).toBe('#FFA028');
+    const teal = await storeWith({ ...OLD, display: { ...OLD.display, accent: '#2EC4B6' }, schema: 2 });
+    expect(teal.store.getSettings().display.accent).toBe('#2EC4B6');
   });
 
   it('앱키는 암호화해서 저장해요', async () => {

@@ -43,7 +43,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   general: { restoreWorkspace: true },
-  display: { theme: 'modern', upDown: 'global', accent: '#FB8B1E', fontScale: 1 },
+  display: { theme: 'modern', upDown: 'global', accent: '#FFA028', fontScale: 1 },
   commandLine: {
     assist: 'beginner',
     securityOnlyEnter: 'keep-function',
@@ -69,4 +69,5 @@ export interface CredentialStatus {
 }
 
 /** 강조 색 후보: 등락·선택·자산군 칩 색과 겹치지 않는 색만(02) */
-export const ACCENT_CHOICES = ['#FB8B1E', '#E8E8E8', '#2EC4B6'];
+/** 강조 색 후보: 블룸버그 앰버(기본), 예전 주황, 흰색, 청록 */
+export const ACCENT_CHOICES = ['#FFA028', '#FB8B1E', '#E8E8E8', '#2EC4B6'];

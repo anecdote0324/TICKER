@@ -10,10 +10,11 @@ export const settings = createStore<Settings>(DEFAULT_SETTINGS);
 export function applyTheme(s: Settings, doc: Document = document) {
   const root = doc.documentElement;
   const korean = s.display.upDown === 'korean';
-  root.style.setProperty('--up', korean ? '#FF5F57' : '#3FD08A');
-  root.style.setProperty('--down', korean ? '#4C9AFF' : '#FF5F57');
-  root.style.setProperty('--up-bg', korean ? 'rgba(255,95,87,0.28)' : 'rgba(63,208,138,0.24)');
-  root.style.setProperty('--down-bg', korean ? 'rgba(76,154,255,0.28)' : 'rgba(255,95,87,0.26)');
+  // 글로벌식은 블룸버그의 초록·빨강, 한국식은 빨강 상승·파랑 하락(02 색)
+  root.style.setProperty('--up', korean ? '#E8203C' : '#1FBF3F');
+  root.style.setProperty('--down', korean ? '#2F7BFF' : '#E8203C');
+  root.style.setProperty('--up-bg', korean ? 'rgba(232,32,60,0.32)' : 'rgba(31,191,63,0.3)');
+  root.style.setProperty('--down-bg', korean ? 'rgba(47,123,255,0.32)' : 'rgba(232,32,60,0.32)');
   root.style.setProperty('--accent', s.display.accent);
   applyZoom(s.display.fontScale, doc);
 }

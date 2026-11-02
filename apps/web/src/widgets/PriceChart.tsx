@@ -106,6 +106,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const [liveBar, setLiveBar] = useState<Bar | null>(null);
   const quote = useQuote(inst?.id);
   const upDown = useStore(settings, (s) => s.display.upDown);
+  const accent = useStore(settings, (s) => s.display.accent);
   const boxRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -127,24 +128,26 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const chart = createChart(el, {
       width: el.clientWidth,
       height: el.clientHeight,
-      layout: { background: { type: ColorType.Solid, color: '#0A0A0A' }, textColor: '#8C8C8C', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, attributionLogo: false },
-      grid: { vertLines: { color: '#141414' }, horzLines: { color: '#141414' } },
+      layout: { background: { type: ColorType.Solid, color: '#000000' }, textColor: '#BDBDBD', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, attributionLogo: false },
+      grid: { vertLines: { color: '#161616' }, horzLines: { color: '#161616' } },
       rightPriceScale: { borderColor: '#242424' },
       timeScale: { borderColor: '#242424', rightOffset: RIGHT_PAD, timeVisible: timeMode, secondsVisible: false, tickMarkFormatter: (t: number, type: TickMarkType) => kstTick(t, type) },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#555', labelBackgroundColor: '#262626' }, horzLine: { color: '#555', labelBackgroundColor: '#262626' } },
       // 시간 축은 한국 시간으로 보여 줘요(배지 시각과 같은 기준)
       localization: { locale: 'ko-KR', timeFormatter: (t: number) => kstLabel(t, timeMode ? 'full' : 'date') },
     });
-    const candle = chart.addSeries(CandlestickSeries, { borderVisible: false, priceLineColor: '#FB8B1E' });
+    // 현재가 꼬리표와 20봉선은 강조 색(앰버). 강조 색을 바꾸면 아래 색 효과에서 다시 칠해요
+    const accentColor = cssVar('--accent') || '#FFA028';
+    const candle = chart.addSeries(CandlestickSeries, { borderVisible: false, priceLineColor: accentColor });
     const vol = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false });
     chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.22 } });
     // 이동평균선은 가격 축 맞춤에서 빼요. 현재가에서 멀리 떨어진 60일선 때문에 캔들이 작게 몰리지 않게
     const maOptions = { lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider: () => null } as const;
-    const ma20 = chart.addSeries(LineSeries, { ...maOptions, color: '#FB8B1E' });
+    const ma20 = chart.addSeries(LineSeries, { ...maOptions, color: accentColor });
     const ma60 = chart.addSeries(LineSeries, { ...maOptions, color: '#BDBDBD' });
     // 환율처럼 종가만 있는 데이터는 캔들 대신 선으로 그려요
-    const closeLine = chart.addSeries(LineSeries, { color: '#E6E6E6', lineWidth: 1, priceLineColor: '#FB8B1E', visible: false });
+    const closeLine = chart.addSeries(LineSeries, { color: '#E6E6E6', lineWidth: 1, priceLineColor: accentColor, visible: false });
     closeRef.current = closeLine;
     chartRef.current = chart;
     candleRef.current = candle;
@@ -194,12 +197,15 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
 
   // 등락 색(설정)
   useEffect(() => {
-    const up = cssVar('--up') || '#3FD08A';
-    const down = cssVar('--down') || '#FF5F57';
-    candleRef.current?.applyOptions({ upColor: up, downColor: down, wickUpColor: up, wickDownColor: down });
+    const up = cssVar('--up') || '#1FBF3F';
+    const down = cssVar('--down') || '#E8203C';
+    const accentColor = cssVar('--accent') || '#FFA028';
+    candleRef.current?.applyOptions({ upColor: up, downColor: down, wickUpColor: up, wickDownColor: down, priceLineColor: accentColor });
+    ma20Ref.current?.applyOptions({ color: accentColor });
+    closeRef.current?.applyOptions({ priceLineColor: accentColor });
     const bars = barsRef.current;
     volRef.current?.setData(bars.map((b, i) => ({ time: b.t as UTCTimestamp, value: b.v, color: (i > 0 && b.c < bars[i - 1].c) || b.c < b.o ? `${down}66` : `${up}66` })));
-  }, [upDown, series]);
+  }, [upDown, accent, series]);
 
   const noIntraday = !!inst && intraday && !supports('GIP', inst);
 
@@ -259,8 +265,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     closeRef.current?.applyOptions({ visible: closeOnly, priceFormat: { type: 'price', precision: d, minMove: Math.pow(10, -d) } });
     closeRef.current?.setData(closeOnly ? bars.map((b) => ({ time: b.t as UTCTimestamp, value: b.c })) : []);
     c.setData(bars.map((b) => ({ time: b.t as UTCTimestamp, open: b.o, high: b.h, low: b.l, close: b.c })));
-    const up = cssVar('--up') || '#3FD08A';
-    const down = cssVar('--down') || '#FF5F57';
+    const up = cssVar('--up') || '#1FBF3F';
+    const down = cssVar('--down') || '#E8203C';
     volRef.current?.setData(bars.map((b, i) => ({ time: b.t as UTCTimestamp, value: b.v, color: (i > 0 && b.c < bars[i - 1].c) || b.c < b.o ? `${down}66` : `${up}66` })));
     // 이동평균선은 GP에만(일봉이면 20·60일, 시간봉이면 20·60봉)
     const withMa = !intraday;
@@ -391,7 +397,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
           )}
           {!intraday && (
             <span>
-              <i style={{ display: 'inline-block', width: 10, height: 2, background: '#FB8B1E', verticalAlign: 'middle' }} /> 20{' '}
+              <i style={{ display: 'inline-block', width: 10, height: 2, background: 'var(--accent)', verticalAlign: 'middle' }} /> 20{' '}
               <i style={{ display: 'inline-block', width: 10, height: 2, background: '#BDBDBD', verticalAlign: 'middle' }} /> 60
             </span>
           )}

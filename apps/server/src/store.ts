@@ -68,7 +68,9 @@ export class Store {
     if (s) {
       // schema 1: 등락 색 기본값이 한국식이던 때. 화면이 설정을 통째로 저장해서 사용자가 고르지 않은 값도 들어 있어요.
       // 기본값을 글로벌식으로 바꾸면서(02), 그때 저장된 등락 색은 버리고 새 기본값을 써요
-      if ((s.schema ?? 1) < SETTINGS_SCHEMA && s.display) delete (s.display as Partial<Settings['display']>).upDown;
+      if ((s.schema ?? 1) < 2 && s.display) delete (s.display as Partial<Settings['display']>).upDown;
+      // schema 2: 강조 색 기본값이 #FB8B1E이던 때. 블룸버그 테마(앰버 #FFA028)로 바꾸면서 예전 기본값 그대로면 새 기본값을 써요
+      if ((s.schema ?? 1) < 3 && s.display?.accent?.toUpperCase() === '#FB8B1E') delete (s.display as Partial<Settings['display']>).accent;
       this.settings = mergeSettings(s);
     }
     for (const n of STATE_NAMES) {
@@ -136,7 +138,7 @@ export class Store {
 }
 
 /** 설정 파일 형식 번호. 기본값을 바꿔서 예전 파일을 고쳐 읽어야 할 때 올려요 */
-const SETTINGS_SCHEMA = 2;
+const SETTINGS_SCHEMA = 3;
 
 function mergeSettings(s: Partial<Settings>): Settings {
   const d = DEFAULT_SETTINGS;
