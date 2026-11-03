@@ -41,6 +41,8 @@ export interface PanelState {
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;
+  /** COMP에서 고른 기간 */
+  compRange?: string;
   /** MOST에서 고른 순위 종류(거래량·거래대금·상승률·하락률) */
   mostKind?: 'volume' | 'turnover' | 'gainers' | 'losers';
 }
@@ -91,7 +93,9 @@ export function applyExecution(panelId: string, exec: Execution) {
   if (!p || exec.kind !== 'function' || !exec.fn) return;
   const prev: NavEntry = { fn: p.fn, securityId: p.securityId, args: p.args };
   const securityId = exec.instrumentId ?? p.securityId;
-  patchPanel(panelId, { fn: exec.fn, securityId, args: exec.args, back: [...p.back, prev].slice(-50), fwd: [] });
+  // 종목만 바꿔 지금 기능을 유지하면(COMP를 보던 패널에서 000660⏎) 비교 종목 같은 인자도 그대로 둬요
+  const args = exec.args ?? (exec.keepArgs && exec.fn === p.fn ? p.args : undefined);
+  patchPanel(panelId, { fn: exec.fn, securityId, args, back: [...p.back, prev].slice(-50), fwd: [] });
   if (exec.instrumentId) {
     propagateSecurity({ ...p, fn: exec.fn }, exec.instrumentId);
     const inst = getInstrument(exec.instrumentId);

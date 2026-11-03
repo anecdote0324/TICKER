@@ -5,14 +5,19 @@ import type { AssetClass } from './instrument';
 
 export type SecurityNeed = 'none' | 'one' | 'optional';
 
-/** 기능 뒤에 붙이는 인자(05 §3.1, v0.2). MOST는 시장 하나 */
+/** 기능 뒤에 붙이는 인자(05 §3.1, v0.2). MOST는 시장 하나, COMP는 비교할 종목 여러 개 */
 export interface FunctionArgs {
-  kind: 'market';
+  kind: 'market' | 'securities';
   /** 자리 표시와 오류 문구에 쓰는 이름: '시장' */
   label: string;
-  /** 고를 수 있는 값. 첫 번째가 기본값이에요 */
+  /** 고를 수 있는 값. 첫 번째가 기본값이에요(시장 인자) */
   choices: Array<{ code: string; label: string }>;
+  /** 받을 수 있는 인자 수 */
+  max?: number;
 }
+
+/** COMP에 겹칠 수 있는 비교 종목 수 */
+export const COMP_MAX = 5;
 
 /** MOST 시장 인자: 코스피·코스닥·미국(나스닥+뉴욕)·코인(Binance) */
 export const MOST_MARKETS: FunctionArgs['choices'] = [
@@ -174,14 +179,29 @@ const BUILT: FunctionDef[] = [
     speed: '국내·미국 30초마다 조회(한국투자증권 순위), 코인 30초마다(Binance 24시간)',
     examples: ['MOST', 'MOST KQ', 'MOST US', 'MOST CRYPTO'],
     aliases: ['LVI'],
-    args: { kind: 'market', label: '시장', choices: MOST_MARKETS },
+    args: { kind: 'market', label: '시장', choices: MOST_MARKETS, max: 1 },
+  },
+  {
+    code: 'COMP',
+    nameKo: '비교 차트',
+    nameEn: 'Comparative Returns',
+    summary: '여러 종목 수익률 겹쳐 비교',
+    detail: '기준 종목과 비교 종목들의 수익률(기간 시작 = 0%)을 한 차트에 겹쳐요. 기능 뒤에 비교할 종목을 붙여요: 005930 COMP 000660 KOSPI. 비교 종목을 안 붙이면 그 시장의 대표 지수와 비교해요.',
+    security: 'one',
+    assetClasses: ALL_ASSETS,
+    keywords: ['비교', '수익률비교'],
+    version: 'v0.2',
+    implemented: true,
+    speed: '일봉(마지막 봉은 시세와 같은 속도)',
+    examples: ['005930 COMP', '005930 COMP 000660 KOSPI', 'AAPL US COMP MSFT US SPX'],
+    similar: ['GP'],
+    args: { kind: 'securities', label: '비교 종목', choices: [], max: COMP_MAX },
   },
 ];
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
   N: { security: 'optional', assetClasses: ALL_ASSETS, keywords: ['뉴스', '공시'], summary: '뉴스·공시 헤드라인' },
-  COMP: { security: 'one', assetClasses: ALL_ASSETS, keywords: ['비교'], summary: '여러 종목 겹쳐 비교' },
   HMAP: { security: 'none', assetClasses: [], keywords: ['히트맵'], summary: '업종 기간별 등락 색' },
   IMAP: { security: 'none', assetClasses: [], keywords: ['업종'], summary: '업종별 등락 타일' },
   FA: { security: 'one', assetClasses: ['EQUITY'], keywords: ['재무', '재무제표'], summary: '손익·재무상태·현금흐름' },

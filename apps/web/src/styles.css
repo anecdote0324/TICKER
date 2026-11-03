@@ -1622,3 +1622,50 @@ button {
     display: none;
   }
 }
+
+/* ── COMP 비교 차트 ── */
+.comp-legend {
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  right: 70px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font: 11px var(--mono);
+  pointer-events: auto;
+}
+.comp-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.6);
+}
+.comp-item i {
+  width: 10px;
+  height: 2px;
+  display: inline-block;
+}
+.comp-name {
+  color: var(--name);
+  font-family: var(--sans);
+}
+.comp-x {
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 10px;
+}
+.comp-x:hover {
+  color: var(--value-hi);
+}
+.comp-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 28px;
+  z-index: 3;
+  font-size: 11px;
+}

@@ -94,6 +94,8 @@ export interface Segment {
   lookup?: { code: string; market: 'KR' | 'US' };
   /** 기능 인자의 값(MOST KQ의 'KQ') */
   arg?: string;
+  /** 종목 인자(COMP의 비교 종목). 해석한 종목은 inst, 붙인 시장은 market */
+  argSecurity?: boolean;
 }
 
 export type RowKind = 'security' | 'function' | 'market' | 'asset' | 'command' | 'convert' | 'fix' | 'unavailable' | 'nomatch' | 'lookup' | 'history' | 'header' | 'arg';
@@ -150,8 +152,10 @@ export interface Execution {
   canonical: string;
   /** 종목이 필요 없는 기능에 종목을 함께 친 경우: 띄운 종목만 바꿔요 */
   setsSecurityOnly?: boolean;
-  /** 기능 인자(MOST의 시장 등) */
+  /** 기능 인자(MOST의 시장, COMP의 비교 종목 id) */
   args?: string[];
+  /** 종목만 입력해서 지금 기능을 유지할 때: 패널의 인자(COMP 비교 종목)도 그대로 둬요 */
+  keepArgs?: boolean;
   /** ⏎ 라벨에 붙은 설명 */
   notes: string[];
 }

@@ -36,7 +36,7 @@ import { TitleBar } from './common';
 type CrossListener = (t: number | null, from: IChartApi) => void;
 const crossListeners = new Set<CrossListener>();
 
-function cssVar(name: string) {
+export function cssVar(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
@@ -46,13 +46,13 @@ function kst(t: number) {
   return new Date((t + 9 * 3600) * 1000);
 }
 
-function kstLabel(t: number, kind: 'full' | 'date') {
+export function kstLabel(t: number, kind: 'full' | 'date') {
   const d = kst(t);
   const date = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
   return kind === 'date' ? date : `${date} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
 
-function kstTick(t: number, type: TickMarkType) {
+export function kstTick(t: number, type: TickMarkType) {
   const d = kst(t);
   switch (type) {
     case TickMarkType.Year:

@@ -13,6 +13,7 @@ import {
 } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import { FUNCTIONS } from '@bt/shared';
+import { Comp } from '../widgets/Comp';
 import { Cryp } from '../widgets/Cryp';
 import { Des } from '../widgets/Des';
 import { Fxc } from '../widgets/Fxc';
@@ -92,6 +93,8 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Des panel={p} />;
     case 'MOST':
       return <Most panel={p} />;
+    case 'COMP':
+      return <Comp panel={p} />;
     default: {
       const fn = p.fn ? FUNCTIONS.find((f) => f.code === p.fn) : undefined;
       return (

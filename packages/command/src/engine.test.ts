@@ -428,3 +428,35 @@ describe('기능 인자(05 §3.1, v0.2): MOST 시장', () => {
     expect(run('FXC USD').label).toContain('인자를 받지 않아요');
   });
 });
+
+describe('기능 인자(05 §3.1, v0.2): COMP 비교 종목', () => {
+  it('기준 종목 뒤의 종목들을 비교 종목으로', () => {
+    const a = run('005930 COMP 000660 AAPL US');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'COMP', instrumentId: 'EQ:KS:005930', args: ['EQ:KS:000660', 'EQ:US:AAPL'], canonical: '005930 KS EQUITY COMP 000660 AAPL US' } });
+    expect(a.label).toContain('비교: SK하이닉스, ');
+  });
+  it('COMP를 먼저 치면 첫 종목이 기준, 그다음부터 비교 종목', () => {
+    expect(run('COMP 005930 BTC').plan).toMatchObject({ exec: { instrumentId: 'EQ:KS:005930', args: ['CRY:BTC'] } });
+  });
+  it('표준형을 다시 쳐도 같은 결과', () => {
+    const c = (run('005930 COMP 000660 AAPL US').plan as { exec: { canonical: string } }).exec.canonical;
+    expect(run(c).plan).toMatchObject({ exec: { args: ['EQ:KS:000660', 'EQ:US:AAPL'] } });
+  });
+  it('비교 종목을 안 붙이면 인자 없이(패널이 대표 지수로)', () => {
+    const a = run('005930 COMP');
+    expect((a.plan as { exec: { args?: string[] } }).exec.args).toBeUndefined();
+  });
+  it('짧거나 겹치는 비교 종목은 고르기, 없는 종목은 실행 안 됨', () => {
+    expect(run('005930 COMP GS').plan.kind).toBe('select');
+    expect(run('005930 COMP ZZZZZQ').plan.kind).toBe('error');
+  });
+  it('비교 종목은 5개까지', () => {
+    expect(run('005930 COMP 000660 207940 006400 105560 069500 AAPL US').label).toContain('5개까지');
+  });
+  it('종목만 바꾸면(COMP를 보던 패널) 비교 종목은 그대로 둬요', () => {
+    const samsung = index.get('EQ:KS:005930')!.inst;
+    const a = engine.analyze('000660', 6, { ...ctx(), panel: { security: samsung, fn: 'COMP' } });
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'COMP', instrumentId: 'EQ:KS:000660', keepArgs: true } });
+  });
+});
+

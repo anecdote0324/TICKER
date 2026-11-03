@@ -329,6 +329,17 @@ export class CommandEngine {
           state = 'sec';
           continue;
         }
+        if (fnSeg?.fn?.args?.kind === 'securities') {
+          // 앞 비교 종목의 시장(AAPL US): 그 인자 칸에 붙여요. 기준 종목의 시장으로 읽지 않게 따로 칸을 만들지 않아요
+          const prev = segs[segs.length - 1];
+          const pm = MARKET_WORDS[up];
+          if (pm && pm !== 'IGNORE' && prev?.slot === 'arg' && prev.argSecurity && !prev.market) {
+            segs[segs.length - 1] = { ...prev, end: t.end, text: input.slice(prev.start, t.end), market: pm };
+            continue;
+          }
+          segs.push(this.argSecuritySegment(mk(i, i, {}), fnSeg.fn, segs));
+          continue;
+        }
         const again = exactFunction(w) ?? (ctx.hanEng ? convertedFunction(w) : undefined);
         if (again && fnSeg) {
           segs.push(
@@ -385,6 +396,12 @@ export class CommandEngine {
         state = 'asset';
         continue;
       }
+      // COMP 005930 000660: 기준 종목 뒤의 토큰은 비교 종목이에요
+      if (fnSeg?.fn?.args?.kind === 'securities' && secSeg) {
+        segs.push(this.argSecuritySegment(mk(i, i, {}), fnSeg.fn, segs));
+        state = 'fn';
+        continue;
+      }
       // 기능(종목 뒤에서는 길이와 상관없이 정확한 기능 코드, 05 §6.3)
       const fx = exactFunction(w);
       if (fx) {
@@ -439,8 +456,28 @@ export class CommandEngine {
       const m = this.resolveSecurity(seg, ctx, composing, firstSlot, mSeg, aSeg);
       matches.set(seg.index, m);
     }
+    // ── 비교 종목(COMP) 해석: 붙인 시장으로 걸러요 ──
+    for (const seg of segs) {
+      if (seg.slot !== 'arg' || !seg.argSecurity || seg.status === 'invalid') continue;
+      const code = seg.market ? seg.text.split(/\s+/)[0] : seg.text;
+      const tmp: Segment = { ...seg, text: code, status: 'exact' };
+      const m = this.resolveSecurity(tmp, ctx, composing, false, seg.market ? ({ market: seg.market } as Segment) : undefined, undefined);
+      seg.inst = tmp.inst;
+      seg.status = tmp.status;
+      seg.chooseReason = tmp.chooseReason;
+      seg.error = tmp.status === 'nomatch' ? `'${code}'와 맞는 비교 종목이 없어요` : tmp.error;
+      matches.set(seg.index, m);
+    }
 
     return { segs, matches };
+  }
+
+  /** 종목 인자 칸(COMP의 비교 종목). 해석은 parse 끝에서 해요 */
+  private argSecuritySegment(seg: Segment, fn: FunctionDef, segs: Segment[]): Segment {
+    const max = fn.args?.max ?? 1;
+    const used = segs.filter((s) => s.slot === 'arg' && s.argSecurity).length;
+    if (used >= max) return { ...seg, slot: 'arg', status: 'invalid', error: `${fn.args?.label ?? '인자'}은(는) ${max}개까지예요` };
+    return { ...seg, slot: 'arg', argSecurity: true };
   }
 
   private hasExactSecurity(word: string): boolean {
@@ -1032,16 +1069,17 @@ export class CommandEngine {
       return { kind: 'execute', exec };
     }
     if (!r.security) return { kind: 'need-security', fn };
-    return {
-      kind: 'execute',
-      exec: {
-        kind: 'function',
-        fn: fn.code,
-        instrumentId: r.security.id,
-        canonical: `${canonicalSecurity(r.security)} ${fn.code}`,
-        notes,
-      },
+    const argSegs = segs.filter((s) => s.slot === 'arg' && s.argSecurity && s.inst);
+    const exec: Execution = {
+      kind: 'function',
+      fn: fn.code,
+      instrumentId: r.security.id,
+      canonical: [`${canonicalSecurity(r.security)} ${fn.code}`, ...argSegs.map((s) => shortCommandSecurity(s.inst!))].join(' '),
+      notes,
     };
+    if (argSegs.length > 0) exec.args = argSegs.map((s) => s.inst!.id);
+    else if (r.fnImplied) exec.keepArgs = true;
+    return { kind: 'execute', exec };
   }
 
   private rowsFor(
@@ -1121,6 +1159,11 @@ export class CommandEngine {
         break;
       }
       case 'arg': {
+        if (seg.argSecurity) {
+          rows.push(...this.securityRows(seg, matches.get(seg.index) ?? [], ctx, false));
+          if (rows.length === 0 && seg.status !== 'invalid') rows.push(noMatchRow(seg.text));
+          break;
+        }
         const f = segs.find((s) => s.slot === 'function' && s.fn)?.fn;
         if (f?.args && seg.status !== 'invalid') rows.push(...argRows(f, seg.arg ?? seg.text));
         break;
@@ -1322,7 +1365,12 @@ export class CommandEngine {
       return { input, cursor: input.length, noop: true };
     }
 
-    if (row.kind === 'security' && row.instrumentId) {
+    if (row.kind === 'security' && row.instrumentId && seg?.slot === 'arg') {
+      // 비교 종목: 자산군까지 붙이면 다음 비교 종목으로 읽혀서 미국 종목만 시장을 붙여요(AAPL US)
+      const inst = this.index.get(row.instrumentId)?.inst;
+      chosen = { start, text: insert, rowId: row.id };
+      if (inst?.market === 'US') insert += ' US';
+    } else if (row.kind === 'security' && row.instrumentId) {
       const inst = this.index.get(row.instrumentId)?.inst;
       chosen = { start, text: insert, rowId: row.id };
       const next = segs[a.listSegment + 1];
@@ -1561,7 +1609,8 @@ export function labelFor(plan: EnterPlan, index?: SearchIndex): string {
       }
       const inst = e.instrumentId ? index?.get(e.instrumentId)?.inst : undefined;
       const name = inst ? labelSecurity(inst) : e.canonical.split(' ')[0];
-      return `⏎ 실행: ${name} ${fn.nameKo}${notes || ` (${fn.code})`}`;
+      const vs = e.args?.length ? ` · 비교: ${e.args.map((id) => { const x = index?.get(id)?.inst; return x ? displayName(x) : id; }).join(', ')}` : '';
+      return `⏎ 실행: ${name} ${fn.nameKo}${notes || ` (${fn.code})`}${vs}`;
     }
     case 'select':
       return `⏎ 선택: ${plan.label}`;
