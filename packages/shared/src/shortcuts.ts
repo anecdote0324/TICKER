@@ -15,6 +15,7 @@ export type ShortcutId =
   | 'prevPanel'
   | 'openList'
   | 'descCard'
+  | 'functionList'
   | 'assetEquity'
   | 'assetCrypto'
   | 'assetCurncy'
@@ -44,7 +45,9 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'prevPanel', label: '이전 패널', scope: '어디서나', win: ['Ctrl+Shift+Tab'], mac: ['Ctrl+Shift+Tab'] },
   // Ctrl+Space는 일부 IME에서 입력 언어 전환 키예요. Mac에서는 입력 소스 전환이라 묶지 않아요
   { id: 'openList', label: '지금 칸 목록 열기(다른 뜻 보기)', scope: '커맨드 라인', win: ['Alt+ArrowDown', 'Ctrl+Space'], mac: ['Alt+ArrowDown'] },
-  { id: 'descCard', label: '설명 창 / 문법 요약', scope: '커맨드 라인', win: ['F1', 'Mod+/'], mac: ['F1', 'Mod+/'] },
+  // F1: 기능 목록(v0.2). 커맨드 라인 밖에서 누르면 활성 패널의 커맨드 라인으로 가서 열어요
+  { id: 'functionList', label: '기능 목록', scope: '어디서나', win: ['F1'], mac: ['F1'] },
+  { id: 'descCard', label: '설명 창 / 문법 요약', scope: '커맨드 라인', win: ['Mod+/'], mac: ['Mod+/'] },
   { id: 'assetEquity', label: '자산군 EQUITY', scope: '커맨드 라인', win: ['Mod+Shift+E'], mac: ['Mod+Shift+E'] },
   { id: 'assetCrypto', label: '자산군 CRYPTO', scope: '커맨드 라인', win: ['Mod+Shift+C'], mac: ['Mod+Shift+C'] },
   { id: 'assetCurncy', label: '자산군 CURNCY', scope: '커맨드 라인', win: ['Mod+Shift+X'], mac: ['Mod+Shift+X'] },

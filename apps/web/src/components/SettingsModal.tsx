@@ -191,7 +191,8 @@ const COMPARE: Array<[string, Record<AssistLevel, string>]> = [
   ['후보 목록', { beginner: '입력하면 바로', standard: '입력하면 바로', expert: 'Tab·↓·Alt+↓, 애매·오류', off: '↓·Alt+↓만' }],
   ['흐린 글씨 미리보기', { beginner: '✓', standard: '✓', expert: '✓', off: '—' }],
   ['기능 설명', { beginner: '✓', standard: '✓', expert: '코드와 이름만', off: '—' }],
-  ['설명 창', { beginner: '자리가 있으면 자동', standard: 'F1', expert: 'F1', off: 'F1' }],
+  ['설명 창', { beginner: '자리가 있으면 자동', standard: 'Ctrl+/ (Mac ⌘/)', expert: 'Ctrl+/ (Mac ⌘/)', off: 'Ctrl+/ (Mac ⌘/)' }],
+  ['기능 목록', { beginner: 'F1', standard: 'F1', expert: 'F1', off: 'F1' }],
   ['진행 표시', { beginner: '전체', standard: '전체', expert: '메시지만', off: '메시지만' }],
   ['키 안내·시작 목록·팁', { beginner: '✓', standard: '—', expert: '—', off: '—' }],
   ['⏎ 라벨', { beginner: '✓', standard: '✓', expert: '✓', off: '✓' }],
@@ -231,7 +232,7 @@ function Preview({ level }: { level: AssistLevel }) {
             <span className="ac-canon">{r.canonical}</span>
           </div>
         ))}
-      {level === 'beginner' && <div className="ac-keys" style={{ fontFamily: 'var(--sans)' }}>Tab 자동완성 · ↑↓ 고르기 · ⏎ 실행 · Esc 닫기 · F1 설명</div>}
+      {level === 'beginner' && <div className="ac-keys" style={{ fontFamily: 'var(--sans)' }}>Tab 자동완성 · ↑↓ 고르기 · ⏎ 실행 · Esc 닫기 · F1 기능 목록</div>}
       {(level === 'expert' || level === 'off') && (
         <div className="label" style={{ fontFamily: 'var(--sans)', marginTop: 4 }}>
           {level === 'expert' ? '목록은 Tab·↓를 누를 때 열려요' : '목록은 ↓를 누를 때만 열려요'}

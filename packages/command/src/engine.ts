@@ -270,8 +270,11 @@ export class CommandEngine {
       i = 1;
       state = 'fn';
     } else {
-      const fnHit = exactFunction(first.norm);
-      const latinLen = /^[A-Za-z0-9]+$/.test(first.norm) ? first.norm.length : 99;
+      // 목록에서 직접 고른 기능(N처럼 한 글자라 종목 앞부분과 겹치는 기능도 고르면 기능이에요)
+      const picked = ctx.chosen?.find((c) => c.start === first.start && c.text === first.text && c.rowId.startsWith('fn:'));
+      const pickedFn = picked ? FUNCTIONS.find((f) => f.code === picked.rowId.slice(3)) : undefined;
+      const fnHit: FnHit | undefined = pickedFn ? { fn: pickedFn, tier: 0, via: 'code', exact: true } : exactFunction(first.norm);
+      const latinLen = pickedFn ? 99 : /^[A-Za-z0-9]+$/.test(first.norm) ? first.norm.length : 99;
       // 인자를 받는 기능(MOST)은 뒤의 시장 단어가 인자예요: MOST KQ = 코스닥 상위 종목. 종목 MOST는 'MOST US EQUITY'
       const qualifierIsArg = nextIsQualifier && !!fnHit?.fn.args && !!argValue(fnHit.fn, toks[1].norm);
       if (fnHit && latinLen >= 2 && (!nextIsQualifier || qualifierIsArg)) {
@@ -1469,6 +1472,9 @@ export class CommandEngine {
       if (seg && seg.status !== 'choose' && seg.inst?.id === row.instrumentId && restEmpty && seg.text.toUpperCase() === row.insert.toUpperCase()) {
         // 이미 정해진 종목: 시장·자산군만 채워요
       }
+    } else if (row.kind === 'function' && row.fnCode && input.slice(0, start).trim() === '') {
+      // 줄 첫머리에서 고른 기능: N처럼 종목 앞부분과 겹쳐도 기능으로 읽게 기억해요
+      chosen = { start, text: insert, rowId: `fn:${row.fnCode}` };
     }
     let out = input.slice(0, start) + insert;
     let closeList = false;
@@ -1713,6 +1719,11 @@ export function labelFor(plan: EnterPlan, index?: SearchIndex): string {
       }
       const fn = FUNCTIONS.find((f) => f.code === e.fn)!;
       const notes = e.notes.length > 0 ? ` (${e.notes.join(', ')})` : '';
+      if (fn.security === 'optional') {
+        // 종목이 있어도 없어도 되는 기능(N): 붙인 종목이 있으면 그 종목으로
+        const inst = e.instrumentId ? index?.get(e.instrumentId)?.inst : undefined;
+        return `⏎ 실행: ${inst ? `${labelSecurity(inst)} ` : ''}${fn.nameKo}${notes || ` (${fn.code})`}`;
+      }
       if (!isSecurityFunction(fn)) {
         const arg = e.args?.length && fn.args ? ` · ${e.args.map((v) => fn.args!.choices.find((c) => c.code === v)?.label ?? v).join(', ')}` : '';
         return `⏎ 실행: ${fn.nameKo}${arg} (종목 불필요)${notes}`;

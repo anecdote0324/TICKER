@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Instrument } from '@bt/shared';
 import { CommandEngine } from './engine';
+import { functionListLine, functionListRows } from './function-list';
 import { fixtureInstruments } from './fixtures';
 import { SearchIndex } from './search-index';
 import type { Analysis, EngineContext } from './types';
@@ -549,5 +550,88 @@ describe('BLP 런치패드(v0.2)', () => {
   it('BLP⏎은 워크스페이스 메뉴', () => {
     expect(run('BLP').plan).toMatchObject({ kind: 'execute', exec: { kind: 'command', cmd: 'launchpad' } });
     expect(run('BLP').label).toBe('⏎ 실행: 워크스페이스 메뉴 열기 (BLP)');
+  });
+});
+
+describe('F1 기능 목록(v0.2): 종목 다음에 쓰는 기능과 종목 없이 쓰는 기능', () => {
+  const rows = functionListRows();
+  const headers = rows.filter((r) => r.kind === 'header').map((r) => r.id);
+  const codesAfter = (hdr: string) => {
+    const i = rows.findIndex((r) => r.id === hdr);
+    const out: string[] = [];
+    for (let k = i + 1; k < rows.length && rows[k].kind !== 'header'; k++) out.push(rows[k].code);
+    return out;
+  };
+
+  it('두 묶음으로 나눠요: DES·N은 종목 다음, IMAP·FXC는 종목 없이', () => {
+    expect(headers).toEqual(['flist:hdr:sec', 'flist:hdr:none']);
+    expect(codesAfter('flist:hdr:sec')).toEqual(expect.arrayContaining(['GP', 'GIP', 'DES', 'COMP', 'N']));
+    expect(codesAfter('flist:hdr:none')).toEqual(expect.arrayContaining(['MON', 'WEI', 'FXC', 'CRYP', 'MOST', 'HMAP', 'IMAP', 'LAST']));
+    expect(codesAfter('flist:hdr:sec')).not.toContain('IMAP');
+    // 아직 만들지 않은 기능은 빼요
+    expect(rows.some((r) => r.code === 'FA')).toBe(false);
+    expect(rows.find((r) => r.code === 'N')?.info).toContain('종목 없이도 돼요');
+    expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
+  });
+
+  /** 목록에서 고르고 Enter: 만든 줄을 그대로 해석해요 */
+  function pick(code: string, text: string, panel: EngineContext['panel'] = {}) {
+    const { line, chosen } = functionListLine(code, text, panel.security);
+    const c = ctx(panel, { chosen: chosen ? [chosen] : [] });
+    return { line, a: run(line, c) };
+  }
+
+  it('005930 다음 F1 → DES ⏎ = 005930 DES', () => {
+    const { line, a } = pick('DES', '005930');
+    expect(line).toBe('005930 DES');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'DES', instrumentId: 'EQ:KS:005930' } });
+  });
+
+  it('빈 줄에서 DES를 고르면 패널의 종목으로 열어요', () => {
+    const { line, a } = pick('DES', '', { security: inst('EQ:KS:005930') });
+    expect(line).toBe('005930 KS EQUITY DES');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'DES', instrumentId: 'EQ:KS:005930' } });
+  });
+
+  it('종목이 없으면 기능만 써서 뒤에 종목을 치게 해요', () => {
+    const { line, a } = pick('DES', '');
+    expect(line).toBe('DES');
+    expect(a.plan.kind).toBe('need-security');
+  });
+
+  it('N은 종목 없이도 바로 열려요(한 글자라 종목 앞부분과 겹쳐도)', () => {
+    const { line, a } = pick('N', '');
+    expect(line).toBe('N');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'N' } });
+    expect(a.label).toBe('⏎ 실행: 뉴스·공시 (N)');
+  });
+
+  it('종목을 붙인 N은 그 종목의 뉴스·공시예요(라벨에 "종목 불필요"를 붙이지 않아요)', () => {
+    const { line, a } = pick('N', '', { security: inst('EQ:KS:005930') });
+    expect(line).toBe('005930 KS EQUITY N');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'N', instrumentId: 'EQ:KS:005930' } });
+    expect(a.label).toBe('⏎ 실행: 삼성전자 뉴스·공시 (N)');
+  });
+
+  it('종목 없이 쓰는 기능은 친 글자와 상관없이 기능 코드만', () => {
+    const { line, a } = pick('IMAP', '005930', { security: inst('EQ:KS:005930') });
+    expect(line).toBe('IMAP');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'IMAP' } });
+  });
+});
+
+describe('N ⏎ ⏎: 한 글자 기능도 목록에서 고르면 열려요', () => {
+  it('첫 Enter는 N 뉴스·공시 선택, 두 번째 Enter는 실행', () => {
+    const first = engine.enter(run('N'), ctx());
+    expect(first).toMatchObject({ kind: 'select', rowId: 'fn:N' });
+    const out = enterTwice('N');
+    expect(out).toMatchObject({ kind: 'execute', exec: { fn: 'N' } });
+  });
+
+  it('Tab으로 고른 N도 기능으로 읽어요', () => {
+    const a = run('N');
+    const r = engine.applyRow(a, a.rows.find((x) => x.id === 'fn:N')!, ctx());
+    expect(r.chosen).toMatchObject({ start: 0, text: 'N', rowId: 'fn:N' });
+    expect(run(r.input, ctx({}, { chosen: [r.chosen!] })).plan).toMatchObject({ kind: 'execute', exec: { fn: 'N' } });
   });
 });

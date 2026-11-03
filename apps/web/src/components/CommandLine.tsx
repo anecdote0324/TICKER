@@ -3,11 +3,11 @@
 // 한글을 조합하는 동안에는 입력칸 글자를 보이게 바꿔서 조합 중인 글자가 사라지지 않게 해요.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Analysis, ChosenToken, EngineContext, Execution, Row } from '@bt/command';
+import { functionListLine, functionListRows, type Analysis, type ChosenToken, type EngineContext, type Execution, type Row } from '@bt/command';
 import { ASSET_LABEL, canonicalSecurity, displayName, FUNCTIONS, MARKET_LABEL, type AssetClass, type Instrument } from '@bt/shared';
 import { api, isMac } from '../api';
 import { logIme } from '../imeLog';
-import { isShortcut } from '../keys';
+import { isShortcut, shortcutLabel } from '../keys';
 import { recordAnalyze } from '../perf';
 import { feedStatus } from '../stores/feed';
 import { engine, getInstrument, index, indexState, supports } from '../stores/instruments';
@@ -19,6 +19,7 @@ import { useStore } from '../stores/store';
 import { openHelp, openSettings, openWorkspaceMenu, showToast, ui } from '../stores/ui';
 import { menuFunctions } from '../stores/menu';
 import { CandidateList } from './CandidateList';
+import { focusRegistry } from './focus';
 import { openInNewPanel } from './Workspace';
 
 interface Props {
@@ -79,6 +80,8 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
   const [historyQuery, setHistoryQuery] = useState('');
   /** Ctrl+R 기록 검색(v0.2): 강조한 줄 */
   const [hist, setHist] = useState<{ pos: number } | null>(null);
+  /** F1 기능 목록(v0.2): 강조한 줄 */
+  const [fnList, setFnList] = useState<{ pos: number } | null>(null);
   /** Shift+Enter·Mod+Enter: 옆 새 패널·새 창에서 실행(v0.2) */
   const openTarget = useRef<'right' | 'window' | null>(null);
   const programmatic = useRef(false);
@@ -173,9 +176,41 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     return out;
   }, [hist, text, app.history]);
   const histPick = hist ? histRows[Math.min(hist.pos, Math.max(0, histRows.length - 1))] : undefined;
-  const shown: Analysis = hist
-    ? { ...analysis, rows: histRows, more: 0, ghost: null, plan: { kind: 'empty' }, label: histPick ? `⏎ 기록 실행: ${histPick.name}` : `기록 검색: '${text.trim()}' 일치 없음`, needsAttention: false }
-    : analysis;
+
+  // F1 기능 목록: 고른 기능으로 만들 줄. 지금 줄 앞쪽의 종목(시장·자산군 포함)은 그대로 두고 기능만 바꿔요
+  const fnRows = useMemo(() => functionListRows(), []);
+  const fnPlanFor = useCallback(
+    (code: string) => {
+      let end = 0;
+      for (const sg of analysis.segments) {
+        if (sg.slot !== 'security' && sg.slot !== 'market' && sg.slot !== 'asset') break;
+        end = sg.end;
+      }
+      const { line, chosen: c } = functionListLine(code, text.slice(0, end), security);
+      const keep = end > 0 ? chosen.filter((x) => x.start + x.text.length <= end) : [];
+      const all = c ? [...keep, c] : keep;
+      return { line, chosen: all, a: engine.analyze(line, line.length, { ...ctx, chosen: all }) };
+    },
+    [analysis.segments, text, security, chosen, ctx],
+  );
+  const fnPick = fnList ? fnRows[fnList.pos] : undefined;
+  const fnPlan = useMemo(() => (fnPick?.fnCode ? fnPlanFor(fnPick.fnCode) : undefined), [fnPick, fnPlanFor]);
+
+  const shown: Analysis = fnList
+    ? {
+        ...analysis,
+        rows: fnRows,
+        more: 0,
+        ghost: null,
+        plan: { kind: 'empty' },
+        label: fnPlan?.a.label ?? '',
+        progress: [],
+        message: `기능 목록 · ↑↓ 고르기 · ⏎ 열기 · Tab 줄에 넣기 · Esc 닫기`,
+        needsAttention: false,
+      }
+    : hist
+      ? { ...analysis, rows: histRows, more: 0, ghost: null, plan: { kind: 'empty' }, label: histPick ? `⏎ 기록 실행: ${histPick.name}` : `기록 검색: '${text.trim()}' 일치 없음`, needsAttention: false }
+      : analysis;
 
   // 목록이 바뀌면 강조를 1번·선택 없음으로(K5)
   const rowsKey = analysis.rows.map((r) => r.id).join('|');
@@ -215,6 +250,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
   }
   showList = showList && analysis.rows.length > 0;
   if (hist) showList = focused && histRows.length > 0;
+  if (fnList) showList = focused;
   const ghost = assist !== 'off' && focused && !dismissed ? analysis.ghost : null;
 
   // ── 입력칸 쓰기: execCommand로 써서 Ctrl+Z 되돌리기 기록을 살려요(05 §9.2) ──
@@ -380,6 +416,57 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     [analysis, ctx, writeInput],
   );
 
+  // ── F1 기능 목록에서 고르기: 열기(Enter·클릭) 또는 줄에 넣기(Tab) ──
+  const openFnList = useCallback(() => {
+    setHist(null);
+    setDismissed(false);
+    setFnList({ pos: fnRows.findIndex((r) => r.kind !== 'header') });
+  }, [fnRows]);
+  // 커맨드 라인 밖에서 누른 F1: 활성 패널의 커맨드 라인으로 와서 열어요(keys.ts)
+  useEffect(() => {
+    if (variant !== 'panel') return;
+    const open = () => {
+      const inp = inputRef.current;
+      if (!inp) return;
+      if (!inp.ownerDocument.hasFocus()) inp.ownerDocument.defaultView?.focus();
+      inp.focus();
+      openFnList();
+    };
+    focusRegistry.fnList.set(panelId, open);
+    return () => {
+      if (focusRegistry.fnList.get(panelId) === open) focusRegistry.fnList.delete(panelId);
+    };
+  }, [variant, panelId, openFnList]);
+  const pickFn = (runNow: boolean, row: Row | undefined = fnPick) => {
+    if (!row?.fnCode) return;
+    const p = fnPlanFor(row.fnCode);
+    setFnList(null);
+    helped.current = true;
+    if (runNow && p.a.plan.kind === 'execute') {
+      run(p.a.plan.exec);
+      return;
+    }
+    setChosen(p.chosen);
+    // 종목이 필요한데 없으면 기능 뒤에 바로 종목을 칠 수 있게 한 칸 띄워요(DES 005930)
+    const next = p.a.plan.kind === 'need-security' ? `${p.line} ` : p.line;
+    writeInput(next, next.length);
+    setSelectedId(null);
+    setListSegment(undefined);
+    setListOpen(true);
+  };
+  const moveFn = (delta: number) => {
+    if (!fnList) return;
+    let i = fnList.pos;
+    for (let n = 0; n < fnRows.length; n++) {
+      const j = i + delta;
+      if (j < 0 || j >= fnRows.length) break;
+      i = j;
+      if (fnRows[i].kind !== 'header') break;
+    }
+    if (fnRows[i]?.kind === 'header') return;
+    setFnList({ pos: i });
+  };
+
   // ── Enter(05 §3.6) ──
   const doEnter = useCallback(
     (selected: string | null = selectedId) => {
@@ -509,9 +596,48 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       return;
     }
 
+    // F1 기능 목록(v0.2): 한 번 더 누르면 닫혀요
+    if (isShortcut(ne, 'functionList')) {
+      e.preventDefault();
+      if (fnList) setFnList(null);
+      else openFnList();
+      return;
+    }
+    if (fnList) {
+      if (key === 'Escape') {
+        e.preventDefault();
+        setFnList(null);
+        return;
+      }
+      if (key === 'ArrowDown' || key === 'ArrowUp') {
+        e.preventDefault();
+        moveFn(key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (key === 'Home' || key === 'End') {
+        e.preventDefault();
+        const sel = fnRows.map((r, i) => (r.kind === 'header' ? -1 : i)).filter((i) => i >= 0);
+        setFnList({ pos: key === 'Home' ? sel[0] : sel[sel.length - 1] });
+        return;
+      }
+      if (key === 'Tab') {
+        e.preventDefault();
+        pickFn(false);
+        return;
+      }
+      if (key === 'Enter') {
+        e.preventDefault();
+        openTarget.current = e.shiftKey ? 'right' : (isMac ? e.metaKey : e.ctrlKey) ? 'window' : null;
+        pickFn(true);
+        openTarget.current = null;
+        return;
+      }
+    }
+
     // Ctrl+R 명령 기록 검색(05 §10.2, v0.2): 한 번 더 누르면 더 오래된 기록으로
     if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && code === 'KeyR') {
       e.preventDefault();
+      setFnList(null);
       setListOpen(true);
       setDismissed(false);
       setHist((h) => (h ? { pos: Math.min(h.pos + 1, Math.max(0, histRows.length - 1)) } : { pos: 0 }));
@@ -741,6 +867,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     setCursor(inp.selectionStart ?? inp.value.length);
     if (programmatic.current) return;
     setDismissed(false);
+    setFnList(null);
     setHistoryPos(-1);
     if (hist) setHist({ pos: 0 });
     if (!composingRef.current) setListSegment(undefined);
@@ -804,13 +931,13 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       inputRef.current?.setSelectionRange(seg.start, seg.end);
     }
   };
-  const label = hist ? shown.label : !hasText ? (focused && assist === 'beginner' ? '⏎ 시작 목록' : '') : analysis.label;
+  const label = hist || fnList ? shown.label : !hasText ? (focused && assist === 'beginner' ? '⏎ 시작 목록' : '') : analysis.label;
   const labelText = variant === 'panel' && fieldRef.current && fieldRef.current.clientWidth < 220 ? shortenLabel(label) : label;
-  const chip = hist ? '기록 검색 (Ctrl+R)' : analysis.contextChip ? `[${analysis.contextChip} ›]` : '';
+  const chip = fnList ? `기능 목록 (${shortcutLabel('functionList')})` : hist ? '기록 검색 (Ctrl+R)' : analysis.contextChip ? `[${analysis.contextChip} ›]` : '';
 
   return (
     <div className="cmd" onMouseDown={(e) => e.stopPropagation()}>
-      {chip && (hasText || hist) && <span className="cmd-chip">{chip}</span>}
+      {chip && (hasText || hist || fnList) && <span className="cmd-chip">{chip}</span>}
       <div className={`cmd-field ${composing ? 'composing' : ''}`} ref={fieldRef}>
         <div className="cmd-mirror" ref={mirrorRef} aria-hidden="true">
           {hasText ? mirror : <span className="placeholder">{placeholder}</span>}
@@ -849,7 +976,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
           role="combobox"
           aria-expanded={showList}
           aria-controls="ac-list"
-          aria-activedescendant={showList ? `ac-${highlight}` : undefined}
+          aria-activedescendant={showList ? `ac-${fnList ? fnList.pos : highlight}` : undefined}
           aria-label={`패널 ${panel?.num ?? ''} 커맨드 라인`}
           aria-describedby={undefined}
           spellCheck={false}
@@ -869,6 +996,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
             setListOpen(false);
             setSelectedId(null);
             setHist(null);
+            setFnList(null);
           }}
           onPaste={() => {
             // 붙여넣기는 절대 실행하지 않아요. 목록도 열지 않아요(05 §13)
@@ -917,7 +1045,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
           anchor={anchor}
           analysis={shown}
           assist={assist}
-          highlight={hist ? Math.min(hist.pos, Math.max(0, histRows.length - 1)) : highlight}
+          highlight={fnList ? fnList.pos : hist ? Math.min(hist.pos, Math.max(0, histRows.length - 1)) : highlight}
           selectedId={selectedId}
           showDesc={desc === 'auto' ? 'auto' : desc}
           onHover={() => undefined}
@@ -931,6 +1059,11 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
               const inp = inputRef.current;
               inp?.blur();
               inp?.focus();
+              return;
+            }
+            if (fnList) {
+              // 기능 목록: 메뉴처럼 누르면 열려요(Tab은 줄에 넣기)
+              pickFn(true, row);
               return;
             }
             if (hist) {

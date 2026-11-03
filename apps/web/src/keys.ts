@@ -6,7 +6,7 @@ import { isMac } from './api';
 import { focusRegistry } from './components/focus';
 import { activePanelId, navigate, panels } from './stores/panels';
 import { settings } from './stores/settings';
-import { openSettings, showToast, togglePalette } from './stores/ui';
+import { openSettings, showToast, togglePalette, ui } from './stores/ui';
 
 /** 설정에서 바꾼 키를 반영한 단축키 판정 */
 export function isShortcut(e: KeyLike, id: ShortcutId): boolean {
@@ -68,6 +68,16 @@ export function onGlobalKey(e: KeyboardEvent) {
     // F키 모드(Windows, v0.2)를 켜면 F11은 CURNCY예요. 전체 화면은 다른 키로 바꿔 써요(06)
     if (e.key === 'F11' && !isMac && settings.get().commandLine.fKeyMode) return;
     void toggleFullScreen((e.view as Window | null) ?? window);
+    return;
+  }
+  if (isShortcut(e, 'functionList')) {
+    // 커맨드 라인 안에서는 그 커맨드 라인이 직접 열고 닫아요
+    if ((e.target as HTMLElement | null)?.closest?.('.cmd')) return;
+    e.preventDefault();
+    // 설정·도움말 창이 떠 있으면 뒤의 패널로 가지 않아요
+    const u = ui.get();
+    if (u.settings || u.help) return;
+    if (active) focusRegistry.fnList.get(active)?.();
     return;
   }
   if (isShortcut(e, 'focusCommand')) {
