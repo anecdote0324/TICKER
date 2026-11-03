@@ -17,6 +17,7 @@ import {
 } from '@bt/shared';
 import type { BinanceAdapter, Ticker24h } from './adapters/binance';
 import { krMaster, parseKrInfoLine, parseSectorNames, type KrStockInfo } from './kr-master';
+import { applyUsBoost } from './us-activity';
 import { fetchBytes, type Logger } from './util';
 
 const MASTER_BASE = 'https://new.real.download.dws.co.kr/common/master';
@@ -254,7 +255,7 @@ export function cryptoFromTickers(tickers: Ticker24h[]): Instrument[] {
   return out;
 }
 
-export async function buildInstruments(dataDir: string, binance: BinanceAdapter, log: Logger, snapshotFile?: string): Promise<InstrumentsResponse> {
+export async function buildInstruments(dataDir: string, binance: BinanceAdapter, log: Logger, snapshotFile?: string, usScores?: Map<string, number>): Promise<InstrumentsResponse> {
   const sources: MasterSource[] = [];
   const all: Instrument[] = [];
   // 사본은 필요할 때만 읽어요
@@ -313,6 +314,8 @@ export async function buildInstruments(dataDir: string, binance: BinanceAdapter,
     const r = popRank.get(i.code);
     i.popularity = r !== undefined ? 1 - (r / US_POPULAR.length) * 0.4 : i.flags?.includes('ETF') ? 0.25 : 0.2;
   }
+  // 앱에서 본 거래대금으로 인기도 보강(v0.2)
+  if (usScores?.size) applyUsBoost(us, usScores);
   all.push(...us);
 
   try {

@@ -380,7 +380,7 @@ export function Workspace({ screenId, initial, onChange, visible }: { screenId: 
     }
   }, [visible]);
   return (
-    <div className="workspace" style={visible ? undefined : { display: 'none' }}>
+    <div className="workspace" data-screen={screenId} style={visible ? undefined : { display: 'none' }}>
       <DockviewReact
         className="dockview-theme-bt"
         theme={theme}

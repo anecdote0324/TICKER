@@ -33,6 +33,9 @@ function loadSaved(): SavedWorkspace | null {
   return w;
 }
 
+/** 떼어낸 화면의 창 id(같은 창에 화면 탭이 여러 개일 수 있어요, v0.2). 예전 저장분은 화면 id가 창 id */
+const winOf = (s: Screen): string | undefined => (s.detached ? (s.win ?? s.id) : undefined);
+
 const DEFAULT_WORKSPACE: SavedWorkspace = { screens: [{ id: 'main', name: 'Market Pulse' }], active: 'main', layouts: {}, panels: {} };
 
 export function App() {
@@ -42,6 +45,8 @@ export function App() {
     if (Object.keys(saved.current.panels).length) panels.set(saved.current.panels);
   }
   const [screens, setScreens] = useState<Screen[]>(saved.current.screens);
+  /** 떼어낸 창마다 보이는 화면 탭(v0.2) */
+  const [winActive, setWinActive] = useState<Record<string, string>>({});
   const [active, setActive] = useState(saved.current.active);
   const [wsName, setWsName] = useState(saved.current.name);
   // 워크스페이스를 불러오면 모든 화면 탭의 배치를 새로 만들어요
@@ -160,7 +165,7 @@ export function App() {
     const rest = screens.filter((s) => !s.detached && s.id !== id);
     if (!rest.length) return;
     keepLayout(id);
-    setScreens((all) => all.map((s) => (s.id === id ? { ...s, detached: true } : s)));
+    setScreens((all) => all.map((s) => (s.id === id ? { ...s, detached: true, win: id } : s)));
     if (active === id) {
       // 메인 창은 왼쪽 옆 화면을 보여 줘요
       const left = screens.slice(0, screens.findIndex((s) => s.id === id)).filter((s) => !s.detached);
@@ -171,16 +176,35 @@ export function App() {
   /** 떼어낸 화면을 메인 창으로 돌려놓아요(창을 닫아도 같아요) */
   const attachScreen = (id: string, bounds?: Screen['bounds']) => {
     keepLayout(id);
-    setScreens((all) => all.map((s) => (s.id === id ? { ...s, detached: false, bounds: bounds ?? s.bounds } : s)));
+    setScreens((all) => all.map((s) => (s.id === id ? { ...s, detached: false, win: undefined, bounds: bounds ?? s.bounds } : s)));
     setActive(id);
     window.focus();
+  };
+
+  /** 떼어낸 창을 닫았어요: 그 창의 화면을 모두 메인 창으로 */
+  const closeWindow = (win: string, bounds?: Screen['bounds']) => {
+    const ids = screens.filter((s) => winOf(s) === win).map((s) => s.id);
+    for (const id of ids) keepLayout(id);
+    setScreens((all) => all.map((s) => (ids.includes(s.id) ? { ...s, detached: false, win: undefined, bounds: bounds ?? s.bounds } : s)));
+    if (ids[0]) setActive(winActive[win] && ids.includes(winActive[win]) ? winActive[win] : ids[0]);
+    window.focus();
+  };
+
+  /** 떼어낸 창 안에 화면 탭 추가(v0.2) */
+  const addScreenInWindow = (win: string) => {
+    const id = `s${Date.now().toString(36)}`;
+    const bounds = screens.find((s) => winOf(s) === win)?.bounds;
+    setScreens((s) => [...s, { id, name: `화면 ${s.length + 1}`, detached: true, win, bounds }]);
+    setWinActive((m) => ({ ...m, [win]: id }));
   };
 
   // 메인 창이 보여 줄 화면: 고른 화면이 떼어낸 것이면 메인 창에 남은 첫 화면
   const mainScreens = screens.filter((s) => !s.detached);
   const mainActive = mainScreens.some((s) => s.id === active) ? active : (mainScreens[0]?.id ?? active);
   // 팔레트·도움말을 떼어낸 화면 창에 그릴지(그 창에서 열었을 때)
-  const overlayHost = u.host && screens.some((s) => s.id === u.host && s.detached) ? u.host : undefined;
+  const overlayHost = u.host && screens.some((s) => winOf(s) === u.host) ? u.host : undefined;
+  // 떼어낸 창들(창 id 순서는 화면 순서)
+  const wins = [...new Set(screens.map(winOf).filter((w): w is string => !!w))];
 
   useEffect(() => {
     attachGlobalKeys(window);
@@ -196,9 +220,13 @@ export function App() {
         active={mainActive}
         onSelect={(id) => {
           // 떼어낸 화면이면 그 창을 앞으로 가져와요
-          const w = screenWindows.get(id);
-          if (w && !w.closed) w.focus();
-          else setActive(id);
+          const s = screens.find((x) => x.id === id);
+          const win = s ? winOf(s) : undefined;
+          const w = win ? screenWindows.get(win) : undefined;
+          if (win && w && !w.closed) {
+            setWinActive((m) => ({ ...m, [win]: id }));
+            w.focus();
+          } else setActive(id);
         }}
         onAdd={() => {
           const id = `s${Date.now().toString(36)}`;
@@ -215,42 +243,65 @@ export function App() {
         }}
         workspaceMenu={<WorkspaceMenu current={wsName} list={named} onSave={saveNamed} onLoad={loadNamed} onDelete={deleteNamed} onReset={resetWorkspace} />}
       />
-      {screens.map((s) => {
-        const workspace = (
+      {screens
+        .filter((s) => !s.detached)
+        .map((s) => (
           <Workspace
-            key={`${generation}:${s.id}:${s.detached ? 'window' : 'main'}`}
+            key={`${generation}:${s.id}:main`}
             screenId={s.id}
-            visible={s.detached || s.id === mainActive}
+            visible={s.id === mainActive}
             initial={layouts.current[s.id] ?? null}
             onChange={(l) => {
               layouts.current = { ...layouts.current, [s.id]: l };
               scheduleSave();
             }}
           />
-        );
-        if (!s.detached) return workspace;
+        ))}
+      {wins.map((win) => {
+        const tabs = screens.filter((s) => winOf(s) === win);
+        const shown = tabs.find((t) => t.id === winActive[win]) ?? tabs[0];
+        if (!shown) return null;
         return (
           <ScreenWindow
-            key={`${generation}:${s.id}:window`}
-            screen={s}
-            onClosed={(bounds) => attachScreen(s.id, bounds)}
+            key={`${generation}:${win}:window`}
+            winId={win}
+            title={shown.name}
+            bounds={tabs[0].bounds}
+            screenIds={tabs.map((t) => t.id)}
+            onClosed={(bounds) => closeWindow(win, bounds)}
             onFailed={() => {
-              attachScreen(s.id);
-              showToast(`'${s.name}' 화면을 새 창으로 열지 못해서 메인 창에 두었어요`);
+              closeWindow(win);
+              showToast(`'${shown.name}' 화면을 새 창으로 열지 못해서 메인 창에 두었어요`);
             }}
-            onBounds={(bounds) => setScreens((all) => all.map((x) => (x.id === s.id ? { ...x, bounds } : x)))}
+            onBounds={(bounds) => setScreens((all) => all.map((x) => (winOf(x) === win ? { ...x, bounds } : x)))}
           >
             <ScreenWindowBar
-              name={s.name}
+              tabs={tabs.map((t) => ({ id: t.id, name: t.name }))}
+              active={shown.id}
+              onSelect={(id) => setWinActive((m) => ({ ...m, [win]: id }))}
+              onAddScreen={() => addScreenInWindow(win)}
+              onRename={(id, name) => setScreens((all) => all.map((x) => (x.id === id ? { ...x, name } : x)))}
+              onCloseTab={(id) => closeScreen(id)}
+              onAttach={(id) => attachScreen(id)}
               onAddPanel={() => {
-                const api = dockApis.get(s.id);
+                const api = dockApis.get(shown.id);
                 if (api) addPanel(api);
               }}
-              onAttach={() => attachScreen(s.id)}
             />
-            {workspace}
-            {overlayHost === s.id && u.palette && <Palette />}
-            {overlayHost === s.id && <HelpOverlay />}
+            {tabs.map((t) => (
+              <Workspace
+                key={`${generation}:${t.id}:window`}
+                screenId={t.id}
+                visible={t.id === shown.id}
+                initial={layouts.current[t.id] ?? null}
+                onChange={(l) => {
+                  layouts.current = { ...layouts.current, [t.id]: l };
+                  scheduleSave();
+                }}
+              />
+            ))}
+            {overlayHost === win && u.palette && <Palette />}
+            {overlayHost === win && <HelpOverlay />}
           </ScreenWindow>
         );
       })}

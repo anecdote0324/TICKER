@@ -11,6 +11,7 @@ import { KisAdapter, type KisCredentials, type KisEndpoints, type KisTokenStore,
 import { buildApp } from './app';
 import { History } from './history';
 import { NewsService } from './news';
+import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
 import { fileSecretBox, Store, type SecretBox } from './store';
@@ -60,6 +61,10 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   hub.binance = new BinanceAdapter(hub);
   hub.ecb = new EcbAdapter(hub);
   hub.demo = new DemoAdapter(hub);
+  // 미국 종목 인기도 보강(v0.2): 앱에서 본 거래대금
+  const usActivity = new UsActivity(opts.dataDir);
+  await usActivity.load();
+  hub.usActivity = usActivity;
   // N 뉴스·공시: RSS·DART를 받아 뉴스 아카이브(news.db)에 쌓아요(03 v0.2)
   const news = new NewsService(opts.dataDir, log, join(opts.dataDir, 'news.db'));
   news.start();
@@ -79,13 +84,13 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const makeKis = (cred: KisCredentials) => new KisAdapter(hub, cred, tokenStore, opts.kisEndpoints);
 
   // 종목 색인은 마스터를 받는 동안 기다리지 않고 시작해요. 목록 요청만 기다려요
-  let instruments: Promise<InstrumentsResponse> = buildInstruments(opts.dataDir, hub.binance, log, opts.snapshotFile).then((r) => {
+  let instruments: Promise<InstrumentsResponse> = buildInstruments(opts.dataDir, hub.binance, log, opts.snapshotFile, usActivity.scores()).then((r) => {
     hub.setInstruments(r.instruments);
     return r;
   });
   // 하루에 한 번 다시 만들어요
   const rebuild = setInterval(() => {
-    instruments = buildInstruments(opts.dataDir, hub.binance, log, opts.snapshotFile).then((r) => {
+    instruments = buildInstruments(opts.dataDir, hub.binance, log, opts.snapshotFile, usActivity.scores()).then((r) => {
       hub.setInstruments(r.instruments);
       return r;
     });
@@ -152,6 +157,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       hub.demo.stop();
       hub.kis?.stop();
       news.stop();
+      await usActivity.flush();
       await app.close();
       // 실시간 구독을 끊은 뒤 남은 분봉을 저장해요(01 종료할 때)
       hub.history?.close();

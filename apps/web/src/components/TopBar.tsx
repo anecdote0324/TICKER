@@ -17,6 +17,8 @@ export interface Screen {
   name: string;
   /** 새 창으로 떼어냈어요(그 창에 패널 배치를 그려요) */
   detached?: boolean;
+  /** 떼어낸 창(같은 창에 화면 탭이 여러 개일 수 있어요, v0.2). 없으면 화면 id가 창 id */
+  win?: string;
   /** 마지막으로 떼어냈던 창의 위치·크기 */
   bounds?: ScreenBounds;
 }

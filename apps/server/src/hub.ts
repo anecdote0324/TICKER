@@ -9,6 +9,7 @@ import { kisPollFresh, type KisAdapter } from './adapters/kis';
 import type { Adapter, AdapterHost } from './adapters/types';
 import { mergeBars, type History } from './history';
 import { krMaster } from './kr-master';
+import type { UsActivity } from './us-activity';
 import type { Logger } from './util';
 
 export interface Client {
@@ -51,6 +52,8 @@ export function nextBackfillPoint(bars: Bar[], floor: number, checked: (t: numbe
 
 export class Hub implements AdapterHost {
   instruments = new Map<string, Instrument>();
+  /** 미국 종목 인기도 보강용 거래대금 기록(v0.2) */
+  usActivity?: UsActivity;
   private quotes = new Map<string, Quote>();
   private clients = new Set<Client>();
   private refs = new Map<string, number>();
@@ -223,6 +226,8 @@ export class Hub implements AdapterHost {
     // 분봉은 지금 체결된 값으로만 만들어요. 장이 닫힌 뒤 조회한 마감 값으로 봉을 만들면 정규장 밖에 봉이 생겨요
     const inst = this.instruments.get(q.id);
     if (q.fresh.receivedAt - q.fresh.asOf < 120_000 && (!inst || intradayAt(inst, q.fresh.asOf))) this.history?.onQuote(q);
+    // 미국 종목의 거래대금은 인기도 보강에 모아요(데모 값은 빼요)
+    if (inst?.market === 'US' && q.fresh.source === 'KIS') this.usActivity?.record(inst.code, q.turnover);
     this.pending.add(q.id);
     if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(), FLUSH_MS);
   }
@@ -530,6 +535,7 @@ export class Hub implements AdapterHost {
     }
     if (!this.kis) throw new Error('한국투자증권 키를 넣으면 국내·미국 상위 종목을 볼 수 있어요(코인은 MOST CRYPTO)');
     const { rows, fresh } = await this.kis.ranking(market, kind);
+    if (market === 'US') for (const r of rows) this.usActivity?.record(r.code, r.turnover);
     for (const r of rows) {
       const inst = r.id ? this.instruments.get(r.id) : undefined;
       if (!inst) r.id = undefined;

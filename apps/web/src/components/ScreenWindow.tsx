@@ -1,22 +1,30 @@
-// 화면 탭을 통째로 떼어낸 창(02 화면 탭과 워크스페이스). 같은 출처의 새 창을 열고, 그 화면의 패널 배치를
+// 화면 탭을 통째로 떼어낸 창(02 화면 탭과 워크스페이스). 같은 출처의 새 창을 열고, 그 창의 화면들의 패널 배치를
 // 메인 창의 React가 그 창의 문서 안에 그려요. 시세·종목 색인·설정·연동 그룹은 메인 창과 함께 써요.
-// 창의 닫기(X)를 누르면 화면이 메인 창으로 돌아와요. 창의 위치·크기는 기억해서 다음에 떼어낼 때와 다음 실행 때 써요.
+// 한 창에 화면 탭을 여러 개 둘 수 있어요(v0.2). 창의 닫기(X)를 누르면 그 창의 화면이 모두 메인 창으로 돌아와요.
+// 창의 위치·크기는 기억해서 다음에 떼어낼 때와 다음 실행 때 써요.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { preparePopoutDocument, releasePopoutDocument } from '../popout';
 import { screenWindows } from '../stores/windows';
-import type { Screen, ScreenBounds } from './TopBar';
+import type { ScreenBounds } from './TopBar';
 import { dockApis } from './Workspace';
 
 const DEFAULT_SIZE = { width: 1280, height: 800 };
+const ICON = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.3 };
 
 function sameBounds(a: ScreenBounds | undefined, b: ScreenBounds) {
   return !!a && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 export function ScreenWindow(props: {
-  screen: Screen;
+  /** 창 id(처음 떼어낸 화면의 id) */
+  winId: string;
+  /** 창 제목에 쓸 이름(보이는 화면 탭) */
+  title: string;
+  bounds?: ScreenBounds;
+  /** 이 창에 그리는 화면들(크기가 바뀌면 다시 배치) */
+  screenIds: string[];
   children: ReactNode;
   /** 사용자가 창을 닫았어요. 화면을 메인 창으로 돌려요 */
   onClosed: (bounds?: ScreenBounds) => void;
@@ -28,10 +36,11 @@ export function ScreenWindow(props: {
   const [root, setRoot] = useState<HTMLElement | null>(null);
   const cb = useRef(props);
   cb.current = props;
-  const { id, name } = props.screen;
+  const id = props.winId;
+  const name = props.title;
 
   useEffect(() => {
-    const b = cb.current.screen.bounds;
+    const b = cb.current.bounds;
     const box = b ? { left: b.x, top: b.y, width: b.width, height: b.height } : DEFAULT_SIZE;
     const features = Object.entries(box)
       .map(([k, v]) => `${k}=${Math.round(v)}`)
@@ -54,9 +63,12 @@ export function ScreenWindow(props: {
     const timers: number[] = [];
 
     const relayout = () => {
-      const el = doc?.querySelector<HTMLElement>('.workspace');
-      const api = dockApis.get(id);
-      if (el && api && el.clientWidth > 0 && el.clientHeight > 0) api.layout(el.clientWidth, el.clientHeight, true);
+      // 보이는 화면만 크기가 있어요. 숨은 화면은 보일 때 Workspace가 다시 맞춰요
+      for (const sid of cb.current.screenIds) {
+        const el = doc?.querySelector<HTMLElement>(`.workspace[data-screen="${sid}"]`) ?? doc?.querySelector<HTMLElement>('.workspace');
+        const api = dockApis.get(sid);
+        if (el && api && el.clientWidth > 0 && el.clientHeight > 0) api.layout(el.clientWidth, el.clientHeight, true);
+      }
     };
     const onResize = () => w.requestAnimationFrame(relayout);
     const release = () => {
@@ -103,7 +115,7 @@ export function ScreenWindow(props: {
       () => {
         try {
           doc = preparePopoutDocument(w);
-          doc.title = `TICKER · ${cb.current.screen.name}`;
+          doc.title = `TICKER · ${cb.current.title}`;
           const el = doc.createElement('div');
           el.className = 'app screen-window';
           doc.body.appendChild(el);
@@ -140,8 +152,19 @@ export function ScreenWindow(props: {
   return root ? createPortal(props.children, root) : null;
 }
 
-/** 떼어낸 화면 창의 맨 위 줄: 화면 이름, 패널 추가, 메인 창으로 돌려놓기 */
-export function ScreenWindowBar(props: { name: string; onAddPanel: () => void; onAttach: () => void }) {
+/** 떼어낸 화면 창의 맨 위 줄(v0.2): 이 창의 화면 탭들(고르기·이름 바꾸기·닫기·메인 창으로), 화면 추가, 패널 추가 */
+export function ScreenWindowBar(props: {
+  tabs: Array<{ id: string; name: string }>;
+  active: string;
+  onSelect: (id: string) => void;
+  onAddScreen: () => void;
+  onRename: (id: string, name: string) => void;
+  onCloseTab: (id: string) => void;
+  onAttach: (id: string) => void;
+  onAddPanel: () => void;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const many = props.tabs.length > 1;
   return (
     <header className="topbar">
       <div className="logo">
@@ -149,16 +172,52 @@ export function ScreenWindowBar(props: { name: string; onAddPanel: () => void; o
         <b>TICKER</b>
       </div>
       <nav className="screen-tabs" aria-label="화면 탭">
-        <div className="stab on">
-          <span className="stab-name stab-solo">{props.name}</span>
-        </div>
+        {props.tabs.map((t) => (
+          <div key={t.id} className={`stab ${t.id === props.active ? 'on' : ''}`}>
+            {editing === t.id ? (
+              <input
+                className="stab-edit"
+                defaultValue={t.name}
+                autoFocus
+                onBlur={(e) => {
+                  setEditing(null);
+                  const v = e.currentTarget.value.trim();
+                  if (v) props.onRename(t.id, v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+                  if (e.key === 'Escape') setEditing(null);
+                }}
+              />
+            ) : (
+              <button className="stab-name" onClick={() => props.onSelect(t.id)} onDoubleClick={() => setEditing(t.id)} title="두 번 눌러 이름 바꾸기">
+                {t.name}
+              </button>
+            )}
+            <button className="stab-x" aria-label={`${t.name} 화면을 메인 창으로 돌려놓기`} title="메인 창으로 돌려놓기" onClick={() => props.onAttach(t.id)}>
+              <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true" style={ICON}>
+                <path d="M5 10.5H1.5V7M1.5 10.5L6 6M7 9.5h3.5v-8h-8V5" />
+              </svg>
+            </button>
+            {many && (
+              <button className="stab-x" aria-label={`${t.name} 화면 닫기`} title="화면 닫기(알림에서 되돌릴 수 있어요)" onClick={() => props.onCloseTab(t.id)}>
+                <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true" style={ICON}>
+                  <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
+                </svg>
+              </button>
+            )}
+          </div>
+        ))}
+        <button aria-label="이 창에 화면 탭 추가" title="이 창에 화면 탭 추가" onClick={props.onAddScreen} style={{ fontFamily: 'var(--mono)', fontSize: 14 }}>
+          +
+        </button>
       </nav>
       <button className="btn" style={{ height: 20, padding: '0 8px', fontSize: 11 }} onClick={props.onAddPanel} title="활성 패널 옆에 새 패널">
         패널 추가
       </button>
-      <button className="btn" style={{ height: 20, padding: '0 8px', fontSize: 11, marginLeft: 'auto' }} onClick={props.onAttach} title="이 화면을 메인 창의 화면 탭으로 돌려놓아요(창의 닫기와 같아요)">
-        메인 창으로 돌려놓기
-      </button>
+      <span style={{ marginLeft: 'auto' }} className="label">
+        창을 닫으면 이 창의 화면이 모두 메인 창으로 돌아가요
+      </span>
     </header>
   );
 }
