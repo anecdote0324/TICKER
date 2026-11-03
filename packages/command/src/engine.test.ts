@@ -544,3 +544,10 @@ describe('기능 메뉴·번호 메뉴·자산군별 기본 기능(v0.2)', () =>
     expect(run('XYZQQ').label).toBe('⏎ 검색');
   });
 });
+
+describe('BLP 런치패드(v0.2)', () => {
+  it('BLP⏎은 워크스페이스 메뉴', () => {
+    expect(run('BLP').plan).toMatchObject({ kind: 'execute', exec: { kind: 'command', cmd: 'launchpad' } });
+    expect(run('BLP').label).toBe('⏎ 실행: 워크스페이스 메뉴 열기 (BLP)');
+  });
+});

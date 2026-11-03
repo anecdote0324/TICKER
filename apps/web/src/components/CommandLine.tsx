@@ -16,7 +16,7 @@ import { settings, updateSettings } from '../stores/settings';
 import { checkSlots } from '../stores/slots';
 import { appState, removeAlias, setAlias, updateState, usageScore } from '../stores/state';
 import { useStore } from '../stores/store';
-import { openHelp, openSettings, showToast, ui } from '../stores/ui';
+import { openHelp, openSettings, openWorkspaceMenu, showToast, ui } from '../stores/ui';
 import { menuFunctions } from '../stores/menu';
 import { CandidateList } from './CandidateList';
 import { openInNewPanel } from './Workspace';
@@ -249,6 +249,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     (exec: Execution, via?: { row?: Row; query?: string }) => {
       if (exec.kind === 'command') {
         if (exec.cmd === 'settings') openSettings();
+        else if (exec.cmd === 'launchpad') openWorkspaceMenu();
         else if (exec.cmd === 'alias') {
           const name = exec.args?.[0];
           const inst = getInstrument(exec.instrumentId);

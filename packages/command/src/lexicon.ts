@@ -67,7 +67,7 @@ export const RESERVED_ASSET_WORDS: Record<string, string> = {
   PFD: '계획 없음',
 };
 
-export type CommandWord = 'help' | 'syntax' | 'settings' | 'alias';
+export type CommandWord = 'help' | 'syntax' | 'settings' | 'alias' | 'launchpad';
 
 export const COMMAND_WORDS: Record<string, { cmd: CommandWord; nameKo: string; summary: string }> = {
   '?': { cmd: 'syntax', nameKo: '문법 요약', summary: '명령어 문법 안내' },
@@ -76,6 +76,7 @@ export const COMMAND_WORDS: Record<string, { cmd: CommandWord; nameKo: string; s
   설정: { cmd: 'settings', nameKo: '설정', summary: '설정 창 열기' },
   PDF: { cmd: 'settings', nameKo: '개인 설정', summary: '설정 창 열기 (블룸버그 Personal Defaults)' },
   ALIAS: { cmd: 'alias', nameKo: '별칭', summary: '종목 별칭 만들기 (ALIAS 별칭 종목)' },
+  BLP: { cmd: 'launchpad', nameKo: '런치패드', summary: '워크스페이스(이름 붙인 화면 배치) 메뉴 열기' },
   별칭: { cmd: 'alias', nameKo: '별칭', summary: '종목 별칭 만들기 (별칭 이름 종목)' },
 };
 

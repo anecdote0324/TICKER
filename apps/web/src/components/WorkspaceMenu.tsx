@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { NamedWorkspace } from '../stores/state';
+import { useStore } from '../stores/store';
+import { ui } from '../stores/ui';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -21,6 +23,16 @@ export function WorkspaceMenu(props: {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const boxRef = useRef<HTMLDivElement>(null);
+  // BLP⏎(v0.2)이 메뉴를 열어요
+  const tick = useStore(ui, (s) => s.workspaceMenuTick ?? 0);
+  const firstTick = useRef(tick);
+  useEffect(() => {
+    if (tick === firstTick.current) return;
+    setOpen(true);
+    setName(props.current ?? '');
+    // props.current는 열 때의 이름만 써요
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick]);
 
   useEffect(() => {
     if (!open) return;

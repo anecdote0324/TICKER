@@ -17,7 +17,15 @@ export const ui = createStore<{
   /** 팔레트·도움말을 그릴 떼어낸 화면 창의 화면 id. 없으면 메인 창 */
   host?: string;
   toast: Toast | null;
+  /** 워크스페이스 메뉴를 열라는 요청(BLP⏎, v0.2). 늘어날 때마다 메뉴가 열려요 */
+  workspaceMenuTick?: number;
 }>({ settings: false, help: null, palette: false, toast: null });
+
+/** 워크스페이스 메뉴 열기(BLP 런치패드, 08: 워크스페이스가 이 역할). 메뉴는 메인 창 맨 위 줄에 있어요 */
+export function openWorkspaceMenu() {
+  if (focusedScreenWindow()) window.focus();
+  ui.set((s) => ({ ...s, workspaceMenuTick: (s.workspaceMenuTick ?? 0) + 1 }));
+}
 
 /** 팔레트를 열거나 닫아요. 연 창(포커스가 있는 창) 안에 그려요(05 §10.4) */
 export function togglePalette() {
