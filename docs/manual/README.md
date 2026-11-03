@@ -1,6 +1,6 @@
 # TICKER 사용설명서
 
-TICKER는 블룸버그 터미널을 닮은 개인용 데스크톱 시세 터미널이에요. 이 설명서는 지금 앱(v0.1 미리 보기)에서 되는 모든 기능과 모든 명령어를 설명해요. 기능이 생기거나 바뀌면 이 설명서도 함께 고쳐요.
+TICKER는 블룸버그 터미널을 닮은 개인용 데스크톱 시세 터미널이에요. 이 설명서는 지금 앱(v0.1.0)에서 되는 모든 기능과 모든 명령어를 설명해요. 기능이 생기거나 바뀌면 이 설명서도 함께 고쳐요.
 
 - 아직 만들지 않은 기능은 "v0.2에서 제공 예정"처럼 적어 두었어요. 버전별 계획은 [버전별 기능](../versions.md)에 있어요.
 - `Mod`는 Windows의 **Ctrl**, Mac의 **⌘(Command)** 예요. 키를 적을 때 Windows 키를 먼저, Mac 키를 괄호 안에 적어요. 예: `Ctrl+K`(Mac `⌘K`).
@@ -27,7 +27,7 @@ TICKER는 블룸버그 터미널을 닮은 개인용 데스크톱 시세 터미�
 
 ### 1.1 설치 파일 받기
 
-GitHub 저장소의 [Releases](https://github.com/anecdote0324/BloombergTerminal/releases)에서 가장 위 버전의 **Assets**를 열어 내 컴퓨터에 맞는 파일을 받아요.
+GitHub 저장소의 [Releases](https://github.com/anecdote0324/BloombergTerminal/releases)에서 받을 버전의 **Assets**를 열어 내 컴퓨터에 맞는 파일을 받아요.
 
 | 컴퓨터 | 받을 파일 | 설명 |
 |---|---|---|
@@ -36,7 +36,7 @@ GitHub 저장소의 [Releases](https://github.com/anecdote0324/BloombergTerminal
 | Mac (Apple Silicon, M1 이상) | `TICKER-<버전>-arm64.dmg` | 인텔 Mac은 지원하지 않아요 |
 
 - `Source code (zip)`, `Source code (tar.gz)`는 프로그램 코드라 실행 파일이 아니에요.
-- 정식 버전이 아직 없으면 저장소 첫 화면에는 버전이 `tag`로만 보여요. Releases 화면에서 `Pre-release` 표시가 붙은 버전을 찾아요.
+- `Latest` 표시가 붙은 것이 정식 버전이에요(지금은 `v0.1.0`). 저장소 첫 화면 오른쪽의 Releases에도 이 버전이 보여요. 정식 뒤에 나온 시험 버전에는 `Pre-release` 표시가 붙어요.
 - **미리 보기(Pre-release)** 는 시험 중인 버전이고, **정식(Latest)** 은 확인을 마친 버전이에요. 둘 다 받는 방법과 설치 방법은 같아요.
 - 설치형을 권하는 이유: 켜는 속도가 빠르고, 시작 메뉴에서 찾을 수 있고, 새 버전을 같은 자리에 덮어 설치할 수 있어요. 휴대용은 USB에 넣어 다니거나 잠깐 써 볼 때 좋아요. 두 방식 모두 설정·키·화면 배치는 같은 데이터 폴더(1.5)에 저장돼요.
 
