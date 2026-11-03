@@ -37,6 +37,12 @@ export interface EngineContext {
   lookup?: boolean;
   /** 사용자 별칭(ALIAS, v0.2): 별칭 키(aliasKey) → 종목 id */
   aliases?: (key: string) => string | undefined;
+  /** 종목만 입력하고 Enter(06): 지금 기능 유지(기본) 또는 블룸버그식 기능 메뉴(v0.2) */
+  securityEnter?: 'keep-function' | 'menu';
+  /** 패널이 기능 메뉴 페이지일 때 번호 → 기능 코드(숫자 + Enter, 05 §10.2) */
+  menu?: string[];
+  /** 자산군별 기본 기능(v0.2, 06). 없으면 GP */
+  defaultFn?: (asset: AssetClass) => string | undefined;
 }
 
 export interface ChosenToken {

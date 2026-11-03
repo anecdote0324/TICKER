@@ -1,5 +1,6 @@
 // 설정(06 설정 화면). 바꾸면 바로 적용되고, 모든 패널과 떼어낸 창에 함께 적용돼요.
 
+import type { AssetClass } from './instrument';
 import type { ShortcutMap } from './shortcuts';
 
 export type AssistLevel = 'beginner' | 'standard' | 'expert' | 'off';
@@ -27,11 +28,17 @@ export interface Settings {
   };
   commandLine: {
     assist: AssistLevel;
-    /** 종목만 입력하고 Enter: v0.1은 '지금 기능 유지' 하나 */
-    securityOnlyEnter: 'keep-function';
+    /** 종목만 입력하고 Enter: 지금 기능 유지(기본) 또는 블룸버그식 기능 메뉴(v0.2) */
+    securityOnlyEnter: 'keep-function' | 'menu';
     tabAutofill: boolean;
     hanEngCorrection: boolean;
     tips: boolean;
+    /** 자산군별 기본 기능(v0.2): 종목만 쳤는데 지금 기능을 그 종목에 못 쓸 때 열 기능. 없으면 GP */
+    defaultFunctions: Partial<Record<AssetClass, string>>;
+    /** F키 모드(Windows, v0.2): F8 EQUITY, F9 CRYPTO, F10 INDEX, F11 CURNCY */
+    fKeyMode: boolean;
+    /** HTS식 6자리 바로 열기(v0.2, 기본 꺼짐): 국내 종목코드 6자리를 다 치면 Enter 없이 종목을 바꿔요 */
+    htsSixDigit: boolean;
   };
   data: {
     /** 환율 갱신 주기(초) */
@@ -50,6 +57,9 @@ export const DEFAULT_SETTINGS: Settings = {
     tabAutofill: true,
     hanEngCorrection: true,
     tips: true,
+    defaultFunctions: {},
+    fKeyMode: false,
+    htsSixDigit: false,
   },
   data: { fxIntervalSec: 60 },
   keys: {},

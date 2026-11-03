@@ -104,9 +104,11 @@ export function applyExecution(panelId: string, exec: Execution) {
   if (exec.instrumentId) {
     propagateSecurity({ ...p, fn: exec.fn }, exec.instrumentId);
     const inst = getInstrument(exec.instrumentId);
-    recordUsage(exec.instrumentId, exec.setsSecurityOnly ? undefined : exec.fn, inst?.assetClass);
+    // 기능 메뉴·로컬 검색 페이지는 기능 사용 횟수에 넣지 않아요
+    const internal = exec.fn === 'MENU' || exec.fn === 'SEARCH';
+    recordUsage(exec.instrumentId, exec.setsSecurityOnly || internal ? undefined : exec.fn, inst?.assetClass);
   }
-  recordHistory(exec.canonical, panelId);
+  if (exec.canonical) recordHistory(exec.canonical, panelId);
 }
 
 /** MON 행 고르기처럼 종목만 바꿀 때 */
@@ -134,6 +136,9 @@ export function panelCanonical(p: PanelState, fn: FunctionDef | undefined): stri
   if (!p.fn) return '';
   const inst = getInstrument(p.securityId);
   if (fn && fn.security === 'one' && inst) return `${canonicalSecurity(inst)} ${p.fn}`;
+  // 기능 메뉴는 종목만(다시 치면 메뉴), 로컬 검색 페이지는 빈 줄
+  if (p.fn === 'MENU') return inst ? canonicalSecurity(inst) : '';
+  if (p.fn === 'SEARCH') return '';
   // 인자를 받는 기능: MOST KQ
   return p.args?.length ? `${p.fn} ${p.args.join(' ')}` : p.fn;
 }

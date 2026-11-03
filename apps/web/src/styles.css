@@ -1844,3 +1844,81 @@ button {
   margin: 2px 0 4px;
   font-size: 13px;
 }
+
+/* ── 기능 메뉴(MENU)·로컬 검색(SEARCH), v0.2 ── */
+.menu-row {
+  gap: 10px;
+}
+.menu-no {
+  width: 26px;
+  color: var(--accent);
+  font-weight: 600;
+  text-align: right;
+}
+.menu-code {
+  width: 46px;
+  color: var(--amber);
+  font: 600 12px var(--mono);
+}
+.menu-name {
+  width: 110px;
+  color: var(--name);
+  white-space: nowrap;
+}
+.menu-sum {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line2);
+  background: var(--header2);
+}
+.search-box input {
+  flex: 1;
+  height: 22px;
+  padding: 0 6px;
+  background: #000;
+  border: 1px solid var(--line2);
+  color: var(--value-hi);
+  font: 12px var(--cmd);
+  outline: none;
+}
+.search-box input:focus {
+  border-color: var(--accent);
+}
+.search-badge {
+  flex: none;
+  width: 44px;
+  font: 600 10px var(--sans);
+  color: #000;
+  background: var(--chip);
+  text-align: center;
+}
+.search-badge.fn {
+  background: var(--accent);
+}
+.search-code {
+  flex: none;
+  width: 70px;
+  font: 11.5px var(--mono);
+  color: var(--value-hi);
+}
+.search-info {
+  flex: none;
+  max-width: 40%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+.search-flags {
+  flex: none;
+  font-size: 10px;
+}

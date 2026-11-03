@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis } from '@bt/command';
 import {
   ACCENT_CHOICES,
+  ASSET_LABEL,
+  FUNCTIONS,
   ASSIST_LABEL,
   bindingFromEvent,
   bindingsFor,
@@ -284,13 +286,48 @@ function Command() {
       <div className="field">
         <label>동작</label>
         <div className="seg">
-          <button className="on">지금 기능 유지 (기본값)</button>
-          <button disabled title="v0.2부터">
-            블룸버그식 기능 메뉴 (v0.2)
+          <button className={s.commandLine.securityOnlyEnter !== 'menu' ? 'on' : ''} onClick={() => void updateSettings({ commandLine: { securityOnlyEnter: 'keep-function' } })}>
+            지금 기능 유지 (기본값)
+          </button>
+          <button className={s.commandLine.securityOnlyEnter === 'menu' ? 'on' : ''} onClick={() => void updateSettings({ commandLine: { securityOnlyEnter: 'menu' } })}>
+            블룸버그식 기능 메뉴
           </button>
         </div>
       </div>
-      <p className="note">GIP를 보던 패널에서 `005930⏎` → `005930 KS EQUITY GIP`. 지금 기능이 종목용이 아니면(WEI 등) GP로 열어요.</p>
+      <p className="note">
+        {s.commandLine.securityOnlyEnter === 'menu'
+          ? '`005930⏎` → 삼성전자 기능 메뉴(번호 목록). 커맨드 라인에 번호를 치고 Enter(예: `3⏎`)하면 그 기능이 열려요. `005930 GP⏎`처럼 기능을 함께 치면 메뉴 없이 바로 열려요.'
+          : 'GIP를 보던 패널에서 `005930⏎` → `005930 KS EQUITY GIP`. 지금 기능을 그 종목에 쓸 수 없으면(WEI 등) 아래 자산군별 기본 기능으로 열어요.'}
+      </p>
+
+      <h3>자산군별 기본 기능</h3>
+      <p className="note">종목만 쳤는데 지금 기능을 그 종목에 쓸 수 없을 때 열 기능이에요(기본 GP).</p>
+      {(['EQUITY', 'CRYPTO', 'CURNCY', 'INDEX'] as const).map((a) => {
+        const opts = FUNCTIONS.filter((f) => f.implemented && f.security === 'one' && f.assetClasses.includes(a));
+        const cur = s.commandLine.defaultFunctions?.[a] ?? 'GP';
+        return (
+          <div className="field" key={a}>
+            <label>{ASSET_LABEL[a]}</label>
+            <div className="seg">
+              {opts.map((f) => (
+                <button
+                  key={f.code}
+                  className={cur === f.code ? 'on' : ''}
+                  title={f.nameKo}
+                  onClick={() => {
+                    const next = { ...s.commandLine.defaultFunctions };
+                    if (f.code === 'GP') delete next[a];
+                    else next[a] = f.code;
+                    void updateSettings({ commandLine: { defaultFunctions: next } });
+                  }}
+                >
+                  {f.code}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       <h3>입력 도우미</h3>
       <div className="field">
@@ -301,6 +338,21 @@ function Command() {
         <label>한/영 실수 교정</label>
         <Toggle label="한/영 교정" on={s.commandLine.hanEngCorrection} onChange={(v) => void updateSettings({ commandLine: { hanEngCorrection: v } })} />
       </div>
+      <div className="field">
+        <label>HTS식 6자리 바로 열기</label>
+        <Toggle label="HTS식 6자리" on={s.commandLine.htsSixDigit} onChange={(v) => void updateSettings({ commandLine: { htsSixDigit: v } })} />
+      </div>
+      <p className="note">켜면 국내 종목코드 6자리를 다 치는 순간 Enter 없이 종목이 바뀌어요(정확한 6자리 코드에서만). 기본은 꺼짐이에요.</p>
+      <div className="field">
+        <label>F키 모드 (Windows)</label>
+        <Toggle label="F키 모드" on={s.commandLine.fKeyMode} onChange={(v) => void updateSettings({ commandLine: { fKeyMode: v } })} />
+      </div>
+      <p className="note">
+        켜면 커맨드 라인에서 F8 = EQUITY, F9 = CRYPTO, F10 = INDEX, F11 = CURNCY를 넣어요(블룸버그 키보드처럼). Windows에서만 써요.
+        {s.commandLine.fKeyMode && bindingsFor('fullscreen', s.keys, isMac).includes('F11') && !isMac && (
+          <b className="err"> 전체 화면 단축키가 F11이라 겹쳐요. F키 모드가 켜져 있는 동안 F11은 CURNCY예요. 단축키 탭에서 전체 화면을 다른 키로 바꿔 주세요.</b>
+        )}
+      </p>
       <div className="field">
         <label>사용 팁</label>
         <Toggle label="사용 팁" on={s.commandLine.tips} onChange={(v) => void updateSettings({ commandLine: { tips: v } })} />
@@ -319,7 +371,6 @@ function Command() {
         </button>
       </div>
       <Aliases />
-      <p className="note">나중에 추가할 항목: 6자리 코드를 치면 바로 여는 HTS 방식(v0.2, 기본 꺼짐), F키 모드(Windows, v0.2), 자산군별 기본 기능(v0.2).</p>
       <ImeRecorder />
     </>
   );

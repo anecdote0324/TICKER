@@ -17,6 +17,7 @@ import { checkSlots } from '../stores/slots';
 import { appState, removeAlias, setAlias, updateState, usageScore } from '../stores/state';
 import { useStore } from '../stores/store';
 import { openHelp, openSettings, showToast, ui } from '../stores/ui';
+import { menuFunctions } from '../stores/menu';
 import { CandidateList } from './CandidateList';
 import { openInNewPanel } from './Workspace';
 
@@ -38,6 +39,9 @@ interface Intent {
 }
 
 /** 자산군 단축키(눌린 자리로 알아봐서 한글 모드에서도 같아요, 05 §2) */
+/** F키 모드(Windows, v0.2, 05 §10.2): 블룸버그 키보드처럼 F키로 자산군 */
+const F_KEY_ASSET: Record<string, AssetClass> = { F8: 'EQUITY', F9: 'CRYPTO', F10: 'INDEX', F11: 'CURNCY' };
+
 const ASSET_SHORTCUTS = [
   ['assetEquity', 'EQUITY'],
   ['assetCrypto', 'CRYPTO'],
@@ -107,9 +111,12 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       recent: [...new Set(app.history.map((h) => h.cmd))].slice(0, 5),
       lookup: canLookup,
       aliases: (k) => (app.aliases ?? []).find((x) => x.name === k)?.id,
+      securityEnter: st.commandLine.securityOnlyEnter,
+      defaultFn: (a) => st.commandLine.defaultFunctions?.[a],
+      menu: panel?.fn === 'MENU' && security ? menuFunctions(security).map((f) => f.code) : undefined,
     }),
     // idx.count: 색인이 바뀌면 다시 계산
-    [security, panel?.fn, assist, st.commandLine.hanEngCorrection, st.commandLine.tabAutofill, app, chosen, idx.count, canLookup],
+    [security, panel?.fn, assist, st.commandLine, app, chosen, idx.count, canLookup],
   );
 
   // 고른 토큰은 그 글자가 그대로인 동안만 유지돼요
@@ -123,6 +130,20 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     if (text) recordAnalyze(performance.now() - t0);
     return a;
   }, [text, cursor, ctx, composing, listSegment, expanded]);
+
+  // HTS식 6자리 바로 열기(v0.2, 기본 꺼짐): 국내 종목코드 6자리를 다 치면 Enter 없이
+  const htsDone = useRef('');
+  useEffect(() => {
+    if (!st.commandLine.htsSixDigit || composing || !/^\d{6}$/.test(text) || htsDone.current === text) return;
+    const sec = analysis.security;
+    if (analysis.plan.kind !== 'execute' || !sec || (sec.market !== 'KS' && sec.market !== 'KQ') || sec.code !== text) return;
+    htsDone.current = text;
+    run(analysis.plan.exec);
+    // run이 줄을 비워요
+  }, [text, analysis, composing, st.commandLine.htsSixDigit]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (text === '') htsDone.current = '';
+  }, [text]);
 
   // Ctrl+R 기록 검색 줄: 친 글자가 들어간 기록(최신순, 같은 명령은 한 번)
   const histRows: Row[] = useMemo(() => {
@@ -319,6 +340,14 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     [analysis, assist, onDone, panelId, resetLine, st.commandLine.tips, writeInput],
   );
 
+  /** 로컬 검색 페이지(v0.2): 더 보기·일치 없음의 Enter. 이 패널에서 열어요(팔레트는 대상 패널) */
+  const openSearchPage = (q: string) => {
+    applyExecution(panelId, { kind: 'function', fn: 'SEARCH', args: [q], canonical: '', notes: [] });
+    writeInput('', 0);
+    resetLine();
+    onDone?.();
+  };
+
   /** ↑ 기록 목록: 이 패널 먼저, 그다음 모든 패널, 최신순. q가 있으면 그 글자가 든 명령만 */
   const historyList = (q: string): string[] => {
     const all = [...app.history.filter((h) => h.panel === panelId), ...app.history.filter((h) => h.panel !== panelId)].map((h) => h.cmd);
@@ -376,9 +405,16 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
           setListOpen(true);
           if (row && query) updateState('remembered', (m) => ({ ...m, [query.toLowerCase()]: row.id }));
           break;
+        case 'nomatch':
+          // v0.2: 일치 없음에서 Enter → 로컬 검색 페이지(목록이 이미 보일 때. 닫혀 있으면 먼저 목록을 열어요)
+          if (showList || listOpen) {
+            openSearchPage(text.trim());
+            break;
+          }
+          setListOpen(true);
+          break;
         case 'need-security':
         case 'error':
-        case 'nomatch':
           setListOpen(true);
           setDismissed(false);
           flashLabel();
@@ -389,7 +425,8 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
           break;
       }
     },
-    [analysis, ctx, run, selectedId, writeInput],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [analysis, ctx, run, selectedId, writeInput, showList, listOpen, text],
   );
 
   const moveHighlight = (delta: number) => {
@@ -510,8 +547,10 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       }
     }
 
-    // 자산군 단축키 Mod+Shift+E/C/X/I(05 §10.2). 설정에서 바꿀 수 있어요
-    const asset = ASSET_SHORTCUTS.find(([id]) => isShortcut(ne, id))?.[1];
+    // 자산군 단축키 Mod+Shift+E/C/X/I(05 §10.2). 설정에서 바꿀 수 있어요. F키 모드(Windows, v0.2)면 F8~F11도
+    const fKey = st.commandLine.fKeyMode && !isMac && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey ? F_KEY_ASSET[key] : undefined;
+    if (fKey) e.stopPropagation();
+    const asset = fKey ?? ASSET_SHORTCUTS.find(([id]) => isShortcut(ne, id))?.[1];
     if (asset) {
       e.preventDefault();
       const t = text.trimEnd();
@@ -881,7 +920,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
           selectedId={selectedId}
           showDesc={desc === 'auto' ? 'auto' : desc}
           onHover={() => undefined}
-          onMore={() => setExpanded(true)}
+          onMore={() => openSearchPage((analysis.segments[analysis.listSegment] ?? analysis.segments[0])?.text ?? text.trim())}
           onPick={(row, runNow) => {
             if (row.disabled) return;
             // K8: 조합 중 클릭은 음절이 안 끝났을 수 있어요. 줄 id를 기록하고, 포커스를 뺐다 돌려 음절을 마무리한 뒤 실행해요

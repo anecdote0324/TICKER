@@ -949,6 +949,9 @@ export class CommandEngine {
 
   analyze(input: string, cursor: number, ctx: EngineContext, opts: AnalyzeOptions = {}): Analysis {
     const composing = !!opts.composing;
+    // 기능 메뉴 페이지의 숫자 + Enter(05 §10.2, v0.2). 후보 목록에서는 안 써요(숫자는 KRX 코드라 1~2자리만)
+    const num = input.trim();
+    if (ctx.menu?.length && ctx.panel.security && /^\d{1,2}$/.test(num)) return this.menuChoice(input, cursor, Number(num), ctx);
     const { segs, matches } = this.parse(input, ctx, composing);
 
     // 커서가 있는 칸
@@ -970,11 +973,18 @@ export class CommandEngine {
       security = ctx.panel.security;
       securityFromPanel = true;
     }
-    if (security && !fnSeg && !segs.some((s) => s.slot === 'closed')) {
-      // 종목만 입력하고 Enter: 지금 기능 유지(05 §3.4)
-      const cur = ctx.panel.fn ? FUNCTIONS.find((f) => f.code === ctx.panel.fn) : undefined;
-      fn = cur && cur.implemented && isSecurityFunction(cur) && this.fnSupports(cur, security, ctx) ? cur : FUNCTIONS.find((f) => f.code === DEFAULT_FUNCTION);
-      fnImplied = true;
+    let menuMode = false;
+    if (security && !fnSeg && !segs.some((s) => s.slot === 'closed') && !cmdSeg) {
+      if (ctx.securityEnter === 'menu' && !securityFromPanel) {
+        // 블룸버그식(v0.2): 종목만 입력하고 Enter → 그 종목의 기능 메뉴
+        menuMode = true;
+        fn = undefined;
+      } else {
+        // 종목만 입력하고 Enter: 지금 기능 유지(05 §3.4). 지금 기능을 못 쓰면 자산군별 기본 기능(v0.2), 그것도 없으면 GP
+        const cur = ctx.panel.fn ? FUNCTIONS.find((f) => f.code === ctx.panel.fn) : undefined;
+        fn = cur && cur.implemented && isSecurityFunction(cur) && this.fnSupports(cur, security, ctx) ? cur : FUNCTIONS.find((f) => f.code === this.defaultFnFor(security!, ctx));
+        fnImplied = true;
+      }
     }
 
     // 기능과 자산군이 맞는지
@@ -988,7 +998,9 @@ export class CommandEngine {
     }
 
     // Enter 계획(05 §3.6)
-    const plan = this.planEnter(input, segs, matches, ctx, { security, fn, fnImplied, securityFromPanel, secSeg, fnSeg, cmdSeg, assetOnly });
+    const plan = menuMode && security
+      ? this.firstProblem(input, segs, matches, ctx, security) ?? { kind: 'execute' as const, exec: { kind: 'function' as const, fn: 'MENU', instrumentId: security.id, canonical: canonicalSecurity(security), notes: [] } }
+      : this.planEnter(input, segs, matches, ctx, { security, fn, fnImplied, securityFromPanel, secSeg, fnSeg, cmdSeg, assetOnly });
 
     // 목록
     const listSegment = opts.listSegment ?? (plan.kind === 'select' && current >= segs.length ? plan.segment : current);
@@ -1308,9 +1320,46 @@ export class CommandEngine {
     return null;
   }
 
+  /** 기능 메뉴의 번호 고르기 */
+  private menuChoice(input: string, cursor: number, n: number, ctx: EngineContext): Analysis {
+    const sec = ctx.panel.security!;
+    const code = ctx.menu![n - 1];
+    const fn = code ? FUNCTIONS.find((f) => f.code === code) : undefined;
+    const plan: EnterPlan = fn
+      ? { kind: 'execute', exec: { kind: 'function', fn: fn.code, instrumentId: sec.id, canonical: `${canonicalSecurity(sec)} ${fn.code}`, notes: [`메뉴 ${n}번`] } }
+      : { kind: 'error', segment: 0, message: `기능 메뉴에 ${n}번이 없어요(1~${ctx.menu!.length})` };
+    return {
+      input,
+      cursor,
+      segments: [],
+      current: 0,
+      listSegment: 0,
+      rows: [],
+      more: 0,
+      ghost: null,
+      plan,
+      label: fn ? `⏎ 실행: ${n}) ${fn.code} ${fn.nameKo}` : labelFor(plan, this.index),
+      progress: [],
+      message: '',
+      security: sec,
+      fn,
+      needsAttention: !fn,
+    };
+  }
+
+  /** 문제가 있는 토큰(고르기·오류)이 있으면 그 계획. 없으면 undefined */
+  private firstProblem(input: string, segs: Segment[], matches: Map<number, SecurityMatch[]>, ctx: EngineContext, security: Instrument): EnterPlan | undefined {
+    const p = this.planEnter(input, segs, matches, ctx, { security, fn: FUNCTIONS.find((f) => f.code === DEFAULT_FUNCTION), fnImplied: true, securityFromPanel: false });
+    return p.kind === 'execute' ? undefined : p;
+  }
+
+  /** 종목만 쳤을 때 열 기능: 지금 기능(쓸 수 있으면) → 자산군별 기본 기능(설정, v0.2) → GP */
   private defaultFnFor(inst: Instrument, ctx: EngineContext): string {
-    const cur = ctx.panel.fn ? FUNCTIONS.find((f) => f.code === ctx.panel.fn) : undefined;
-    return cur && cur.implemented && isSecurityFunction(cur) && this.fnSupports(cur, inst, ctx) ? cur.code : DEFAULT_FUNCTION;
+    const usable = (code: string | undefined) => {
+      const f = code ? FUNCTIONS.find((x) => x.code === code) : undefined;
+      return f && f.implemented && isSecurityFunction(f) && this.fnSupports(f, inst, ctx) ? f.code : undefined;
+    };
+    return usable(ctx.panel.fn) ?? usable(ctx.defaultFn?.(inst.assetClass)) ?? DEFAULT_FUNCTION;
   }
 
   private progressFor(
@@ -1657,6 +1706,10 @@ export function labelFor(plan: EnterPlan, index?: SearchIndex): string {
         return e.cmd === 'settings' ? '⏎ 실행: 설정 창 열기' : e.cmd === 'syntax' ? '⏎ 실행: 문법 요약' : '⏎ 실행: 도움말';
       }
       if (e.kind === 'asset-list') return `⏎ 목록: ${ASSET_LABEL[e.asset!]} 종목`;
+      if (e.fn === 'MENU') {
+        const inst = e.instrumentId ? index?.get(e.instrumentId)?.inst : undefined;
+        return `⏎ 기능 메뉴: ${inst ? labelSecurity(inst) : e.canonical}`;
+      }
       const fn = FUNCTIONS.find((f) => f.code === e.fn)!;
       const notes = e.notes.length > 0 ? ` (${e.notes.join(', ')})` : '';
       if (!isSecurityFunction(fn)) {
@@ -1675,7 +1728,8 @@ export function labelFor(plan: EnterPlan, index?: SearchIndex): string {
     case 'error':
       return `⏎ 실행 안 됨: ${plan.message}`;
     case 'nomatch':
-      return '⏎ 일치 없음';
+      // v0.2: Enter로 로컬 검색 페이지(05 §4.4)
+      return '⏎ 검색';
     case 'empty':
       return '';
   }

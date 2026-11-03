@@ -20,6 +20,8 @@ import { Fxc } from '../widgets/Fxc';
 import { Hmap } from '../widgets/Hmap';
 import { Imap } from '../widgets/Imap';
 import { Last } from '../widgets/Last';
+import { Menu } from '../widgets/Menu';
+import { Search } from '../widgets/Search';
 import { Mon } from '../widgets/Mon';
 import { News } from '../widgets/News';
 import { Most } from '../widgets/Most';
@@ -108,6 +110,10 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Imap panel={p} />;
     case 'LAST':
       return <Last panel={p} />;
+    case 'MENU':
+      return <Menu panel={p} />;
+    case 'SEARCH':
+      return <Search panel={p} />;
     default: {
       const fn = p.fn ? FUNCTIONS.find((f) => f.code === p.fn) : undefined;
       return (

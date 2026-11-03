@@ -514,3 +514,33 @@ describe('줄 id는 겹치지 않아요', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+describe('기능 메뉴·번호 메뉴·자산군별 기본 기능(v0.2)', () => {
+  it('블룸버그식 설정이면 종목만 Enter → 기능 메뉴', () => {
+    const a = run('005930', ctx({ fn: 'GP' }, { securityEnter: 'menu' }));
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'MENU', instrumentId: 'EQ:KS:005930', canonical: '005930 KS EQUITY' } });
+    expect(a.label).toBe('⏎ 기능 메뉴: 삼성전자');
+    expect(a.ghost?.rest ?? '').not.toContain('GP');
+  });
+  it('기능을 함께 치면 메뉴 없이 그 기능, 애매하면 고르기가 먼저', () => {
+    expect(run('005930 DES', ctx({}, { securityEnter: 'menu' })).plan).toMatchObject({ exec: { fn: 'DES' } });
+    expect(run('GS', ctx({}, { securityEnter: 'menu' })).plan.kind).toBe('select');
+  });
+  it('기능 메뉴 페이지에서 숫자 + Enter는 그 번호 기능', () => {
+    const sam = inst('EQ:KS:005930');
+    const c = ctx({ security: sam, fn: 'MENU' }, { menu: ['GP', 'GIP', 'DES'] });
+    expect(run('3', c).plan).toMatchObject({ exec: { fn: 'DES', instrumentId: 'EQ:KS:005930', canonical: '005930 KS EQUITY DES' } });
+    expect(run('3', c).label).toBe('⏎ 실행: 3) DES 종목 개요');
+    expect(run('9', c).plan.kind).toBe('error');
+    // 6자리는 코드
+    expect(run('005930', c).plan).not.toMatchObject({ exec: { fn: 'DES' } });
+  });
+  it('지금 기능을 못 쓰면 자산군별 기본 기능, 없으면 GP', () => {
+    const c = ctx({ fn: 'WEI' }, { defaultFn: (a) => (a === 'EQUITY' ? 'DES' : undefined) });
+    expect(run('005930', c).plan).toMatchObject({ exec: { fn: 'DES' } });
+    expect(run('BTC', c).plan).toMatchObject({ exec: { fn: 'GP' } });
+  });
+  it('일치 없음의 ⏎ 라벨은 검색(로컬 검색 페이지)', () => {
+    expect(run('XYZQQ').label).toBe('⏎ 검색');
+  });
+});

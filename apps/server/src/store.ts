@@ -145,7 +145,7 @@ function mergeSettings(s: Partial<Settings>): Settings {
   return {
     general: { ...d.general, ...s.general },
     display: { ...d.display, ...s.display },
-    commandLine: { ...d.commandLine, ...s.commandLine },
+    commandLine: { ...d.commandLine, ...s.commandLine, defaultFunctions: { ...d.commandLine.defaultFunctions, ...s.commandLine?.defaultFunctions } },
     data: { ...d.data, ...s.data },
     keys: { ...d.keys, ...s.keys },
   };

@@ -65,6 +65,8 @@ export function onGlobalKey(e: KeyboardEvent) {
   }
   if (isShortcut(e, 'fullscreen')) {
     e.preventDefault();
+    // F키 모드(Windows, v0.2)를 켜면 F11은 CURNCY예요. 전체 화면은 다른 키로 바꿔 써요(06)
+    if (e.key === 'F11' && !isMac && settings.get().commandLine.fKeyMode) return;
     void toggleFullScreen((e.view as Window | null) ?? window);
     return;
   }
