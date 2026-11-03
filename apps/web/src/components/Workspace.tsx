@@ -19,6 +19,7 @@ import { Des } from '../widgets/Des';
 import { Fxc } from '../widgets/Fxc';
 import { Hmap } from '../widgets/Hmap';
 import { Imap } from '../widgets/Imap';
+import { Last } from '../widgets/Last';
 import { Mon } from '../widgets/Mon';
 import { News } from '../widgets/News';
 import { Most } from '../widgets/Most';
@@ -104,6 +105,8 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Hmap panel={p} />;
     case 'IMAP':
       return <Imap panel={p} />;
+    case 'LAST':
+      return <Last panel={p} />;
     default: {
       const fn = p.fn ? FUNCTIONS.find((f) => f.code === p.fn) : undefined;
       return (

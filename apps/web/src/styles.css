@@ -1820,3 +1820,18 @@ button {
   font: 600 10.5px var(--sans);
   cursor: pointer;
 }
+
+/* ── LAST 최근 화면 ── */
+.last-cmd {
+  font: 11.5px var(--cmd);
+  color: var(--name);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.last-desc {
+  color: var(--value);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
