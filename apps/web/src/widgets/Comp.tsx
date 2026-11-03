@@ -10,7 +10,7 @@ import { getInstrument, useInstrument } from '../stores/instruments';
 import { patchPanel, type PanelState } from '../stores/panels';
 import { settings } from '../stores/settings';
 import { useStore } from '../stores/store';
-import { COMP_DEFAULT, COMP_RANGES, benchmarkOf, commonStart, rangeStart, returnsFrom, type CompRange } from './comp';
+import { COMP_DEFAULT, COMP_RANGES, benchmarkOf, commonStart, rangeStart, returnsFrom, type CompRange } from './compCalc';
 import { cssVar, kstLabel, kstTick } from './PriceChart';
 import { TitleBar } from './common';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Bar, Instrument } from '@bt/shared';
-import { benchmarkOf, commonStart, rangeStart, returnsFrom } from './comp';
+import { benchmarkOf, commonStart, rangeStart, returnsFrom } from './compCalc';
 
 const day = (d: string) => Date.parse(`${d}T00:00:00Z`) / 1000;
 const bar = (d: string, c: number): Bar => ({ t: day(d), o: c, h: c, l: c, c, v: 0 });
