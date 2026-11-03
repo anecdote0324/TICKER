@@ -72,6 +72,8 @@ jobs:
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "이미 있는 $TAG 릴리스(초안)에 올려요"
+            # 공개할 때 태그가 이 커밋에 생기게 대상을 지금 커밋으로 옮겨요(지난 실행이 고치기 전 커밋으로 만든 초안일 수 있어요)
+            gh release edit "$TAG" --target "$GITHUB_SHA"
           else
             # 태그가 없으면(직접 실행) 공개할 때 이 커밋에 만들어요. 지난 릴리스와의 변경 비교 링크를 붙여요
             gh release create "$TAG" --draft --title "$TAG" --target "$GITHUB_SHA" --generate-notes ${{ needs.version.outputs.prerelease == 'true' && '--prerelease' || '' }}
