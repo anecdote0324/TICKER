@@ -473,3 +473,37 @@ describe('기능 인자(05 §3.1, v0.2): HMAP·IMAP 지수', () => {
     expect(run('HMAP SPX').plan.kind).toBe('error');
   });
 });
+
+describe('찾기 넓히기(v0.2): 오타 허용 T9, 영문 머리글자, 사용자 별칭', () => {
+  it('apel → Apple(오타 한 글자, 4글자 이상 영문 이름)', () => {
+    const m = index.search('apel', { first: true });
+    expect(m.find((x) => x.rec.inst.id === 'EQ:US:AAPL')).toMatchObject({ tier: 9, via: 'typo' });
+    const a = run('apel');
+    expect(a.plan.kind).toBe('select');
+    expect(a.rows.find((r) => r.instrumentId === 'EQ:US:AAPL')?.flags).toContain('오타?');
+  });
+  it('코드·티커에는 오타를 쓰지 않아요(AAPK는 AAPL이 아님)', () => {
+    expect(index.search('aapk', { first: true }).some((x) => x.rec.inst.id === 'EQ:US:AAPL' && x.via === 'typo')).toBe(false);
+  });
+  it('기능 코드 오타: CRPY → CRYP 줄', () => {
+    expect(run('CRPY').rows.some((r) => r.fnCode === 'CRYP' && r.flags.includes('오타?'))).toBe(true);
+  });
+  it('영문 머리글자: Equity Residential → er', () => {
+    expect(index.search('er', { first: false }).find((x) => x.rec.inst.id === 'EQ:US:EQR')).toMatchObject({ via: 'acronym', tier: 6 });
+  });
+  it('사용자 별칭은 첫 칸에서 티커를 이기고(짧아도 바로 실행), 시장을 붙이면 진짜 종목', () => {
+    const c = ctx({}, { aliases: (k) => (k === 'GS' ? 'EQ:KS:005930' : undefined) });
+    const a = run('GS', c);
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { instrumentId: 'EQ:KS:005930' } });
+    expect(a.rows[0]).toMatchObject({ badge: 'ALIAS', instrumentId: 'EQ:KS:005930' });
+    expect(run('GS KS', c).plan).toMatchObject({ exec: { instrumentId: 'EQ:KS:078930' } });
+  });
+  it('ALIAS 명령: 만들기, 목록, 잘못된 이름', () => {
+    expect(run('ALIAS SS 005930').plan).toMatchObject({ kind: 'execute', exec: { kind: 'command', cmd: 'alias', args: ['SS'], instrumentId: 'EQ:KS:005930' } });
+    expect(run('ALIAS SS 005930').label).toBe('⏎ 실행: 별칭 SS → 삼성전자 만들기');
+    expect(run('ALIAS AP AAPL US').plan).toMatchObject({ exec: { args: ['AP'], instrumentId: 'EQ:US:AAPL' } });
+    expect(run('ALIAS').plan).toMatchObject({ exec: { kind: 'command', cmd: 'alias' } });
+    expect(run('ALIAS GP 005930').label).toContain('기능이라');
+    expect(run('ALIAS SS').label).toContain('종목을 넣어');
+  });
+});

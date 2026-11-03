@@ -67,7 +67,7 @@ export const RESERVED_ASSET_WORDS: Record<string, string> = {
   PFD: '계획 없음',
 };
 
-export type CommandWord = 'help' | 'syntax' | 'settings';
+export type CommandWord = 'help' | 'syntax' | 'settings' | 'alias';
 
 export const COMMAND_WORDS: Record<string, { cmd: CommandWord; nameKo: string; summary: string }> = {
   '?': { cmd: 'syntax', nameKo: '문법 요약', summary: '명령어 문법 안내' },
@@ -75,7 +75,14 @@ export const COMMAND_WORDS: Record<string, { cmd: CommandWord; nameKo: string; s
   HELP: { cmd: 'help', nameKo: '도움말', summary: '커맨드 라인 도움말' },
   설정: { cmd: 'settings', nameKo: '설정', summary: '설정 창 열기' },
   PDF: { cmd: 'settings', nameKo: '개인 설정', summary: '설정 창 열기 (블룸버그 Personal Defaults)' },
+  ALIAS: { cmd: 'alias', nameKo: '별칭', summary: '종목 별칭 만들기 (ALIAS 별칭 종목)' },
+  별칭: { cmd: 'alias', nameKo: '별칭', summary: '종목 별칭 만들기 (별칭 이름 종목)' },
 };
+
+/** 사용자 별칭의 키: 영문·숫자는 대문자, 한글은 공백 없이 */
+export function aliasKey(s: string): string {
+  return normalizeText(s).replace(/\s+/g, '').toUpperCase();
+}
 
 /** 표시용 전체 이름 */
 export const ASSET_FULL: Record<AssetClass, string> = {

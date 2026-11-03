@@ -35,6 +35,8 @@ export interface EngineContext {
   recent?: string[];
   /** 목록에 없는 코드를 한국투자증권에서 직접 조회할 수 있는지(키가 있을 때, 05 §4.5) */
   lookup?: boolean;
+  /** 사용자 별칭(ALIAS, v0.2): 별칭 키(aliasKey) → 종목 id */
+  aliases?: (key: string) => string | undefined;
 }
 
 export interface ChosenToken {
@@ -96,6 +98,8 @@ export interface Segment {
   arg?: string;
   /** 종목 인자(COMP의 비교 종목). 해석한 종목은 inst, 붙인 시장은 market */
   argSecurity?: boolean;
+  /** 사용자 별칭으로 정해졌는지(그 별칭 글자) */
+  byAlias?: string;
 }
 
 export type RowKind = 'security' | 'function' | 'market' | 'asset' | 'command' | 'convert' | 'fix' | 'unavailable' | 'nomatch' | 'lookup' | 'history' | 'header' | 'arg';

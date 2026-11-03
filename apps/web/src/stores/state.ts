@@ -33,6 +33,8 @@ export interface AppState {
   workspace: unknown;
   workspaces: NamedWorkspace[];
   tips: { counts: Record<string, number>; directRuns: number; standardAsked: boolean; hidden: string[] };
+  /** 사용자 별칭(ALIAS, v0.2): 별칭(aliasKey) → 종목 */
+  aliases: Array<{ name: string; id: string; at: number }>;
 }
 
 export const DEFAULT_WATCHLISTS: WatchGroup[] = [
@@ -52,11 +54,12 @@ const DEFAULT: AppState = {
   workspace: null,
   workspaces: [],
   tips: { counts: {}, directRuns: 0, standardAsked: false, hidden: [] },
+  aliases: [],
 };
 
 export const appState = createStore<AppState>(DEFAULT);
 
-const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips'];
+const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases'];
 
 export async function loadAppState() {
   const next: AppState = { ...DEFAULT };
@@ -106,6 +109,15 @@ export function recordUsage(id: string, fn: string | undefined, asset: AssetClas
       return { ...u, [asset]: m };
     });
   }
+}
+
+/** 별칭 만들기(같은 이름이면 바꿔요) */
+export function setAlias(name: string, id: string) {
+  updateState('aliases', (a) => [{ name, id, at: Date.now() }, ...(a ?? []).filter((x) => x.name !== name)]);
+}
+
+export function removeAlias(name: string) {
+  updateState('aliases', (a) => (a ?? []).filter((x) => x.name !== name));
 }
 
 export function recordHistory(cmd: string, panel: string) {

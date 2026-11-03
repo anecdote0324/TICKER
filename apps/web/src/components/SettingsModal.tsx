@@ -7,6 +7,7 @@ import {
   ASSIST_LABEL,
   bindingFromEvent,
   bindingsFor,
+  canonicalSecurity,
   findConflict,
   FIXED_SHORTCUTS,
   formatBinding,
@@ -22,10 +23,10 @@ import { clearImeLog, exportImeLog, imeLog, setImeLogEnabled } from '../imeLog';
 import { keyCapture } from '../keys';
 import { analyzeStats, slowInputs } from '../perf';
 import { feedStats, feedStatus } from '../stores/feed';
-import { engine, indexState } from '../stores/instruments';
+import { engine, getInstrument, indexState } from '../stores/instruments';
 import { settings, updateSettings } from '../stores/settings';
 import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
-import { updateState } from '../stores/state';
+import { appState, removeAlias, updateState } from '../stores/state';
 import { useStore } from '../stores/store';
 import { showToast, ui } from '../stores/ui';
 
@@ -317,8 +318,37 @@ function Command() {
           초기화
         </button>
       </div>
+      <Aliases />
       <p className="note">나중에 추가할 항목: 6자리 코드를 치면 바로 여는 HTS 방식(v0.2, 기본 꺼짐), F키 모드(Windows, v0.2), 자산군별 기본 기능(v0.2).</p>
       <ImeRecorder />
+    </>
+  );
+}
+
+/** 사용자 별칭(ALIAS, v0.2): 커맨드 라인에서 `ALIAS SS 005930⏎`으로 만들고 여기서 지워요 */
+function Aliases() {
+  const list = useStore(appState, (a) => a.aliases ?? []);
+  return (
+    <>
+      <h3>별칭</h3>
+      <p className="note">
+        커맨드 라인에 <code>ALIAS 별칭 종목⏎</code>을 치면 만들어요(예: <code>ALIAS SS 005930⏎</code>). 줄 첫머리에서는 별칭이 같은 글자의 티커보다 먼저예요. 진짜 티커는 <code>SS US</code>처럼 시장을 붙여요.
+      </p>
+      {list.length === 0 && <p className="note">아직 만든 별칭이 없어요.</p>}
+      {list.map((a) => {
+        const inst = getInstrument(a.id);
+        return (
+          <div className="field" key={a.name}>
+            <label>
+              <code>{a.name}</code>
+            </label>
+            <span style={{ flex: 1 }}>{inst ? `${inst.nameKo ?? inst.nameEn ?? inst.code} · ${canonicalSecurity(inst)}` : `${a.id} (지금 목록에 없음)`}</span>
+            <button className="btn" onClick={() => removeAlias(a.name)}>
+              지우기
+            </button>
+          </div>
+        );
+      })}
     </>
   );
 }

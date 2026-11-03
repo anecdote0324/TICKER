@@ -34,6 +34,8 @@ export interface IndexRecord {
   cho: string;
   /** 한글 이름을 영문 자판으로 친 키 */
   keys: string;
+  /** 영문 이름의 머리글자(bank of america → boa, ba). 두 단어 이상인 이름만(v0.2) */
+  acr: string[];
 }
 
 export type MatchVia =
@@ -46,7 +48,13 @@ export type MatchVia =
   | 'substr'
   | 'zero'
   | 'hanToEng'
-  | 'engToHan';
+  | 'engToHan'
+  /** 영문 머리글자(v0.2) */
+  | 'acronym'
+  /** 한 글자 틀린 영문 이름(T9, v0.2) */
+  | 'typo'
+  /** 사용자가 만든 별칭(ALIAS, v0.2) */
+  | 'user';
 
 export interface SecurityMatch {
   rec: IndexRecord;
@@ -77,6 +85,43 @@ function noSpace(s: string): string {
   return s.replace(/\s+/g, '');
 }
 
+/** 머리글자에서 빼는 단어(bank of america corp → ba도 함께) */
+const ACR_STOP = new Set(['of', 'the', 'and', '&', 'inc', 'corp', 'corporation', 'co', 'company', 'ltd', 'limited', 'plc', 'holdings', 'holding', 'group', 'class', 'sa', 'nv', 'ag', 'adr', 'etf', 'trust', 'fund']);
+
+/** 영문 이름의 머리글자: 모든 단어, 접미사·관사를 뺀 단어. 두 글자 이상만 */
+export function acronymsOf(nameEn: string | undefined): string[] {
+  const words = (nameEn ?? '').toLowerCase().split(/[^a-z0-9&]+/).filter(Boolean);
+  if (words.length < 2) return [];
+  const all = words.map((w) => w[0]).join('');
+  const core = words
+    .filter((w) => !ACR_STOP.has(w))
+    .map((w) => w[0])
+    .join('');
+  return [...new Set([all, core])].filter((a) => a.length >= 2);
+}
+
+/**
+ * 오타 한 글자(T9): 바꾸기·넣기·빼기·이웃 글자 맞바꾸기 중 하나로 같아지는지(Damerau 거리 1 이하)
+ */
+export function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  if (la === lb) {
+    let i = 0;
+    while (i < la && a[i] === b[i]) i++;
+    if (i === la) return true;
+    // 바꾸기 한 번 또는 이웃 두 글자 맞바꾸기
+    if (a.slice(i + 1) === b.slice(i + 1)) return true;
+    return i + 1 < la && a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
+  }
+  const [s, l] = la < lb ? [a, b] : [b, a];
+  let i = 0;
+  while (i < s.length && s[i] === l[i]) i++;
+  return s.slice(i) === l.slice(i + 1);
+}
+
 export function buildRecord(inst: Instrument): IndexRecord {
   const codeKeys = new Set<string>([codeKey(inst.code)]);
   const aliasKeys: string[] = [];
@@ -98,6 +143,7 @@ export function buildRecord(inst: Instrument): IndexRecord {
     jamo: hasHangul(nameKoKey) ? toKeystrokeJamo(nameKoKey) : '',
     cho: hasHangul(nameKoKey) ? toChosung(nameKoKey) : '',
     keys: hasHangul(nameKoKey) ? hangulToKeys(nameKoKey) : '',
+    acr: acronymsOf(inst.nameEn),
   };
 }
 
@@ -115,13 +161,14 @@ export interface PackedRecords {
   jamo: string;
   cho: string;
   keys: string;
+  acr: string;
 }
 
 const REC = '\u0001';
 const ITEM = '\u0002';
 
 export function packRecords(insts: Instrument[]): PackedRecords {
-  const cols = { codeKeys: [] as string[], aliasKeys: [] as string[], nameKoKey: [] as string[], nameEnKey: [] as string[], enStarts: [] as string[], jamo: [] as string[], cho: [] as string[], keys: [] as string[] };
+  const cols = { codeKeys: [] as string[], aliasKeys: [] as string[], nameKoKey: [] as string[], nameEnKey: [] as string[], enStarts: [] as string[], jamo: [] as string[], cho: [] as string[], keys: [] as string[], acr: [] as string[] };
   for (const inst of insts) {
     const r = buildRecord(inst);
     cols.codeKeys.push(r.codeKeys.join(ITEM));
@@ -132,6 +179,7 @@ export function packRecords(insts: Instrument[]): PackedRecords {
     cols.jamo.push(r.jamo);
     cols.cho.push(r.cho);
     cols.keys.push(r.keys);
+    cols.acr.push(r.acr.join(ITEM));
   }
   return {
     count: insts.length,
@@ -143,6 +191,7 @@ export function packRecords(insts: Instrument[]): PackedRecords {
     jamo: cols.jamo.join(REC),
     cho: cols.cho.join(REC),
     keys: cols.keys.join(REC),
+    acr: cols.acr.join(REC),
   };
 }
 
@@ -159,6 +208,7 @@ export function unpackRecords(insts: Instrument[], p: PackedRecords): IndexRecor
   const jamo = col(p.jamo);
   const cho = col(p.cho);
   const keys = col(p.keys);
+  const acr = col(p.acr ?? '');
   const out: IndexRecord[] = new Array(insts.length);
   for (let i = 0; i < insts.length; i++) {
     out[i] = {
@@ -171,6 +221,7 @@ export function unpackRecords(insts: Instrument[], p: PackedRecords): IndexRecor
       jamo: jamo[i],
       cho: cho[i],
       keys: keys[i],
+      acr: items(acr[i] ?? ''),
     };
   }
   return out;
@@ -301,6 +352,7 @@ export class SearchIndex {
     addKey(r.nameEnKey);
     for (const e of r.enStarts) addKey(e.key);
     addKey(r.keys);
+    for (const a of r.acr) addKey(a);
     // 앞자리 0이 빠진 국내 코드(5930 → 005930)
     const inst = r.inst;
     if ((inst.market === 'KS' || inst.market === 'KQ') && inst.code.length === 6) addKey(inst.code.replace(/^0+/, ''));
@@ -450,7 +502,34 @@ export class SearchIndex {
       if (engLower && r.keys && r.keys.startsWith(engLower)) {
         best = pick(best, { rec: r, tier: 8, sub: 2, via: 'engToHan' });
       }
+      // 영문 머리글자(v0.2): 정확하면 2글자부터, 앞부분은 3글자부터. 초성(T6)처럼 이름의 첫 글자들이라 같은 등급
+      if (latin && r.acr.length && (!best || best.tier > 6)) {
+        for (const a of r.acr) {
+          if (a === q.lower) best = pick(best, { rec: r, tier: 6, sub: 3, via: 'acronym' });
+          else if (q.lower.length >= 3 && a.startsWith(q.lower)) best = pick(best, { rec: r, tier: 6, sub: 4, via: 'acronym' });
+        }
+      }
       if (best) out.push(best);
+    }
+
+    // T9 오타 허용(v0.2): 4글자 이상 영문, 위 결과가 3개 미만일 때만. 영문 이름의 단어 시작과 한 글자 차이. 코드·티커에는 안 써요
+    if (latin && q.lower.length >= 4 && /^[a-z]+$/.test(q.lower) && out.length < 3) {
+      const have = new Set(out.map((m) => m.rec));
+      const pool = this.byFirst1.get(q.lower[0]) ?? [];
+      const n = q.lower.length;
+      for (const r of pool) {
+        if (have.has(r)) continue;
+        if (asset && r.inst.assetClass !== asset) continue;
+        if (market && r.inst.market !== market) continue;
+        for (const s of r.enStarts) {
+          if (s.key.length < n - 1) continue;
+          if (withinOneEdit(q.lower, s.key.slice(0, n)) || withinOneEdit(q.lower, s.key.slice(0, n + 1)) || withinOneEdit(q.lower, s.key.slice(0, n - 1))) {
+            out.push({ rec: r, tier: 9, sub: s.word, via: 'typo', hl: { kind: 'en', start: s.word, len: n } });
+            have.add(r);
+            break;
+          }
+        }
+      }
     }
 
     // 영→한 줄은 다른 결과가 3개 미만일 때만(05 §8.2)

@@ -29,12 +29,13 @@ import {
   FOREIGN_MARKETS,
   MARKET_WORDS,
   RESERVED_ASSET_WORDS,
+  aliasKey,
   codeKey,
   normalizeText,
   type CommandWord,
 } from './lexicon';
 import { sortMatches } from './rank';
-import { nameRangesOf, type SearchIndex, type SecurityMatch } from './search-index';
+import { nameRangesOf, withinOneEdit, type SearchIndex, type SecurityMatch } from './search-index';
 import type {
   Analysis,
   ChosenToken,
@@ -79,7 +80,7 @@ for (const f of FUNCTIONS) for (const k of f.keywords) if (!KEYWORDS.has(k)) KEY
 interface FnHit {
   fn: FunctionDef;
   tier: number;
-  via: 'code' | 'alias' | 'keyword' | 'convert';
+  via: 'code' | 'alias' | 'keyword' | 'convert' | 'typo';
   /** 별칭·키워드·변환으로 들어온 글자 */
   from?: string;
   exact: boolean;
@@ -118,6 +119,10 @@ function functionPrefixHits(word: string, opts: { closedSlot: boolean; hanEng: b
   if (/^[A-Za-z0-9]+$/.test(word)) {
     const up = word.toUpperCase();
     for (const f of FUNCTIONS) if (f.code !== up && f.code.startsWith(up)) push({ fn: f, tier: 2, via: 'code', exact: false });
+    // T9 오타 허용(v0.2): 4글자 이상, 앞부분이 맞는 기능이 없을 때만, 만든 기능 코드와 한 글자 차이(CRPY → CRYP)
+    if (hits.length === 0 && up.length >= 4 && /^[A-Z]+$/.test(up)) {
+      for (const f of FUNCTIONS) if (f.implemented && f.code.length >= 4 && withinOneEdit(up, f.code)) push({ fn: f, tier: 9, via: 'typo', exact: false });
+    }
   } else if (hasHangul(word)) {
     const syllable = [...word].some(isSyllable);
     const cho = isChosungQuery(word);
@@ -320,6 +325,17 @@ export class CommandEngine {
           segs.push(mk(i, i, { slot: 'go', status: 'ignored' }));
           continue;
         }
+        if (segs[0]?.slot === 'command' && segs[0].cmd === 'alias') {
+          // ALIAS 별칭 종목: 두 번째 단어가 별칭, 그 뒤가 종목(시장·자산군도 붙일 수 있어요)
+          if (!segs.some((s) => s.slot === 'arg')) {
+            const err = aliasNameError(w);
+            segs.push(mk(i, i, err ? { slot: 'arg', status: 'invalid', error: err } : { slot: 'arg', arg: w.toUpperCase() }));
+          } else {
+            segs.push(mk(i, i, { slot: 'security' }));
+            state = 'sec';
+          }
+          continue;
+        }
         if (segs[0]?.slot === 'command') {
           segs.push(mk(i, i, { slot: 'arg', status: 'invalid', error: '이 명령은 뒤에 아무것도 받지 않아요' }));
           continue;
@@ -519,6 +535,18 @@ export class CommandEngine {
     const key = codeKey(text);
     // 시장·자산군을 직접 붙였으면(GP US, GS KS) 짧은 입력 규칙을 쓰지 않아요
     const opts = { first: firstSlot && !mSeg && !aSeg, composing, hanEng: ctx.hanEng };
+    // 사용자 별칭(v0.2, 05 §13): 첫 칸에서는 별칭이 티커를 이겨요. SS US처럼 시장을 붙이면 진짜 티커
+    if (firstSlot && !mSeg && !aSeg && ctx.aliases && !composing) {
+      const target = ctx.aliases(aliasKey(text));
+      const rec = target ? this.index.get(target) : undefined;
+      if (rec) {
+        seg.inst = rec.inst;
+        seg.status = 'exact';
+        seg.byAlias = text;
+        const others = sortMatches(this.index.search(text, { ...opts }), ctx).filter((m) => m.rec !== rec);
+        return [{ rec, tier: 0, sub: -2, via: 'user' }, ...others];
+      }
+    }
     let list = this.index.search(text, { ...opts, market: mSeg?.market, asset: aSeg?.asset });
 
     // 시장 교정: 입력한 시장에서 아무것도 못 찾을 때만(05 §7.3)
@@ -602,7 +630,7 @@ export class CommandEngine {
     if (sorted.length > 0) {
       seg.status = 'choose';
       const top = sorted[0];
-      seg.chooseReason = top.shortExact ? 'short' : top.tier >= 8 ? 'convert' : top.tier >= 6 ? 'fuzzy' : 'prefix';
+      seg.chooseReason = top.shortExact ? 'short' : top.tier === 8 ? 'convert' : top.tier >= 6 ? 'fuzzy' : 'prefix';
       return sorted;
     }
     if (firstSlot && this.hasFunctionCandidates(text, ctx)) {
@@ -666,11 +694,13 @@ export class CommandEngine {
     const flags: string[] = [...(inst.flags ?? [])];
     if (m.via === 'hanToEng') flags.push('한/영');
     if (m.via === 'engToHan') flags.push('영→한');
+    if (m.via === 'typo') flags.push('오타?');
+    if (m.via === 'acronym') flags.push('머리글자');
     const id = `sec:${inst.id}`;
     return {
       id,
       kind: 'security',
-      badge: assetBadge(inst),
+      badge: m.via === 'user' ? 'ALIAS' : assetBadge(inst),
       code: inst.code,
       name: inst.nameKo || inst.nameEn || inst.code,
       nameEn: inst.nameKo ? inst.nameEn : undefined,
@@ -698,6 +728,7 @@ export class CommandEngine {
     let name = fn.nameKo;
     if (opts.via === 'keyword' && opts.from) name = `${opts.from} → ${fn.nameKo}`;
     if (opts.via === 'convert' && opts.from) name = `${opts.from} → ${fn.code} ${fn.nameKo}`;
+    if (opts.via === 'typo') flags.push('오타?');
     const disabled = !fn.implemented || (sec && isSecurityFunction(fn) ? !this.fnSupports(fn, sec, ctx) : false);
     return {
       id: `fn:${fn.code}`,
@@ -1037,6 +1068,15 @@ export class CommandEngine {
       }
     }
 
+    if (r.cmdSeg?.cmd === 'alias') {
+      const name = segs.find((s) => s.slot === 'arg' && s.arg)?.arg;
+      if (!name) return { kind: 'execute', exec: { kind: 'command', cmd: 'alias', canonical: 'ALIAS', notes: [] } };
+      if (!r.security || !r.secSeg) return { kind: 'error', segment: segs.length - 1, message: `별칭 ${name}에 쓸 종목을 넣어 주세요 (예: ALIAS ${name} 005930)` };
+      return {
+        kind: 'execute',
+        exec: { kind: 'command', cmd: 'alias', args: [name], instrumentId: r.security.id, canonical: `ALIAS ${name} ${canonicalSecurity(r.security)}`, notes: [] },
+      };
+    }
     if (r.cmdSeg?.cmd) {
       const word = r.cmdSeg.text;
       return {
@@ -1439,6 +1479,18 @@ function rankIn(order: string[], code: string): number {
   return i < 0 ? 999 : i;
 }
 
+/** 별칭 이름 검사: 2~12글자 영문·숫자·한글, 기능·명령·시장·자산군 단어는 안 돼요(그 뜻이 먼저라 별칭이 쓰이지 않아요) */
+export function aliasNameError(w: string): string | undefined {
+  const t = normalizeText(w);
+  if (!/^[A-Za-z0-9가-힣]{2,12}$/.test(t)) return '별칭은 영문·숫자·한글 2~12글자예요';
+  const up = t.toUpperCase();
+  if (exactFunction(t)) return `${up}는 기능이라 별칭으로 쓸 수 없어요`;
+  if (commandOf(t)) return `${t}는 명령이라 별칭으로 쓸 수 없어요`;
+  if (MARKET_WORDS[up] || ASSET_WORDS[up] || ASSET_WORDS[t] || RESERVED_ASSET_WORDS[up]) return `${up}는 시장·자산군 단어라 별칭으로 쓸 수 없어요`;
+  if (up === 'GO') return 'GO는 별칭으로 쓸 수 없어요';
+  return undefined;
+}
+
 /** 기능 인자 줄: MOST 뒤의 코스피·코스닥·미국·코인 */
 function argRows(fn: FunctionDef, text: string): Row[] {
   const a = fn.args!;
@@ -1598,6 +1650,10 @@ export function labelFor(plan: EnterPlan, index?: SearchIndex): string {
     case 'execute': {
       const e = plan.exec;
       if (e.kind === 'command') {
+        if (e.cmd === 'alias') {
+          const inst = e.instrumentId ? index?.get(e.instrumentId)?.inst : undefined;
+          return e.args?.[0] && inst ? `⏎ 실행: 별칭 ${e.args[0]} → ${labelSecurity(inst)} 만들기` : '⏎ 실행: 별칭 목록(설정 → 커맨드 라인)';
+        }
         return e.cmd === 'settings' ? '⏎ 실행: 설정 창 열기' : e.cmd === 'syntax' ? '⏎ 실행: 문법 요약' : '⏎ 실행: 도움말';
       }
       if (e.kind === 'asset-list') return `⏎ 목록: ${ASSET_LABEL[e.asset!]} 종목`;

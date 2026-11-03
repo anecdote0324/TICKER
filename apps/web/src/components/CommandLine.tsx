@@ -14,7 +14,7 @@ import { engine, getInstrument, index, indexState, supports } from '../stores/in
 import { applyExecution, panelCanonical, panels, type PanelState } from '../stores/panels';
 import { settings, updateSettings } from '../stores/settings';
 import { checkSlots } from '../stores/slots';
-import { appState, updateState, usageScore } from '../stores/state';
+import { appState, removeAlias, setAlias, updateState, usageScore } from '../stores/state';
 import { useStore } from '../stores/store';
 import { openHelp, openSettings, showToast, ui } from '../stores/ui';
 import { CandidateList } from './CandidateList';
@@ -98,6 +98,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       chosen,
       recent: [...new Set(app.history.map((h) => h.cmd))].slice(0, 5),
       lookup: canLookup,
+      aliases: (k) => (app.aliases ?? []).find((x) => x.name === k)?.id,
     }),
     // idx.count: 색인이 바뀌면 다시 계산
     [security, panel?.fn, assist, st.commandLine.hanEngCorrection, st.commandLine.tabAutofill, app, chosen, idx.count, canLookup],
@@ -183,7 +184,18 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     (exec: Execution, via?: { row?: Row; query?: string }) => {
       if (exec.kind === 'command') {
         if (exec.cmd === 'settings') openSettings();
-        else openHelp(exec.cmd === 'syntax' ? 'syntax' : 'help');
+        else if (exec.cmd === 'alias') {
+          const name = exec.args?.[0];
+          const inst = getInstrument(exec.instrumentId);
+          if (name && inst) {
+            const before = (appState.get().aliases ?? []).find((x) => x.name === name);
+            setAlias(name, inst.id);
+            showToast(`별칭 ${name} → ${inst.nameKo ?? inst.nameEn ?? inst.code}${before ? '(바꿈)' : ''}. 이제 ${name}⏎로 열려요`, {
+              label: '되돌리기',
+              run: () => (before ? setAlias(before.name, before.id) : removeAlias(name)),
+            });
+          } else openSettings('command');
+        } else openHelp(exec.cmd === 'syntax' ? 'syntax' : 'help');
       } else if (exec.kind === 'lookup' && exec.lookup) {
         const { code, market } = exec.lookup;
         const fnCode = exec.fn ?? 'GP';
