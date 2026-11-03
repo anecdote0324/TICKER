@@ -1,7 +1,7 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type SecurityProfile, type ServerMessage, type SourceStatus } from '@bt/shared';
+import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type MostKind, type MostResponse, type SecurityProfile, type ServerMessage, type SourceStatus, CRYPTO_EXCLUDED_BASES } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
@@ -19,6 +19,8 @@ export interface Client {
 }
 
 const FLUSH_MS = 100;
+/** MOST 순위를 이만큼(20초) 다시 써요 */
+const MOST_CACHE_MS = 20_000;
 /** DES 종목 개요를 이만큼(30초) 다시 써요. 여러 창에서 같은 종목을 열어도 한 번만 조회해요 */
 const PROFILE_CACHE_MS = 30_000;
 /** 지난 시간봉을 이만큼(1년) 채워요. 한국투자증권은 분봉을 1년까지 보관해요 */
@@ -429,6 +431,77 @@ export class Hub implements AdapterHost {
       }
     }
     return out;
+  }
+
+  private mostCache = new Map<string, { at: number; p: Promise<MostResponse> }>();
+
+  /** MOST 상위 종목(03 v0.2). 여러 창이 같은 시장을 열어도 20초 동안은 한 번만 조회해요 */
+  most(market: 'KS' | 'KQ' | 'US' | 'CRYPTO', kind: MostKind): Promise<MostResponse> {
+    const key = `${market}:${kind}`;
+    const hit = this.mostCache.get(key);
+    if (hit && Date.now() - hit.at < MOST_CACHE_MS) return hit.p;
+    const p = this.loadMost(market, kind);
+    this.mostCache.set(key, { at: Date.now(), p });
+    p.catch(() => this.mostCache.delete(key));
+    return p;
+  }
+
+  private async loadMost(market: 'KS' | 'KQ' | 'US' | 'CRYPTO', kind: MostKind): Promise<MostResponse> {
+    if (market === 'CRYPTO') {
+      if (!this.binance) throw new Error('Binance에 연결되지 않았어요');
+      const t = Date.now();
+      const rows = (await this.binance.tickers24h())
+        .filter((x) => x.symbol.endsWith('USDT') && !CRYPTO_EXCLUDED_BASES.has(x.symbol.slice(0, -4)) && Number(x.quoteVolume) > 0)
+        .map((x) => {
+          const code = x.symbol.slice(0, -4);
+          const last = Number(x.lastPrice);
+          const open = Number(x.openPrice);
+          const id = `CRY:${code}`;
+          const inst = this.instruments.get(id);
+          return {
+            rank: 0,
+            id: inst ? id : undefined,
+            code,
+            name: inst?.nameKo ?? code,
+            last,
+            change: last - open,
+            changePct: open ? ((last - open) / open) * 100 : 0,
+            volume: Number(x.volume),
+            turnover: Number(x.quoteVolume),
+          };
+        });
+      const by: Record<MostKind, (x: (typeof rows)[number]) => number> = {
+        volume: (x) => x.turnover, // 코인은 종류마다 단위가 달라서 거래량 순위도 USDT 거래대금으로 매겨요
+        turnover: (x) => x.turnover,
+        gainers: (x) => x.changePct,
+        losers: (x) => -x.changePct,
+      };
+      // 상승·하락률은 거래가 아주 적은 코인을 빼요(24시간 거래대금 100만 USDT 이상)
+      const pool = kind === 'gainers' || kind === 'losers' ? rows.filter((x) => x.turnover >= 1e6) : rows;
+      return {
+        market,
+        kind,
+        currency: 'USDT',
+        rows: pool.sort((a, b) => by[kind](b) - by[kind](a)).slice(0, 30).map((x, i) => ({ ...x, rank: i + 1 })),
+        fresh: { source: 'BINANCE', mode: 'poll', asOf: t, receivedAt: t, intervalMs: 30_000, asOfFromReceipt: true },
+        note: kind === 'volume' ? 'Binance USDT 현물 · 거래량은 USDT 거래대금 순' : kind === 'turnover' ? 'Binance USDT 현물' : 'Binance USDT 현물 · 24시간 거래대금 100만 USDT 이상',
+      };
+    }
+    if (!this.kis) throw new Error('한국투자증권 키를 넣으면 국내·미국 상위 종목을 볼 수 있어요(코인은 MOST CRYPTO)');
+    const { rows, fresh } = await this.kis.ranking(market, kind);
+    for (const r of rows) {
+      const inst = r.id ? this.instruments.get(r.id) : undefined;
+      if (!inst) r.id = undefined;
+      else if (market === 'US' && inst.nameKo) r.name = inst.nameKo;
+    }
+    return {
+      market,
+      kind,
+      currency: market === 'US' ? 'USD' : 'KRW',
+      rows,
+      fresh,
+      note: market === 'US' ? `한국투자증권 · 나스닥과 뉴욕 순위를 합침${kind === 'gainers' || kind === 'losers' ? ' · 1만 주 이상' : ''}` : '한국투자증권 순위',
+    };
   }
 
   quoteSnapshot(ids: string[]): Quote[] {

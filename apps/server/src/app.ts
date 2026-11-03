@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { BarInterval, ClientMessage, CredentialStatus, InstrumentsResponse, ServerMessage, Settings } from '@bt/shared';
+import type { BarInterval, ClientMessage, CredentialStatus, InstrumentsResponse, MostKind, ServerMessage, Settings } from '@bt/shared';
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
 import { STATE_NAMES, type StateName, type Store } from './store';
@@ -143,6 +143,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!hub.instruments.has(id)) return reply.code(404).send({ error: '종목을 찾지 못했어요' });
     try {
       return await hub.profile(id);
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  app.get<{ Querystring: { market?: string; kind?: string } }>('/api/most', async (req, reply) => {
+    const market = req.query.market ?? 'KS';
+    const kind = req.query.kind ?? 'volume';
+    if (!['KS', 'KQ', 'US', 'CRYPTO'].includes(market) || !['volume', 'turnover', 'gainers', 'losers'].includes(kind)) return reply.code(400).send({ error: '시장 또는 종류가 맞지 않아요' });
+    try {
+      return await hub.most(market as 'KS' | 'KQ' | 'US' | 'CRYPTO', kind as MostKind);
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });
     }

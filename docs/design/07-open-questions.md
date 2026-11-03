@@ -36,6 +36,7 @@
 
 - DES: 주식현재가 시세(FHKST01010100)의 `per`·`pbr`·`eps`·`bps`·`w52_hgpr`·`lstn_stcn`·`hts_frgn_ehrt`와 해외주식 현재가상세(HHDFS76200200)의 `perx`·`h52p`·`shar`·`e_icod`가 실제 계정에서 그 이름과 단위로 오는지. 상태 칸(`mang_issu_cls_code`, `mrkt_warn_cls_code`, `invt_caful_yn`)의 값
 - 종목 마스터의 매출액·영업이익이 기준 월까지의 누적인지(반기·분기), 연간인지
+- MOST: 국내 순위의 `FID_INPUT_ISCD` `0001`·`1001`이 코스피·코스닥 전체로 걸러지는지, 등락률 순위의 정렬 코드(`0` 상승·`1` 하락)와 `fid_prc_cls_code`의 뜻, 해외 순위의 `rate`·`diff`가 부호를 담는지, 한 번에 몇 줄이 오는지. 장 시작 전·휴장일에 빈 응답인지
 
 ## 개발 전에 실제로 확인할 것
 

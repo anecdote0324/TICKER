@@ -18,6 +18,8 @@ export const LINK_COLORS: Record<LinkColor, { label: string; color: string }> = 
 export interface NavEntry {
   fn?: string;
   securityId?: string;
+  /** 기능 인자(MOST KQ의 'KQ') */
+  args?: string[];
 }
 
 export interface PanelState {
@@ -25,6 +27,8 @@ export interface PanelState {
   num: number;
   fn?: string;
   securityId?: string;
+  /** 기능 인자(MOST의 시장 등, 05 §3.1) */
+  args?: string[];
   link: LinkColor | null;
   back: NavEntry[];
   fwd: NavEntry[];
@@ -37,6 +41,8 @@ export interface PanelState {
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;
+  /** MOST에서 고른 순위 종류(거래량·거래대금·상승률·하락률) */
+  mostKind?: 'volume' | 'turnover' | 'gainers' | 'losers';
 }
 
 export const panels = createStore<Record<string, PanelState>>({});
@@ -72,7 +78,7 @@ function propagateSecurity(from: PanelState, securityId: string) {
     const next = { ...all };
     for (const p of Object.values(all)) {
       if (p.id !== from.id && p.link === from.link && p.securityId !== securityId) {
-        next[p.id] = { ...p, securityId, back: [...p.back, { fn: p.fn, securityId: p.securityId }].slice(-50), fwd: [] };
+        next[p.id] = { ...p, securityId, back: [...p.back, { fn: p.fn, securityId: p.securityId, args: p.args }].slice(-50), fwd: [] };
       }
     }
     return next;
@@ -83,9 +89,9 @@ function propagateSecurity(from: PanelState, securityId: string) {
 export function applyExecution(panelId: string, exec: Execution) {
   const p = panels.get()[panelId];
   if (!p || exec.kind !== 'function' || !exec.fn) return;
-  const prev: NavEntry = { fn: p.fn, securityId: p.securityId };
+  const prev: NavEntry = { fn: p.fn, securityId: p.securityId, args: p.args };
   const securityId = exec.instrumentId ?? p.securityId;
-  patchPanel(panelId, { fn: exec.fn, securityId, back: [...p.back, prev].slice(-50), fwd: [] });
+  patchPanel(panelId, { fn: exec.fn, securityId, args: exec.args, back: [...p.back, prev].slice(-50), fwd: [] });
   if (exec.instrumentId) {
     propagateSecurity({ ...p, fn: exec.fn }, exec.instrumentId);
     const inst = getInstrument(exec.instrumentId);
@@ -107,9 +113,11 @@ export function navigate(panelId: string, dir: 'back' | 'fwd') {
   const from = dir === 'back' ? p.back : p.fwd;
   if (from.length === 0) return;
   const target = from[from.length - 1];
-  const cur: NavEntry = { fn: p.fn, securityId: p.securityId };
-  if (dir === 'back') patchPanel(panelId, { ...target, back: p.back.slice(0, -1), fwd: [...p.fwd, cur] });
-  else patchPanel(panelId, { ...target, fwd: p.fwd.slice(0, -1), back: [...p.back, cur] });
+  const cur: NavEntry = { fn: p.fn, securityId: p.securityId, args: p.args };
+  // 예전 기록에는 인자 칸이 없어서 지금 인자가 남지 않게 명시해요
+  const to = { fn: target.fn, securityId: target.securityId, args: target.args };
+  if (dir === 'back') patchPanel(panelId, { ...to, back: p.back.slice(0, -1), fwd: [...p.fwd, cur] });
+  else patchPanel(panelId, { ...to, fwd: p.fwd.slice(0, -1), back: [...p.back, cur] });
 }
 
 /** 패널에 띄운 명령(표준형) */
@@ -117,5 +125,6 @@ export function panelCanonical(p: PanelState, fn: FunctionDef | undefined): stri
   if (!p.fn) return '';
   const inst = getInstrument(p.securityId);
   if (fn && fn.security === 'one' && inst) return `${canonicalSecurity(inst)} ${p.fn}`;
-  return p.fn;
+  // 인자를 받는 기능: MOST KQ
+  return p.args?.length ? `${p.fn} ${p.args.join(' ')}` : p.fn;
 }

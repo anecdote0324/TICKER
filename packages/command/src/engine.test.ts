@@ -271,7 +271,8 @@ describe('겹침과 예외(§7, §13)', () => {
     expect(run('CRYPTO').plan).toMatchObject({ exec: { fn: 'CRYP' } });
     expect(run('CURNCY').plan).toMatchObject({ exec: { fn: 'FXC' } });
     expect(run('INDEX').plan).toMatchObject({ exec: { fn: 'WEI' } });
-    expect(run('EQUITY').plan).toMatchObject({ exec: { kind: 'asset-list', asset: 'EQUITY' } });
+    // v0.2부터 EQUITY⏎는 MOST(상위 종목)를 열어요(05 §3.2)
+    expect(run('EQUITY').plan).toMatchObject({ exec: { fn: 'MOST' } });
   });
   it('통화 코드 하나', () => {
     expect(run('EUR').plan).toMatchObject({ exec: { instrumentId: 'CUR:EURKRW' } });
@@ -393,5 +394,37 @@ describe('§4.5 더 보기는 자산군별로 묶어요', () => {
 
   it('펼치지 않으면 묶지 않아요', () => {
     expect(run('C').rows.some((r) => r.kind === 'header' && r.name.includes('코인'))).toBe(false);
+  });
+});
+
+describe('기능 인자(05 §3.1, v0.2): MOST 시장', () => {
+  it('MOST만 치면 기본 시장으로 실행', () => {
+    const a = run('MOST');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'MOST', canonical: 'MOST' } });
+    expect((a.plan as { exec: { args?: string[] } }).exec.args).toBeUndefined();
+  });
+  it('MOST KQ는 코스닥 상위 종목(시장 단어가 종목의 시장이 아니라 인자)', () => {
+    const a = run('MOST KQ');
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { fn: 'MOST', args: ['KQ'], canonical: 'MOST KQ' } });
+    expect(a.label).toBe('⏎ 실행: 상위 종목 · 코스닥 (종목 불필요)');
+  });
+  it('한글 이름·블룸버그 거래소 코드·자산군 단어도 인자로', () => {
+    expect(run('MOST 코스닥').plan).toMatchObject({ exec: { args: ['KQ'] } });
+    expect(run('MOST UW').plan).toMatchObject({ exec: { args: ['US'] } });
+    expect(run('MOST CRYPTO').plan).toMatchObject({ exec: { args: ['CRYPTO'] } });
+  });
+  it('앞부분만 치면 고르기, 빈 칸이면 시장 줄 네 개', () => {
+    const a = run('MOST K');
+    expect(a.plan.kind).toBe('select');
+    expect(a.rows.map((r) => r.code)).toEqual(['KS', 'KQ']);
+    expect(run('MOST ').rows.map((r) => r.code)).toEqual(['KS', 'KQ', 'US', 'CRYPTO']);
+  });
+  it('모르는 시장·인자 두 개는 실행 안 됨', () => {
+    expect(run('MOST LN').plan.kind).toBe('error');
+    expect(run('MOST KQ KS').label).toContain('하나만');
+    expect(run('WEI KS').plan.kind).not.toBe('execute');
+  });
+  it('인자가 없는 기능 뒤의 단어는 실행 안 됨', () => {
+    expect(run('FXC USD').label).toContain('인자를 받지 않아요');
   });
 });

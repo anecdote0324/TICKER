@@ -17,6 +17,7 @@ import { Cryp } from '../widgets/Cryp';
 import { Des } from '../widgets/Des';
 import { Fxc } from '../widgets/Fxc';
 import { Mon } from '../widgets/Mon';
+import { Most } from '../widgets/Most';
 import { PriceChart } from '../widgets/PriceChart';
 import { Wei } from '../widgets/Wei';
 import { TitleBar } from '../widgets/common';
@@ -89,6 +90,8 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Cryp panel={p} />;
     case 'DES':
       return <Des panel={p} />;
+    case 'MOST':
+      return <Most panel={p} />;
     default: {
       const fn = p.fn ? FUNCTIONS.find((f) => f.code === p.fn) : undefined;
       return (

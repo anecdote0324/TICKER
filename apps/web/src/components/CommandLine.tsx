@@ -797,6 +797,7 @@ function tokenMeaning(s: Analysis['segments'][number]): string {
   if (s.slot === 'market' && s.market) return `${t} = 시장 ${MARKET_LABEL[s.market]}`;
   if (s.slot === 'asset' && s.asset) return `${t} = 자산군 ${ASSET_LABEL[s.asset]}`;
   if ((s.slot === 'function' || s.slot === 'closed') && s.fn) return `${t} = ${s.fn.nameKo}`;
+  if (s.slot === 'arg' && s.arg) return `${t} = 시장 ${MARKET_LABEL[s.arg as keyof typeof MARKET_LABEL] ?? (s.arg === 'CRYPTO' ? '코인' : s.arg)}`;
   return t;
 }
 

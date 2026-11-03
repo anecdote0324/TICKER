@@ -5,6 +5,23 @@ import type { AssetClass } from './instrument';
 
 export type SecurityNeed = 'none' | 'one' | 'optional';
 
+/** 기능 뒤에 붙이는 인자(05 §3.1, v0.2). MOST는 시장 하나 */
+export interface FunctionArgs {
+  kind: 'market';
+  /** 자리 표시와 오류 문구에 쓰는 이름: '시장' */
+  label: string;
+  /** 고를 수 있는 값. 첫 번째가 기본값이에요 */
+  choices: Array<{ code: string; label: string }>;
+}
+
+/** MOST 시장 인자: 코스피·코스닥·미국(나스닥+뉴욕)·코인(Binance) */
+export const MOST_MARKETS: FunctionArgs['choices'] = [
+  { code: 'KS', label: '코스피' },
+  { code: 'KQ', label: '코스닥' },
+  { code: 'US', label: '미국' },
+  { code: 'CRYPTO', label: '코인' },
+];
+
 export interface FunctionDef {
   code: string;
   nameKo: string;
@@ -32,6 +49,8 @@ export interface FunctionDef {
   /** 블룸버그 코드가 아닌 자체 코드(K 접두) */
   notBloomberg?: boolean;
   approx?: boolean;
+  /** 기능 뒤에 붙이는 인자 */
+  args?: FunctionArgs;
 }
 
 const ALL_ASSETS: AssetClass[] = ['EQUITY', 'CRYPTO', 'CURNCY', 'INDEX'];
@@ -141,6 +160,22 @@ const BUILT: FunctionDef[] = [
     similar: ['GP'],
     aliases: ['ISSD'],
   },
+  {
+    code: 'MOST',
+    nameKo: '상위 종목',
+    nameEn: 'Most Active',
+    summary: '거래량·거래대금·등락률 상위',
+    detail: '시장 하나의 거래량·거래대금·상승률·하락률 상위 종목이에요. 기능 뒤에 시장을 붙여요: MOST KS(코스피), MOST KQ(코스닥), MOST US(미국), MOST CRYPTO(코인).',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['상위', '상위종목', '거래량상위'],
+    version: 'v0.2',
+    implemented: true,
+    speed: '국내·미국 30초마다 조회(한국투자증권 순위), 코인 30초마다(Binance 24시간)',
+    examples: ['MOST', 'MOST KQ', 'MOST US', 'MOST CRYPTO'],
+    aliases: ['LVI'],
+    args: { kind: 'market', label: '시장', choices: MOST_MARKETS },
+  },
 ];
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
@@ -149,7 +184,6 @@ const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
   COMP: { security: 'one', assetClasses: ALL_ASSETS, keywords: ['비교'], summary: '여러 종목 겹쳐 비교' },
   HMAP: { security: 'none', assetClasses: [], keywords: ['히트맵'], summary: '업종 기간별 등락 색' },
   IMAP: { security: 'none', assetClasses: [], keywords: ['업종'], summary: '업종별 등락 타일' },
-  MOST: { security: 'none', assetClasses: [], keywords: ['상위', '상위종목'], summary: '거래량·등락률 상위' },
   FA: { security: 'one', assetClasses: ['EQUITY'], keywords: ['재무', '재무제표'], summary: '손익·재무상태·현금흐름' },
   ECO: { security: 'none', assetClasses: [], keywords: ['경제지표', '캘린더'], summary: '경제지표 발표 일정' },
   GC: { security: 'none', assetClasses: [], keywords: ['금리', '커브'], summary: '국고채·미국채 금리 커브' },
@@ -229,6 +263,7 @@ export const FUNCTION_ORDER: Record<AssetClass, string[]> = {
 
 /** 자산군의 대표 기능: CRYPTO⏎ → CRYP 등(05 §3.2) */
 export const ASSET_HOME_FUNCTION: Partial<Record<AssetClass, string>> = {
+  EQUITY: 'MOST',
   CRYPTO: 'CRYP',
   CURNCY: 'FXC',
   INDEX: 'WEI',

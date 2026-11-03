@@ -17,6 +17,7 @@ import {
   resolveFunctionAlias,
   versionLabel,
   type AssetClass,
+  type FunctionArgs,
   type FunctionDef,
   type Instrument,
   type Market,
@@ -153,6 +154,29 @@ function commandOf(w: string) {
   return COMMAND_WORDS[w] ?? COMMAND_WORDS[w.toUpperCase()];
 }
 
+/** 기능 인자의 정확한 값: MOST 뒤의 KQ·코스닥·UW·CRYPTO(05 §3.1, v0.2) */
+export function argValue(fn: FunctionDef, w: string): string | undefined {
+  const a = fn.args;
+  if (!a) return undefined;
+  const up = w.toUpperCase();
+  const byLabel = a.choices.find((c) => c.label === w || c.code === up);
+  if (byLabel) return byLabel.code;
+  if (a.kind === 'market') {
+    const m = MARKET_WORDS[up];
+    if (m && m !== 'IGNORE' && a.choices.some((c) => c.code === m)) return m;
+    if (assetOf(w) === 'CRYPTO' && a.choices.some((c) => c.code === 'CRYPTO')) return 'CRYPTO';
+  }
+  return undefined;
+}
+
+/** 앞부분이 맞는 인자 값(고르기 줄) */
+function argChoices(fn: FunctionDef, w: string): FunctionArgs['choices'] {
+  const a = fn.args;
+  if (!a) return [];
+  const up = w.toUpperCase();
+  return a.choices.filter((c) => !w || c.code.startsWith(up) || c.label.startsWith(w));
+}
+
 const CRYPTO_QUOTES = ['USDT', 'BTC', 'ETH', 'BNB', 'KRW', 'EUR', 'TRY', 'FDUSD', 'USDC', 'BUSD', 'JPY', 'BRL'];
 
 export interface ApplyResult {
@@ -243,7 +267,9 @@ export class CommandEngine {
     } else {
       const fnHit = exactFunction(first.norm);
       const latinLen = /^[A-Za-z0-9]+$/.test(first.norm) ? first.norm.length : 99;
-      if (fnHit && latinLen >= 2 && !nextIsQualifier) {
+      // 인자를 받는 기능(MOST)은 뒤의 시장 단어가 인자예요: MOST KQ = 코스닥 상위 종목. 종목 MOST는 'MOST US EQUITY'
+      const qualifierIsArg = nextIsQualifier && !!fnHit?.fn.args && !!argValue(fnHit.fn, toks[1].norm);
+      if (fnHit && latinLen >= 2 && (!nextIsQualifier || qualifierIsArg)) {
         const seg = this.functionSegment(mk(0, 0, {}), fnHit, ctx, true);
         segs.push(seg);
         i = 1;
@@ -316,7 +342,17 @@ export class CommandEngine {
           );
           continue;
         }
-        segs.push(mk(i, i, { slot: 'arg', status: 'unavailable', error: '기능 뒤의 인자는 v0.2부터 받아요' }));
+        const fa = fnSeg?.fn?.args;
+        if (fnSeg?.fn && fa) {
+          const used = segs.some((s) => s.slot === 'arg');
+          const v = argValue(fnSeg.fn, w);
+          if (used) segs.push(mk(i, i, { slot: 'arg', status: 'invalid', error: `${fnSeg.fn.code} 뒤에는 ${fa.label}을(를) 하나만 써요` }));
+          else if (v) segs.push(mk(i, i, { slot: 'arg', arg: v }));
+          else if (argChoices(fnSeg.fn, w).length > 0) segs.push(mk(i, i, { slot: 'arg', status: 'choose', chooseReason: 'prefix' }));
+          else segs.push(mk(i, i, { slot: 'arg', status: 'invalid', error: `${fnSeg.fn.code} 뒤에는 ${fa.label}(${fa.choices.map((c) => c.code).join('·')})을(를) 써요` }));
+          continue;
+        }
+        segs.push(mk(i, i, { slot: 'arg', status: 'invalid', error: fnSeg?.fn ? `${fnSeg.fn.code}는 뒤에 인자를 받지 않아요` : '기능 뒤에는 인자를 받지 않아요' }));
         continue;
       }
 
@@ -986,7 +1022,9 @@ export class CommandEngine {
     if (r.fnSeg?.fnVia) notes.push(`${r.fnSeg.fnVia} → ${fn.code}`);
 
     if (!isSecurityFunction(fn)) {
-      const exec: Execution = { kind: 'function', fn: fn.code, canonical: fn.code, notes };
+      const args = segs.filter((s) => s.slot === 'arg' && s.arg).map((s) => s.arg!);
+      const exec: Execution = { kind: 'function', fn: fn.code, canonical: [fn.code, ...args].join(' '), notes };
+      if (args.length > 0) exec.args = args;
       if (r.security && !r.securityFromPanel) {
         exec.instrumentId = r.security.id;
         exec.setsSecurityOnly = true;
@@ -1020,6 +1058,7 @@ export class CommandEngine {
       if (segs.length === 0) return this.startRows(ctx);
       const last = segs[segs.length - 1];
       const sec = security ?? segs.find((s) => s.slot === 'security')?.inst;
+      if (last.slot === 'function' && last.fn?.args && last.status !== 'invalid') return argRows(last.fn, '');
       if (last.slot === 'function' || last.slot === 'command' || last.slot === 'go' || last.slot === 'arg') return [];
       if (sec) return this.functionListFor(sec, ctx);
       return [];
@@ -1079,6 +1118,11 @@ export class CommandEngine {
         if (rows.length === 0 && seg.slot === 'market' && seg.market) rows.push(recognizedRow('market', seg.text.toUpperCase(), MARKET_LABEL[seg.market], '시장'));
         if (rows.length === 0 && seg.slot === 'asset' && seg.asset) rows.push(recognizedRow('asset', seg.asset, ASSET_LABEL[seg.asset], '자산군'));
         if (rows.length === 0) rows.push(noMatchRow(seg.text));
+        break;
+      }
+      case 'arg': {
+        const f = segs.find((s) => s.slot === 'function' && s.fn)?.fn;
+        if (f?.args && seg.status !== 'invalid') rows.push(...argRows(f, seg.arg ?? seg.text));
         break;
       }
       case 'command': {
@@ -1292,7 +1336,7 @@ export class CommandEngine {
     let out = input.slice(0, start) + insert;
     let closeList = false;
     if (restEmpty) {
-      if (row.kind === 'function' || row.kind === 'command' || row.kind === 'convert' || row.kind === 'unavailable') closeList = true;
+      if (row.kind === 'function' || row.kind === 'command' || row.kind === 'convert' || row.kind === 'unavailable' || row.kind === 'arg') closeList = true;
       else out += ' ';
       const cursor = out.length;
       return { input: out, cursor, chosen, closeList };
@@ -1345,6 +1389,25 @@ export class CommandEngine {
 function rankIn(order: string[], code: string): number {
   const i = order.indexOf(code);
   return i < 0 ? 999 : i;
+}
+
+/** 기능 인자 줄: MOST 뒤의 코스피·코스닥·미국·코인 */
+function argRows(fn: FunctionDef, text: string): Row[] {
+  const a = fn.args!;
+  const exact = argValue(fn, text);
+  const list = exact ? a.choices.filter((c) => c.code === exact) : argChoices(fn, text);
+  return list.map((c, i) => ({
+    id: `arg:${fn.code}:${c.code}`,
+    kind: 'arg' as const,
+    badge: 'ARG',
+    code: c.code,
+    name: c.label,
+    info: `${fn.code} ${a.label}${i === 0 && c.code === a.choices[0].code ? ' · 기본값' : ''}`,
+    flags: [],
+    canonical: `${fn.code} ${c.code}`,
+    tier: 0,
+    insert: c.code,
+  }));
 }
 
 function headerRow(text: string): Row {
@@ -1492,7 +1555,10 @@ export function labelFor(plan: EnterPlan, index?: SearchIndex): string {
       if (e.kind === 'asset-list') return `⏎ 목록: ${ASSET_LABEL[e.asset!]} 종목`;
       const fn = FUNCTIONS.find((f) => f.code === e.fn)!;
       const notes = e.notes.length > 0 ? ` (${e.notes.join(', ')})` : '';
-      if (!isSecurityFunction(fn)) return `⏎ 실행: ${fn.nameKo} (종목 불필요)${notes}`;
+      if (!isSecurityFunction(fn)) {
+        const arg = e.args?.length && fn.args ? ` · ${e.args.map((v) => fn.args!.choices.find((c) => c.code === v)?.label ?? v).join(', ')}` : '';
+        return `⏎ 실행: ${fn.nameKo}${arg} (종목 불필요)${notes}`;
+      }
       const inst = e.instrumentId ? index?.get(e.instrumentId)?.inst : undefined;
       const name = inst ? labelSecurity(inst) : e.canonical.split(' ')[0];
       return `⏎ 실행: ${name} ${fn.nameKo}${notes || ` (${fn.code})`}`;

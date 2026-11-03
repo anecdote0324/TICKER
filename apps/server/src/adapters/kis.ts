@@ -19,6 +19,8 @@ import {
   type BarSeries,
   type Freshness,
   type Instrument,
+  type MostKind,
+  type MostRow,
   type ProfileLive,
   type Quote,
   type SourceStatus,
@@ -101,6 +103,15 @@ const STUCK_MS = 15 * 60_000;
 const CLOSED_POLL_MS = 5 * 60_000;
 /** DES 종목 개요를 다시 조회하는 간격 */
 export const PROFILE_REFRESH_MS = 60_000;
+/** MOST에 보여 줄 줄 수(국내 순위 조회는 한 번에 30건) */
+const MOST_ROWS = 30;
+/** MOST를 다시 조회하는 간격 */
+export const MOST_REFRESH_MS = 30_000;
+
+/** 응답의 output이 배열이 아니어도(한 건) 배열로 */
+function asRows(v: unknown): KisRow[] {
+  return Array.isArray(v) ? (v as KisRow[]) : v && typeof v === 'object' ? [v as KisRow] : [];
+}
 /** 정규장이 끝난 뒤에도 종가가 확정될 때까지 이만큼은 장중처럼 다뤄요 */
 const CLOSE_GRACE_MS = 10 * 60_000;
 /** 장이 열리고 닫힘에 맞춰 실시간 구독을 다시 나누는 간격 */
@@ -969,6 +980,136 @@ export class KisAdapter implements Adapter {
       };
     }
     throw new Error('종목 개요는 주식만 볼 수 있어요');
+  }
+
+  /**
+   * MOST 상위 종목(03 v0.2). 국내는 거래량순위(FHPST01710000, 거래량·거래대금)와 등락률 순위(FHPST01700000),
+   * 미국은 거래소별 거래량·거래대금·상승률/하락률 순위(HHDFS76310010·HHDFS76320010·HHDFS76290000)를 나스닥과 뉴욕에서 받아 합쳐요.
+   * 요청 변수는 공식 예제(examples_llm/domestic_stock/volume_rank·fluctuation, overseas_stock/trade_vol·trade_pbmn·updown_rate)와 같아요
+   */
+  async ranking(market: 'KS' | 'KQ' | 'US', kind: MostKind): Promise<{ rows: MostRow[]; fresh: Freshness }> {
+    const t = Date.now();
+    // 장이 닫혔으면 마감 값이라 기준 시각을 마감 시각으로(`마감 15:30`)
+    const probe: Instrument = { id: `EQ:${market}:_`, assetClass: 'EQUITY', market, code: '_', exchange: market === 'US' ? 'NAS' : 'KRX' };
+    const fresh: Freshness =
+      tradingNow(probe, t) === false
+        ? { source: 'KIS', mode: 'poll', asOf: closeTime(probe, t), receivedAt: t, intervalMs: MOST_REFRESH_MS }
+        : { source: 'KIS', mode: 'poll', asOf: t, receivedAt: t, intervalMs: MOST_REFRESH_MS, asOfFromReceipt: true };
+    const signed = (v: unknown, sign: unknown) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return undefined;
+      // 부호 칸: 1 상한, 2 상승, 3 보합, 4 하한, 5 하락. 값이 부호 없이 오는 경우가 있어서 부호 칸을 따라요
+      return sign === '4' || sign === '5' ? -Math.abs(n) : sign === '1' || sign === '2' ? Math.abs(n) : n;
+    };
+    if (market !== 'US') {
+      const iscd = market === 'KS' ? '0001' : '1001';
+      let rows: KisRow[];
+      if (kind === 'volume' || kind === 'turnover') {
+        const r = await this.get(
+          '/uapi/domestic-stock/v1/quotations/volume-rank',
+          'FHPST01710000',
+          {
+            FID_COND_MRKT_DIV_CODE: 'J',
+            FID_COND_SCR_DIV_CODE: '20171',
+            FID_INPUT_ISCD: iscd,
+            FID_DIV_CLS_CODE: '0',
+            // 0 평균거래량, 3 거래금액순
+            FID_BLNG_CLS_CODE: kind === 'volume' ? '0' : '3',
+            FID_TRGT_CLS_CODE: '111111111',
+            FID_TRGT_EXLS_CLS_CODE: '0000000000',
+            FID_INPUT_PRICE_1: '',
+            FID_INPUT_PRICE_2: '',
+            FID_VOL_CNT: '',
+            FID_INPUT_DATE_1: '',
+          },
+          1,
+        );
+        rows = asRows(r.output);
+      } else {
+        const r = await this.get(
+          '/uapi/domestic-stock/v1/ranking/fluctuation',
+          'FHPST01700000',
+          {
+            fid_rsfl_rate2: '',
+            fid_cond_mrkt_div_code: 'J',
+            fid_cond_scr_div_code: '20170',
+            fid_input_iscd: iscd,
+            // 0 상승률순, 1 하락률순
+            fid_rank_sort_cls_code: kind === 'gainers' ? '0' : '1',
+            fid_input_cnt_1: '0',
+            fid_prc_cls_code: '0',
+            fid_input_price_1: '',
+            fid_input_price_2: '',
+            fid_vol_cnt: '',
+            fid_trgt_cls_code: '0',
+            fid_trgt_exls_cls_code: '0',
+            fid_div_cls_code: '0',
+            fid_rsfl_rate1: '',
+          },
+          1,
+        );
+        rows = asRows(r.output);
+      }
+      const list = rows
+        .map((o, i) => {
+          const code = String(o.mksc_shrn_iscd ?? o.stck_shrn_iscd ?? '').trim();
+          return {
+            rank: Number(o.data_rank) || i + 1,
+            id: code ? `EQ:${market}:${code}` : undefined,
+            code,
+            name: String(o.hts_kor_isnm ?? '').trim(),
+            last: Number(o.stck_prpr),
+            change: signed(o.prdy_vrss, o.prdy_vrss_sign),
+            changePct: signed(o.prdy_ctrt, o.prdy_vrss_sign) ?? 0,
+            volume: Number(o.acml_vol) || undefined,
+            turnover: Number(o.acml_tr_pbmn) || undefined,
+          };
+        })
+        .filter((x) => x.code && Number.isFinite(x.last));
+      return { rows: list, fresh };
+    }
+    const [path, trId] =
+      kind === 'volume'
+        ? ['/uapi/overseas-stock/v1/ranking/trade-vol', 'HHDFS76310010']
+        : kind === 'turnover'
+          ? ['/uapi/overseas-stock/v1/ranking/trade-pbmn', 'HHDFS76320010']
+          : ['/uapi/overseas-stock/v1/ranking/updown-rate', 'HHDFS76290000'];
+    const all: MostRow[] = [];
+    for (const excd of ['NAS', 'NYS']) {
+      const params: Record<string, string> =
+        kind === 'gainers' || kind === 'losers'
+          ? // 거래량 조건 3 = 1만 주 이상(거래가 거의 없는 종목이 상승률 위를 채우지 않게)
+            { EXCD: excd, NDAY: '0', GUBN: kind === 'gainers' ? '1' : '0', VOL_RANG: '3', AUTH: '', KEYB: '' }
+          : { EXCD: excd, NDAY: '0', VOL_RANG: '0', KEYB: '', AUTH: '', PRC1: '', PRC2: '' };
+      const r = await this.get(path, trId, params, 1);
+      for (const o of r.output2 ?? []) {
+        const code = String(o.symb ?? '').trim();
+        if (!code) continue;
+        all.push({
+          rank: 0,
+          id: `EQ:US:${code}`,
+          code,
+          name: String(o.name || o.ename || code).trim(),
+          last: Number(o.last),
+          change: signed(o.diff, o.sign),
+          changePct: signed(o.rate, o.sign) ?? 0,
+          volume: Number(o.tvol) || undefined,
+          turnover: Number(o.tamt) || undefined,
+        });
+      }
+    }
+    const key: Record<MostKind, (x: MostRow) => number> = {
+      volume: (x) => x.volume ?? 0,
+      turnover: (x) => x.turnover ?? 0,
+      gainers: (x) => x.changePct,
+      losers: (x) => -x.changePct,
+    };
+    const rows = all
+      .filter((x) => Number.isFinite(x.last))
+      .sort((a, b) => key[kind](b) - key[kind](a))
+      .slice(0, MOST_ROWS)
+      .map((x, i) => ({ ...x, rank: i + 1 }));
+    return { rows, fresh };
   }
 
   /**

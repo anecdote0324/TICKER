@@ -1591,3 +1591,34 @@ button {
 .des-note {
   padding: 8px 10px;
 }
+
+/* ── MOST 상위 종목 ── */
+.most-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--line2);
+  background: var(--header2);
+}
+.most-tabs button {
+  height: 18px;
+  padding: 0 8px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--amber);
+  font: 600 11px var(--sans);
+  cursor: pointer;
+}
+.most-tabs button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+}
+.row.nolink {
+  cursor: default;
+}
+@container (max-width: 420px) {
+  .col-vol {
+    display: none;
+  }
+}

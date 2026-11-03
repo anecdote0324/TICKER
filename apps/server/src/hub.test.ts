@@ -99,3 +99,28 @@ describe('켜자마자 들어온 봉 요청', () => {
     expect(hub.quoteSnapshot(['CRY:BTC'])).toEqual([]);
   });
 });
+
+describe('MOST 상위 종목', () => {
+  const tick = (symbol: string, open: number, last: number, quoteVolume: number) => ({ symbol, openPrice: String(open), lastPrice: String(last), highPrice: '0', lowPrice: '0', volume: '1', quoteVolume: String(quoteVolume), closeTime: 0, count: 1 });
+
+  it('코인 상승률은 24시간 거래대금 100만 USDT 이상에서 고르고, 목록에 있는 코인만 누를 수 있어요', async () => {
+    const { hub } = setup();
+    hub.setInstruments([btc]);
+    (hub.binance as unknown as { tickers24h: () => Promise<unknown[]> }).tickers24h = async () => [
+      tick('BTCUSDT', 100, 110, 5e8),
+      tick('TINYUSDT', 1, 3, 1e5),
+      tick('ETHUSDT', 100, 105, 2e8),
+      tick('ETHBTC', 1, 2, 1e9),
+    ];
+    const r = await hub.most('CRYPTO', 'gainers');
+    expect(r.rows.map((x) => x.code)).toEqual(['BTC', 'ETH']);
+    expect(r.rows[0]).toMatchObject({ rank: 1, id: 'CRY:BTC', changePct: 10 });
+    expect(r.rows[1].id).toBeUndefined();
+    expect(r.currency).toBe('USDT');
+  });
+
+  it('국내·미국은 한국투자증권 키가 없으면 안내해요', async () => {
+    const { hub } = setup();
+    await expect(hub.most('KS', 'volume')).rejects.toThrow(/한국투자증권 키/);
+  });
+});

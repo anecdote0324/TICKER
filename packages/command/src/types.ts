@@ -92,9 +92,11 @@ export interface Segment {
   chooseReason?: 'prefix' | 'short' | 'ambiguous' | 'fuzzy' | 'convert';
   /** 목록에 없지만 직접 조회해 볼 만한 코드 모양(05 §4.5) */
   lookup?: { code: string; market: 'KR' | 'US' };
+  /** 기능 인자의 값(MOST KQ의 'KQ') */
+  arg?: string;
 }
 
-export type RowKind = 'security' | 'function' | 'market' | 'asset' | 'command' | 'convert' | 'fix' | 'unavailable' | 'nomatch' | 'lookup' | 'history' | 'header';
+export type RowKind = 'security' | 'function' | 'market' | 'asset' | 'command' | 'convert' | 'fix' | 'unavailable' | 'nomatch' | 'lookup' | 'history' | 'header' | 'arg';
 
 export interface Row {
   id: string;
@@ -148,6 +150,8 @@ export interface Execution {
   canonical: string;
   /** 종목이 필요 없는 기능에 종목을 함께 친 경우: 띄운 종목만 바꿔요 */
   setsSecurityOnly?: boolean;
+  /** 기능 인자(MOST의 시장 등) */
+  args?: string[];
   /** ⏎ 라벨에 붙은 설명 */
   notes: string[];
 }
