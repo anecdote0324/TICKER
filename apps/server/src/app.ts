@@ -12,6 +12,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { BarInterval, ClientMessage, CredentialStatus, InstrumentsResponse, MostKind, ServerMessage, Settings } from '@bt/shared';
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
+import type { NewsService } from './news';
 import { STATE_NAMES, type StateName, type Store } from './store';
 import { withTimeout, type RecordingLogger } from './util';
 
@@ -27,6 +28,7 @@ export interface AppDeps {
   version: string;
   makeKis: (cred: KisCredentials) => KisAdapter;
   log: RecordingLogger;
+  news?: NewsService;
 }
 
 /** 키를 암호화하거나 푸는 데 이보다 오래 걸리면 보안 저장소가 응답하지 않는 걸로 봐요 */
@@ -184,10 +186,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const saveSecret = (name: string, value: string | undefined) => withTimeout(store.setSecret(name, value), SECRET_TIMEOUT_MS, SECRET_TIMEOUT_MSG);
   const credentialStatus = async (): Promise<CredentialStatus & { secretKind: string }> => {
     const raw = await readSecret('kis');
-    if (!raw) return { kis: { configured: false, env: 'real' }, secretKind: store.secretKind };
+    const dartRaw = await readSecret('dart');
+    const d = dartRaw ? (JSON.parse(dartRaw) as { key: string; lastTest?: { ok: boolean; message: string; at: number } }) : undefined;
+    const dart: CredentialStatus['dart'] = d ? { configured: true, keyHint: `…${d.key.slice(-4)}`, lastTest: d.lastTest } : { configured: false };
+    if (!raw) return { kis: { configured: false, env: 'real' }, dart, secretKind: store.secretKind };
     const c = JSON.parse(raw) as KisCredentials & { lastTest?: CredentialStatus['kis']['lastTest'] };
     return {
       kis: { configured: true, appKeyHint: `…${c.appKey.slice(-4)}`, env: c.env, lastTest: c.lastTest },
+      dart,
       secretKind: store.secretKind,
     };
   };
@@ -226,6 +232,38 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (test.ok) await switchToKis(kis);
     else if (!current) kis.stop();
     return { test, status: await credentialStatus().catch(() => ({ kis: { configured: true, env: cred.env }, secretKind: store.secretKind })) };
+  });
+
+  // ── DART 인증키(N 뉴스·공시) ── 기록에는 끝 4자리만 남겨요
+  app.put<{ Body: { key?: string } }>('/api/credentials/dart', async (req, reply) => {
+    const key = (req.body?.key ?? '').trim();
+    if (!/^[0-9A-Za-z]{40}$/.test(key)) return reply.code(400).send({ error: 'DART 인증키는 40자리 영문·숫자예요' });
+    if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });
+    const test = await deps.news.testDart(key);
+    log.info(`DART 인증키 확인 ${test.ok ? '성공' : '실패'}(…${key.slice(-4)}): ${test.message}`);
+    try {
+      await saveSecret('dart', JSON.stringify({ key, lastTest: { ...test, at: Date.now() } }));
+    } catch (e) {
+      return reply.code(500).send({ error: `인증키를 저장하지 못했어요: ${(e as Error).message}` });
+    }
+    if (test.ok) deps.news.setDartKey(key);
+    return { test, status: await credentialStatus() };
+  });
+
+  app.delete('/api/credentials/dart', async () => {
+    await saveSecret('dart', undefined);
+    deps.news?.setDartKey(undefined);
+    log.info('DART 인증키를 지웠어요');
+    return { ok: true };
+  });
+
+  // ── N 뉴스·공시 ──
+  app.get<{ Querystring: { id?: string; kind?: string; limit?: string } }>('/api/news', async (req, reply) => {
+    if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });
+    const kind = req.query.kind === 'news' || req.query.kind === 'disclosure' ? req.query.kind : 'all';
+    const inst = req.query.id ? hub.instruments.get(req.query.id) : undefined;
+    const limit = Math.min(500, Math.max(10, Number(req.query.limit) || 150));
+    return deps.news.list(inst, kind, limit);
   });
 
   app.post('/api/credentials/kis/test', async (_req, reply) => {

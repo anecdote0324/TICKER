@@ -197,11 +197,25 @@ const BUILT: FunctionDef[] = [
     similar: ['GP'],
     args: { kind: 'securities', label: '비교 종목', choices: [], max: COMP_MAX },
   },
+  {
+    code: 'N',
+    nameKo: '뉴스·공시',
+    nameEn: 'News',
+    summary: 'DART 공시와 국내외 뉴스 헤드라인',
+    detail: 'DART 공시(인증키가 있을 때)와 국내외 RSS 뉴스 헤드라인이에요. 종목을 함께 치면 그 회사 공시와 제목에 이름이 들어간 헤드라인만 보여요. 줄을 누르면 원문을 열어요.',
+    security: 'optional',
+    assetClasses: ALL_ASSETS,
+    keywords: ['뉴스', '공시'],
+    version: 'v0.2',
+    implemented: true,
+    speed: 'RSS 5분마다, DART 2분마다',
+    examples: ['N', '005930 N', 'AAPL US N'],
+    similar: ['DES'],
+  },
 ];
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
-  N: { security: 'optional', assetClasses: ALL_ASSETS, keywords: ['뉴스', '공시'], summary: '뉴스·공시 헤드라인' },
   HMAP: { security: 'none', assetClasses: [], keywords: ['히트맵'], summary: '업종 기간별 등락 색' },
   IMAP: { security: 'none', assetClasses: [], keywords: ['업종'], summary: '업종별 등락 타일' },
   FA: { security: 'one', assetClasses: ['EQUITY'], keywords: ['재무', '재무제표'], summary: '손익·재무상태·현금흐름' },

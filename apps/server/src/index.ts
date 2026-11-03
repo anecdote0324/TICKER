@@ -10,6 +10,7 @@ import { EcbAdapter } from './adapters/ecb';
 import { KisAdapter, type KisCredentials, type KisEndpoints, type KisTokenStore, type SavedKisToken } from './adapters/kis';
 import { buildApp } from './app';
 import { History } from './history';
+import { NewsService } from './news';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
 import { fileSecretBox, Store, type SecretBox } from './store';
@@ -59,6 +60,12 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   hub.binance = new BinanceAdapter(hub);
   hub.ecb = new EcbAdapter(hub);
   hub.demo = new DemoAdapter(hub);
+  // N 뉴스·공시: RSS·DART를 받아 뉴스 아카이브(news.db)에 쌓아요(03 v0.2)
+  const news = new NewsService(opts.dataDir, log, join(opts.dataDir, 'news.db'));
+  news.start();
+  void withTimeout(store.getSecret('dart'), 15_000, '보안 저장소가 15초 동안 응답하지 않았어요')
+    .then((raw) => raw && news.setDartKey((JSON.parse(raw) as { key: string }).key))
+    .catch((e: Error) => log.warn(`저장된 DART 인증키를 읽지 못했어요: ${e.message}`));
 
   const tokenStore: KisTokenStore = {
     async load() {
@@ -124,6 +131,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     devOrigins: opts.devOrigins,
     version: opts.version ?? '0.1.0-dev',
     makeKis,
+    news,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();
@@ -143,6 +151,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       hub.ecb.stop();
       hub.demo.stop();
       hub.kis?.stop();
+      news.stop();
       await app.close();
       // 실시간 구독을 끊은 뒤 남은 분봉을 저장해요(01 종료할 때)
       hub.history?.close();

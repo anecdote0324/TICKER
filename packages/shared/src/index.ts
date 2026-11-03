@@ -10,4 +10,5 @@ export * from './slots';
 export * from './session';
 export * from './profile';
 export * from './most';
+export * from './news';
 export type { CatalogEntry } from './function-catalog.generated';

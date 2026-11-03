@@ -66,6 +66,13 @@ export interface CredentialStatus {
     /** 연결 테스트 결과 */
     lastTest?: { ok: boolean; message: string; at: number };
   };
+  /** DART 전자공시 인증키(N 뉴스·공시, v0.2) */
+  dart?: {
+    configured: boolean;
+    /** 인증키 끝 4자리만 */
+    keyHint?: string;
+    lastTest?: { ok: boolean; message: string; at: number };
+  };
 }
 
 /** 강조 색 후보: 등락·선택·자산군 칩 색과 겹치지 않는 색만(02) */

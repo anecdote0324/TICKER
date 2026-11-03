@@ -20,7 +20,7 @@
 | 언어 | TypeScript (화면과 서버 모두) | 화면은 어차피 TypeScript여야 하고, 서버와 데이터 형식을 공유할 수 있어요. 서버는 계산보다 중계가 대부분이라 언어 속도 차이가 체감되지 않아요 |
 | 화면 기술 | React + Vite, 창 관리 dockview(창 떼어내기는 dockview 팝아웃 창), 메인 차트 TradingView Lightweight Charts, 소형 차트 uPlot(GRID, v0.3). v0.1의 스파크라인은 SVG로 그려요 | 차트 수십 개를 동시에 그리는 데 맞춘 조합. 실제 성능은 개발하면서 재요 |
 | 서버 | Node.js + Fastify + WebSocket, 앱 안에서 실행 | 시세 수집과 중계, API 키 보호 |
-| DB | SQLite. Node·Electron에 들어 있는 `node:sqlite`를 써요(데이터 폴더의 `history.db`) | 파일 하나, 별도 설치 불필요. 따로 빌드할 모듈이 없어서 Windows·Mac 설치 파일을 만들기 쉬워요 |
+| DB | SQLite. Node·Electron에 들어 있는 `node:sqlite`를 써요(데이터 폴더의 `history.db`, v0.2부터 뉴스 아카이브 `news.db`) | 파일 하나, 별도 설치 불필요. 따로 빌드할 모듈이 없어서 Windows·Mac 설치 파일을 만들기 쉬워요 |
 | 진단 기록 | 내장 서버의 기록을 데이터 폴더의 `logs/server.log`에 남겨요(1MB를 넘으면 `server.log.1`로 넘김). 앱키는 끝 4자리만, 앱시크릿·토큰은 남기지 않아요. 설정 → 정보 → `진단 정보 복사`로 상태와 최근 기록을 모아 보내요. 메인 프로세스에서 놓친 오류는 오류 창 대신 기록에 남겨요(오류 창이 떠 있는 동안 서버가 멈춰서) | 배포판에는 콘솔이 없어서, 실제 PC에서 생긴 문제(한국투자증권 연결 테스트가 끝나지 않음 등)의 원인을 알 수 없었어요 |
 | 저장소 구성 | pnpm 모노레포 | 화면·서버·공통 형식을 한 저장소에서 관리 |
 | 시세 데이터 | 한국투자증권 Open API(국내·미국 주식, 지수, 장내채권, 국내선물옵션), Binance(코인, USDT만), 무료 환율 소스, DART·RSS(v0.2), 그리고 무료 공식 데이터(한국은행 ECOS, 미국 재무부 금리, FRED, SEC EDGAR, KRX Open API 등)를 단계별로 추가. 유료 데이터는 쓰지 않음 | [04 데이터 소스](04-data-sources.md) 참고 |

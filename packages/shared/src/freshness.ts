@@ -3,13 +3,15 @@
 
 import { formatBadgeDate, formatBadgeTime } from './time';
 
-export type SourceId = 'KIS' | 'BINANCE' | 'ECB' | 'DEMO';
+export type SourceId = 'KIS' | 'BINANCE' | 'ECB' | 'DEMO' | 'RSS' | 'DART';
 
 export const SOURCE_LABEL: Record<SourceId, string> = {
   KIS: '한국투자증권',
   BINANCE: 'Binance',
   ECB: 'ECB 기준환율 (Frankfurter)',
   DEMO: '데모 데이터',
+  RSS: '뉴스 RSS',
+  DART: 'DART 전자공시',
 };
 
 /**

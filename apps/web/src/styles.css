@@ -1669,3 +1669,63 @@ button {
   z-index: 3;
   font-size: 11px;
 }
+
+/* ── N 뉴스·공시 ── */
+.news-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid #141414;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.news-row:hover {
+  background: #121212;
+}
+.news-t {
+  flex: none;
+  width: 38px;
+  color: var(--label);
+  font-size: 11px;
+  text-align: left;
+}
+.news-src {
+  flex: none;
+  width: 72px;
+  color: var(--amber);
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.news-src.disc {
+  color: #7fb2ff;
+}
+.news-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--value);
+}
+.news-row.new .news-title {
+  color: var(--value-hi);
+  font-weight: 600;
+}
+.news-corp {
+  color: var(--name);
+  margin-right: 6px;
+}
+.news-corp::before {
+  content: '[';
+}
+.news-corp::after {
+  content: ']';
+}
+.news-foot {
+  font-size: 10.5px;
+}
+@container (max-width: 380px) {
+  .news-src {
+    width: 44px;
+  }
+}

@@ -621,8 +621,81 @@ function Data() {
         한국투자증권 키가 있으면 한국투자증권 환율 조회로 10초마다 받아요('10초 주기' 배지). 키가 없거나 1분 넘게 받지 못하면 ECB 기준환율(Frankfurter, 키 없음, 하루 한 번, '일별' 배지)로 돌아가요. 환율 차트(GP)의 일·주·월봉도 키가 있으면 한국투자증권 것(약 14개월), 없으면 ECB 기준환율(2년)이에요.
       </p>
 
+      <DartKey cred={cred} onChange={setCred} reload={() => void load()} />
+
+      <h3>뉴스 RSS</h3>
+      <p className="note">
+        키가 필요 없어요. 한국경제(증권·경제), 서울경제, 전자신문, MarketWatch(톱·마켓펄스), Investing.com의 헤드라인을 5분마다 받아 데이터 폴더의 뉴스 아카이브(news.db)에 쌓아요. 제목·링크·시각만 보관하고 본문은 원문 링크로 열어요.
+      </p>
+
       <h3>앞으로 추가될 키</h3>
-      <p className="note">DART(v0.2), BOK ECOS·FRED·KOSIS·SEC EDGAR 연락처(v0.3), 네이버·KRX Open API(v0.4), 공공데이터포털(v0.7), EIA(v0.11). 소스마다 출처 표시 문구와 이용 조건 링크를 함께 보여 줄 거예요.</p>
+      <p className="note">BOK ECOS·FRED·KOSIS·SEC EDGAR 연락처(v0.3), 네이버·KRX Open API(v0.4), 공공데이터포털(v0.7), EIA(v0.11). 소스마다 출처 표시 문구와 이용 조건 링크를 함께 보여 줄 거예요.</p>
+    </>
+  );
+}
+
+/** DART 전자공시 인증키(N 뉴스·공시, v0.2). opendart.fss.or.kr에서 무료로 받아요 */
+function DartKey({ cred, onChange, reload }: { cred: (CredentialStatus & { secretKind: string }) | null; onChange: (c: CredentialStatus & { secretKind: string }) => void; reload: () => void }) {
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; message: string } | null>(null);
+  const d = cred?.dart;
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api.put<{ test: { ok: boolean; message: string }; status: CredentialStatus & { secretKind: string } }>('/api/credentials/dart', { key });
+      setMsg(r.test);
+      onChange(r.status);
+      if (r.test.ok) setKey('');
+    } catch (e) {
+      setMsg({ ok: false, message: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <h3>DART 전자공시</h3>
+      <p className="note">
+        N(뉴스·공시)에 국내 공시를 보여 줘요. 인증키는 금융감독원 OpenDART(opendart.fss.or.kr)에서 회원 가입 뒤 무료로 받아요(40자리). 하루 2만 건까지 쓸 수 있고, 이 앱은 2분마다 오늘 공시를 받고 종목을 열 때 그 회사의 지난 1년 공시를 받아요.
+      </p>
+      <div className="field">
+        <label>상태</label>
+        <span>
+          {d?.configured ? (
+            <>
+              저장됨 · 인증키 {d.keyHint}
+              {d.lastTest && <span className={d.lastTest.ok ? 'okmsg' : 'err'}> {d.lastTest.message}</span>}
+            </>
+          ) : (
+            <span className="label">인증키 없음 · N에는 뉴스만 보여요</span>
+          )}
+        </span>
+      </div>
+      <div className="field">
+        <label htmlFor="dart-key">인증키</label>
+        <input id="dart-key" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={d?.configured ? '바꿀 때만 입력' : '40자리'} />
+      </div>
+      <div className="field">
+        <label />
+        <button className="btn primary" disabled={busy || key.trim().length !== 40} onClick={() => void save()}>
+          {busy ? '확인 중…' : '저장하고 확인'}
+        </button>
+        {d?.configured && (
+          <button
+            className="btn"
+            onClick={async () => {
+              await api.del('/api/credentials/dart');
+              setMsg(null);
+              reload();
+            }}
+          >
+            인증키 지우기
+          </button>
+        )}
+      </div>
+      {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.message}</p>}
     </>
   );
 }

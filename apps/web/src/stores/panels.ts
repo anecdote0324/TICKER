@@ -41,6 +41,9 @@ export interface PanelState {
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;
+  /** N에서 고른 탭(전체·공시·국내 뉴스·해외 뉴스)과 종목이 있어도 전체를 볼지 */
+  newsTab?: string;
+  newsAll?: boolean;
   /** COMP에서 고른 기간 */
   compRange?: string;
   /** MOST에서 고른 순위 종류(거래량·거래대금·상승률·하락률) */
