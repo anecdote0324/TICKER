@@ -1485,3 +1485,109 @@ button {
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ── DES 종목 개요 ── */
+.des-head {
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--line2);
+}
+.des-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.des-name {
+  color: var(--name);
+  font-size: 15px;
+  font-weight: 600;
+}
+.des-price {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.des-last {
+  color: var(--value-hi);
+  font-size: 20px;
+  font-weight: 600;
+}
+.des-sector {
+  color: var(--amber);
+  font-size: 11px;
+}
+.des-warn {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.des-warn span {
+  padding: 0 4px;
+  border: 1px solid var(--error);
+  color: var(--error);
+  font-size: 10.5px;
+}
+.des-range {
+  margin-top: 8px;
+  font-size: 11px;
+}
+.des-range-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  text-align: left;
+}
+.des-bar {
+  height: 4px;
+  margin: 6px 0 4px;
+  background: var(--line2);
+  position: relative;
+}
+.des-bar i {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 10px;
+  margin-left: -1px;
+  background: var(--accent);
+}
+.des-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+.des-sec {
+  border-right: 1px solid var(--line);
+}
+.des-sec .grp {
+  justify-content: space-between;
+  gap: 8px;
+}
+.des-src {
+  color: #b8c2e8;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.kv {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border-bottom: 1px solid #141414;
+}
+.kv .k {
+  color: var(--amber);
+  white-space: nowrap;
+}
+.kv .v {
+  color: var(--value-hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.des-note {
+  padding: 8px 10px;
+}

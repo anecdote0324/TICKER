@@ -32,7 +32,7 @@ describe('겹침 표', () => {
       KT: ['select', /선택/],
       KB: ['select', /선택/],
       GP: ['other', /종목 필요/], // 빈 패널: 기능이 먼저라 종목을 물어요
-      DES: ['other', /v0\.2/], // 아직 없는 기능
+      DES: ['other', /종목 필요/], // 기능 코드가 먼저(v0.2): 빈 패널이라 종목을 물어요
     };
     for (const [w, [outcome, label]] of Object.entries(expected)) {
       expect(row(w)?.outcome, w).toBe(outcome);

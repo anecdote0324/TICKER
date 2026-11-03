@@ -32,6 +32,11 @@
 - Electron 45(Windows·Mac)에서 `node:sqlite`로 분봉·이력 저장이 되는지, 종료할 때 남은 분봉이 저장되는지
 - 설치 파일의 종목 목록 사본: GitHub Actions에서 KIS 마스터 서버·Binance에 닿는지, 첫 실행을 인터넷 없이 했을 때 종목 검색이 되는지
 
+## v0.2를 만들면서 실제로 확인할 것
+
+- DES: 주식현재가 시세(FHKST01010100)의 `per`·`pbr`·`eps`·`bps`·`w52_hgpr`·`lstn_stcn`·`hts_frgn_ehrt`와 해외주식 현재가상세(HHDFS76200200)의 `perx`·`h52p`·`shar`·`e_icod`가 실제 계정에서 그 이름과 단위로 오는지. 상태 칸(`mang_issu_cls_code`, `mrkt_warn_cls_code`, `invt_caful_yn`)의 값
+- 종목 마스터의 매출액·영업이익이 기준 월까지의 누적인지(반기·분기), 연간인지
+
 ## 개발 전에 실제로 확인할 것
 
 ### 한국투자증권 API

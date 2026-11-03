@@ -52,18 +52,28 @@ export function dirClass(v: number | undefined): string {
   return v > 0 ? 'up' : 'down';
 }
 
-/** 거래대금: 원화는 억·조, 그 밖은 K·M·B */
+/** 거래대금·시가총액: 원화는 억·조, 그 밖은 K·M·B·T. 손실(음수)은 앞에 −를 붙여요 */
 export function fmtBig(v: number | undefined, currency?: string): string {
   if (v === undefined || !Number.isFinite(v)) return '—';
+  if (v < 0) return `−${fmtBig(-v, currency)}`;
   if (currency === 'KRW') {
-    if (v >= 1e12) return `${(v / 1e12).toFixed(2)}조`;
+    if (v >= 1e12) return `${(v / 1e12).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}조`;
     if (v >= 1e8) return `${Math.round(v / 1e8).toLocaleString('en-US')}억`;
     return `${Math.round(v / 1e4).toLocaleString('en-US')}만`;
   }
+  if (v >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
   if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
   if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
   if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
   return v.toFixed(0);
+}
+
+/** 주식 수: 5,846,278,000 → 58.46억 주, 35,532,000 → 3,553만 주 */
+export function fmtShares(v: number | undefined): string {
+  if (v === undefined || !Number.isFinite(v) || v <= 0) return '—';
+  if (v >= 1e8) return `${(v / 1e8).toFixed(2)}억 주`;
+  if (v >= 1e4) return `${Math.round(v / 1e4).toLocaleString('en-US')}만 주`;
+  return `${Math.round(v).toLocaleString('en-US')}주`;
 }
 
 /** 받침에 맞는 조사(은/는, 이/가 등)를 붙여요. 한글로 끝나지 않으면 두 형태를 함께 적어요(AAPL은(는)) */

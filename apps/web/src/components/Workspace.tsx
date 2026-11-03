@@ -14,6 +14,7 @@ import {
 import 'dockview-react/dist/styles/dockview.css';
 import { FUNCTIONS } from '@bt/shared';
 import { Cryp } from '../widgets/Cryp';
+import { Des } from '../widgets/Des';
 import { Fxc } from '../widgets/Fxc';
 import { Mon } from '../widgets/Mon';
 import { PriceChart } from '../widgets/PriceChart';
@@ -86,6 +87,8 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Fxc panel={p} />;
     case 'CRYP':
       return <Cryp panel={p} />;
+    case 'DES':
+      return <Des panel={p} />;
     default: {
       const fn = p.fn ? FUNCTIONS.find((f) => f.code === p.fn) : undefined;
       return (

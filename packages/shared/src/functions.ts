@@ -125,12 +125,27 @@ const BUILT: FunctionDef[] = [
     speed: '실시간',
     examples: ['CRYP'],
   },
+  {
+    code: 'DES',
+    nameKo: '종목 개요',
+    nameEn: 'Description',
+    summary: '시가총액·PER·52주 고저·업종',
+    detail: '주식의 시가총액, PER·PBR·EPS·BPS, 52주 최고·최저, 업종, 상장일, 매출액·영업이익·ROE(국내 종목 마스터)를 한 화면에 보여 줘요.',
+    security: 'one',
+    assetClasses: ['EQUITY'],
+    keywords: ['개요', '종목개요', '기업개요'],
+    version: 'v0.2',
+    implemented: true,
+    speed: '시세는 실시간, 가치 지표는 60초마다 조회, 실적·업종은 하루 한 번(종목 마스터)',
+    examples: ['005930 DES', 'AAPL US DES'],
+    similar: ['GP'],
+    aliases: ['ISSD'],
+  },
 ];
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
   N: { security: 'optional', assetClasses: ALL_ASSETS, keywords: ['뉴스', '공시'], summary: '뉴스·공시 헤드라인' },
-  DES: { security: 'one', assetClasses: ['EQUITY'], keywords: ['개요', '종목개요'], summary: '시가총액·PER·52주 고저' },
   COMP: { security: 'one', assetClasses: ALL_ASSETS, keywords: ['비교'], summary: '여러 종목 겹쳐 비교' },
   HMAP: { security: 'none', assetClasses: [], keywords: ['히트맵'], summary: '업종 기간별 등락 색' },
   IMAP: { security: 'none', assetClasses: [], keywords: ['업종'], summary: '업종별 등락 타일' },

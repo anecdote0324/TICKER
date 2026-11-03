@@ -16,6 +16,7 @@ import {
   type InstrumentsResponse,
 } from '@bt/shared';
 import type { BinanceAdapter, Ticker24h } from './adapters/binance';
+import { krMaster, parseKrInfoLine, parseSectorNames, type KrStockInfo } from './kr-master';
 import { fetchBytes, type Logger } from './util';
 
 const MASTER_BASE = 'https://new.real.download.dws.co.kr/common/master';
@@ -25,6 +26,8 @@ const MASTERS = {
   nas: 'nasmst.cod',
   nys: 'nysmst.cod',
   ams: 'amsmst.cod',
+  /** 업종 이름(공용 업종 분류, 08 §4.2) */
+  sectors: 'idxcode.mst',
 } as const;
 
 const cp949 = new TextDecoder('euc-kr');
@@ -166,6 +169,16 @@ export function parseKrMaster(bytes: Uint8Array, market: 'KS' | 'KQ'): Instrumen
   return out;
 }
 
+/** 종목 마스터 뒷부분의 칸(업종·상장주수·실적). 목록에 넣은 종목만 보관해요 */
+export function parseKrInfo(bytes: Uint8Array, market: 'KS' | 'KQ', keep: Set<string>): Map<string, KrStockInfo> {
+  const out = new Map<string, KrStockInfo>();
+  for (const line of splitLines(bytes)) {
+    const r = parseKrInfoLine(line, market);
+    if (r && keep.has(r.code)) out.set(r.code, r.info);
+  }
+  return out;
+}
+
 /**
  * 미국 마스터(탭 구분, cp949). 칸: 4 심볼, 5 실시간 심볼, 6 한글명, 7 영문명, 8 종류(1 지수, 2 주식, 3 ETP, 4 워런트),
  * 12 기준가, 17 DR 여부, 22 구분(001 ETF, 002 ETN, 003 ETC, 005 VIX ETF, 006 VIX ETN).
@@ -266,10 +279,19 @@ export async function buildInstruments(dataDir: string, binance: BinanceAdapter,
     }
     const list = parseKrMaster(m.bytes, market);
     kr.push(...list);
+    krMaster.setMarket(market, parseKrInfo(m.bytes, market, new Set(list.map((i) => i.code))), m.asOf);
     sources.push({ name: file, count: list.length, asOf: m.asOf });
   }
   percentile(kr, (i) => i.popularity ?? 0);
   all.push(...kr);
+  // 업종 이름은 받지 못해도 목록은 만들어요(DES의 업종 칸과 HMAP·IMAP의 업종 이름만 비어요)
+  const sec = await loadMaster(dataDir, MASTERS.sectors, log);
+  if ('error' in sec) sources.push({ name: MASTERS.sectors, count: 0, error: sec.error });
+  else {
+    const names = parseSectorNames(sec.bytes);
+    krMaster.setSectorNames(names);
+    sources.push({ name: MASTERS.sectors, count: names.size, asOf: sec.asOf });
+  }
 
   const us: Instrument[] = [];
   for (const [ex, file, part] of [

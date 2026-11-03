@@ -19,6 +19,7 @@ import {
   type BarSeries,
   type Freshness,
   type Instrument,
+  type ProfileLive,
   type Quote,
   type SourceStatus,
 } from '@bt/shared';
@@ -98,6 +99,8 @@ const KR_CLOSE_HMS = '153059';
 const STUCK_MS = 15 * 60_000;
 /** 장이 닫힌 종목은 이 간격으로만 다시 확인해요(값이 바뀌지 않아요) */
 const CLOSED_POLL_MS = 5 * 60_000;
+/** DES 종목 개요를 다시 조회하는 간격 */
+export const PROFILE_REFRESH_MS = 60_000;
 /** 정규장이 끝난 뒤에도 종가가 확정될 때까지 이만큼은 장중처럼 다뤄요 */
 const CLOSE_GRACE_MS = 10 * 60_000;
 /** 장이 열리고 닫힘에 맞춰 실시간 구독을 다시 나누는 간격 */
@@ -890,6 +893,82 @@ export class KisAdapter implements Adapter {
       };
     }
     return undefined;
+  }
+
+  /**
+   * DES 종목 개요의 값(03 v0.2). 국내는 주식현재가 시세(FHKST01010100), 미국은 해외주식 현재가상세(HHDFS76200200).
+   * 칸 이름은 공식 예제(examples_llm/domestic_stock/inquire_price, overseas_stock/price_detail)와 같아요.
+   * 시가총액은 단위가 헷갈리지 않게 현재가 × 상장주식수로 계산해요
+   */
+  async profile(inst: Instrument): Promise<ProfileLive> {
+    const t = Date.now();
+    const fresh: Freshness =
+      tradingNow(inst, t) === false
+        ? { source: 'KIS', mode: 'poll', asOf: closeTime(inst, t), receivedAt: t, intervalMs: PROFILE_REFRESH_MS }
+        : { source: 'KIS', mode: 'poll', asOf: t, receivedAt: t, intervalMs: PROFILE_REFRESH_MS, asOfFromReceipt: true };
+    const pos = (v: unknown) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n !== 0 ? n : undefined;
+    };
+    const date = (v: unknown) => (typeof v === 'string' && /^\d{8}$/.test(v) ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}` : undefined);
+    if (inst.assetClass === 'EQUITY' && inst.market !== 'US') {
+      const r = await this.get('/uapi/domestic-stock/v1/quotations/inquire-price', 'FHKST01010100', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: inst.code }, 0);
+      const o = r.output as KisRow;
+      const last = pos(o.stck_prpr);
+      const shares = pos(o.lstn_stcn);
+      const warnings: string[] = [];
+      if (o.temp_stop_yn === 'Y') warnings.push('거래정지');
+      if (o.mang_issu_cls_code === 'Y') warnings.push('관리종목');
+      if (o.invt_caful_yn === 'Y') warnings.push('투자유의');
+      const warn = { '01': '투자주의', '02': '투자경고', '03': '투자위험' }[String(o.mrkt_warn_cls_code)];
+      if (warn) warnings.push(warn);
+      if (o.short_over_yn === 'Y') warnings.push('단기과열');
+      if (o.sltr_yn === 'Y') warnings.push('정리매매');
+      return {
+        last,
+        shares,
+        marketCap: last && shares ? last * shares : undefined,
+        per: pos(o.per),
+        pbr: pos(o.pbr),
+        eps: pos(o.eps),
+        bps: pos(o.bps),
+        high52: pos(o.w52_hgpr),
+        high52Date: date(o.w52_hgpr_date),
+        low52: pos(o.w52_lwpr),
+        low52Date: date(o.w52_lwpr_date),
+        sector: String(o.bstp_kor_isnm ?? '').trim() || undefined,
+        foreignRatio: Number.isFinite(Number(o.hts_frgn_ehrt)) && o.hts_frgn_ehrt !== '' ? Number(o.hts_frgn_ehrt) : undefined,
+        turnoverRate: pos(o.vol_tnrt),
+        faceValue: pos(o.stck_fcam),
+        settleMonth: /^\d{2}$/.test(String(o.stac_month)) ? String(o.stac_month) : undefined,
+        warnings: warnings.length ? warnings : undefined,
+        fresh,
+      };
+    }
+    if (inst.assetClass === 'EQUITY' && inst.market === 'US') {
+      const r = await this.get('/uapi/overseas-price/v1/quotations/price-detail', 'HHDFS76200200', { AUTH: '', EXCD: inst.exchange ?? 'NAS', SYMB: inst.code }, 0);
+      const o = r.output as KisRow;
+      const last = pos(o.last);
+      const shares = pos(o.shar);
+      return {
+        last,
+        shares,
+        marketCap: last && shares ? last * shares : pos(o.tomv),
+        per: pos(o.perx),
+        pbr: pos(o.pbrx),
+        eps: pos(o.epsx),
+        bps: pos(o.bpsx),
+        high52: pos(o.h52p),
+        high52Date: date(o.h52d),
+        low52: pos(o.l52p),
+        low52Date: date(o.l52d),
+        sector: String(o.e_icod ?? '').trim() || undefined,
+        faceValue: pos(o.e_parp),
+        krwPrice: pos(o.t_xprc),
+        fresh,
+      };
+    }
+    throw new Error('종목 개요는 주식만 볼 수 있어요');
   }
 
   /**

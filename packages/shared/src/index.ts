@@ -8,4 +8,5 @@ export * from './settings';
 export * from './shortcuts';
 export * from './slots';
 export * from './session';
+export * from './profile';
 export type { CatalogEntry } from './function-catalog.generated';

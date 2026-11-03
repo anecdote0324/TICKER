@@ -231,10 +231,15 @@ describe('겹침과 예외(§7, §13)', () => {
     expect(run('PDF').plan).toMatchObject({ exec: { cmd: 'settings' } });
     expect(run('?').plan).toMatchObject({ exec: { cmd: 'syntax' } });
   });
-  it('DES 는 v0.1에서 실행 안 됨', () => {
-    const a = run('DES');
+  it('아직 만들지 않은 기능(ECO)은 실행 안 됨', () => {
+    const a = run('ECO');
     expect(a.plan.kind).toBe('error');
-    expect(a.label).toContain('v0.2에서 제공 예정');
+    expect(a.label).toContain('v0.3에서 제공 예정');
+  });
+  it('DES 는 v0.2부터 종목을 물어요(빈 패널)', () => {
+    const a = run('DES');
+    expect(a.plan.kind).not.toBe('error');
+    expect(a.label).toMatch(/종목 필요/);
   });
   it('GS KS 는 코스피의 GS, 골드만삭스가 아니에요', () => {
     expect(run('GS KS').plan).toMatchObject({ exec: { instrumentId: 'EQ:KS:078930' } });

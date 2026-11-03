@@ -138,6 +138,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
   });
 
+  app.get<{ Querystring: { id?: string } }>('/api/profile', async (req, reply) => {
+    const id = req.query.id ?? '';
+    if (!hub.instruments.has(id)) return reply.code(404).send({ error: '종목을 찾지 못했어요' });
+    try {
+      return await hub.profile(id);
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
   app.get<{ Querystring: { ids?: string } }>('/api/quotes', async (req) => hub.quoteSnapshot((req.query.ids ?? '').split(',').filter(Boolean)));
 
   app.get('/api/status', async () => ({ sources: hub.statuses(), kisBudget: hub.kis?.budgetUsage() }));

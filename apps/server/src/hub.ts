@@ -1,13 +1,14 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
+import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type SecurityProfile, type ServerMessage, type SourceStatus } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
 import type { KisAdapter } from './adapters/kis';
 import type { Adapter, AdapterHost } from './adapters/types';
 import { mergeBars, type History } from './history';
+import { krMaster } from './kr-master';
 import type { Logger } from './util';
 
 export interface Client {
@@ -18,6 +19,8 @@ export interface Client {
 }
 
 const FLUSH_MS = 100;
+/** DES 종목 개요를 이만큼(30초) 다시 써요. 여러 창에서 같은 종목을 열어도 한 번만 조회해요 */
+const PROFILE_CACHE_MS = 30_000;
 /** 지난 시간봉을 이만큼(1년) 채워요. 한국투자증권은 분봉을 1년까지 보관해요 */
 const HOUR_HISTORY_SEC = 365 * 86400;
 /** 시간봉 사이가 이만큼(6일) 비면 빈 곳으로 보고 채워요(주말·짧은 연휴보다 길게) */
@@ -397,6 +400,35 @@ export class Hub implements AdapterHost {
     } finally {
       this.backfilling = false;
     }
+  }
+
+  private profiles = new Map<string, { at: number; p: Promise<SecurityProfile> }>();
+
+  /** DES 종목 개요(03 v0.2): 국내 종목 마스터의 칸과 한국투자증권 현재가 조회의 칸 */
+  profile(id: string): Promise<SecurityProfile> {
+    const hit = this.profiles.get(id);
+    if (hit && Date.now() - hit.at < PROFILE_CACHE_MS) return hit.p;
+    const p = this.loadProfile(id);
+    this.profiles.set(id, { at: Date.now(), p });
+    // 실패한 조회는 다시 쓰지 않아요
+    p.catch(() => this.profiles.delete(id));
+    return p;
+  }
+
+  private async loadProfile(id: string): Promise<SecurityProfile> {
+    const inst = this.instruments.get(id);
+    if (!inst) throw new Error(`종목 ${id}을(를) 찾지 못했어요`);
+    if (inst.assetClass !== 'EQUITY') throw new Error('종목 개요는 주식만 볼 수 있어요');
+    const out: SecurityProfile = { id, currency: inst.currency ?? (inst.market === 'US' ? 'USD' : 'KRW'), master: krMaster.profile(inst) };
+    if (!this.kis) out.liveError = '한국투자증권 키를 넣으면 PER·PBR·52주 고저도 보여요';
+    else {
+      try {
+        out.live = await this.kis.profile(inst);
+      } catch (e) {
+        out.liveError = `한국투자증권 조회 실패: ${(e as Error).message}`;
+      }
+    }
+    return out;
   }
 
   quoteSnapshot(ids: string[]): Quote[] {
