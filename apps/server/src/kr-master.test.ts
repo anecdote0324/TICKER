@@ -34,8 +34,8 @@ describe('국내 종목 마스터 뒷부분', () => {
     // 파일은 cp949예요. 한글 바이트: 제조 = C1A6 C1B6, 금융 = B1DD C0B6
     const bytes = new Uint8Array([...'00013ELEC  \r\n'].map((c) => c.charCodeAt(0)).concat([0x30, 0x30, 0x30, 0x32, 0x31, 0xb1, 0xdd, 0xc0, 0xb6, 0x0a, 0x30, 0x30, 0x30, 0x32, 0x37, 0xc1, 0xa6, 0xc1, 0xb6, 0x0a]));
     const names = parseSectorNames(bytes);
-    expect(names.get('00027')).toBe('제조');
-    expect(names.get('00013')).toBe('ELEC');
+    expect(names.get('0027')).toBe('제조');
+    expect(names.get('0013')).toBe('ELEC');
     const store = new KrMasterStore();
     store.setSectorNames(names);
     const samsung = parseKrInfoLine(line('KS', '005930', { big: '0027', mid: '0013', warn: '02', managed: 'Y' }), 'KS')!;

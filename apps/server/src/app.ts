@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { BarInterval, ClientMessage, CredentialStatus, InstrumentsResponse, MostKind, ServerMessage, Settings } from '@bt/shared';
+import type { BarInterval, ClientMessage, CredentialStatus, InstrumentsResponse, MostKind, SectorIndex, ServerMessage, Settings } from '@bt/shared';
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
 import type { NewsService } from './news';
@@ -160,6 +160,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return reply.code(502).send({ error: (e as Error).message });
     }
   });
+
+  // HMAP·IMAP 업종(03 v0.2)
+  const sectorIndex = (v?: string): SectorIndex => (v === 'KOSDAQ' || v === 'KOSPI2' ? v : 'KOSPI');
+  app.get<{ Querystring: { index?: string } }>('/api/sectors', async (req, reply) => {
+    try {
+      return await hub.sectorMap(sectorIndex(req.query.index));
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+  app.get<{ Querystring: { index?: string } }>('/api/sectors/history', async (req) => hub.sectorHistory(sectorIndex(req.query.index)));
 
   app.get<{ Querystring: { ids?: string } }>('/api/quotes', async (req) => hub.quoteSnapshot((req.query.ids ?? '').split(',').filter(Boolean)));
 

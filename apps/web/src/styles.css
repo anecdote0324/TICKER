@@ -1729,3 +1729,94 @@ button {
     width: 44px;
   }
 }
+
+/* ── IMAP 업종 타일 ── */
+.imap {
+  position: relative;
+}
+.imap-head {
+  position: absolute;
+  height: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 3px;
+  background: #050505;
+  font: 600 10px var(--sans);
+  color: var(--amber);
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+  border: 1px solid #000;
+}
+.imap-head .up,
+.imap-head .down,
+.imap-head .flat {
+  font-family: var(--mono);
+}
+.imap-tile {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  text-align: center;
+  line-height: 1.15;
+}
+.imap-tile:hover {
+  outline: 1px solid var(--accent);
+  z-index: 2;
+}
+.imap-name {
+  font: 500 10.5px var(--sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 2px;
+}
+.imap-chg {
+  font: 10px var(--mono);
+  opacity: 0.9;
+}
+.imap-note {
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  z-index: 3;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--label);
+  font-size: 11px;
+}
+
+/* ── HMAP 업종 히트맵 ── */
+.hmap-cell {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 4px;
+  color: #fff;
+  font-size: 11px;
+  box-sizing: border-box;
+  border-left: 1px solid #000;
+}
+.hmap-spark {
+  width: 60px;
+  height: 16px;
+}
+.hmap-back {
+  height: 16px;
+  padding: 0 6px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--amber);
+  font: 600 10.5px var(--sans);
+  cursor: pointer;
+}

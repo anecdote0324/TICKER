@@ -2,16 +2,17 @@
 
 import { FUNCTION_CATALOG } from './function-catalog.generated';
 import type { AssetClass } from './instrument';
+import { SECTOR_INDEXES } from './sectors';
 
 export type SecurityNeed = 'none' | 'one' | 'optional';
 
-/** 기능 뒤에 붙이는 인자(05 §3.1, v0.2). MOST는 시장 하나, COMP는 비교할 종목 여러 개 */
+/** 기능 뒤에 붙이는 인자(05 §3.1, v0.2). MOST는 시장 하나, HMAP·IMAP은 지수 하나, COMP는 비교할 종목 여러 개 */
 export interface FunctionArgs {
-  kind: 'market' | 'securities';
+  kind: 'market' | 'index' | 'securities';
   /** 자리 표시와 오류 문구에 쓰는 이름: '시장' */
   label: string;
-  /** 고를 수 있는 값. 첫 번째가 기본값이에요(시장 인자) */
-  choices: Array<{ code: string; label: string }>;
+  /** 고를 수 있는 값. 첫 번째가 기본값이에요(시장·지수 인자). aliases도 그 값으로 읽어요(KS → KOSPI) */
+  choices: Array<{ code: string; label: string; aliases?: string[] }>;
   /** 받을 수 있는 인자 수 */
   max?: number;
 }
@@ -198,6 +199,38 @@ const BUILT: FunctionDef[] = [
     args: { kind: 'securities', label: '비교 종목', choices: [], max: COMP_MAX },
   },
   {
+    code: 'HMAP',
+    nameKo: '업종 히트맵',
+    nameEn: 'Sector Heat Map',
+    summary: '업종 지수 기간별 등락 색',
+    detail: '지수의 업종마다 오늘·1주·1개월·3개월·올해 등락을 색 칸으로 보여 줘요. 업종을 누르면 그 업종의 큰 종목들. 기능 뒤에 지수를 붙여요: HMAP KOSPI, HMAP KOSDAQ, HMAP KOSPI2(코스피200).',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['히트맵', '업종히트맵'],
+    version: 'v0.2',
+    implemented: true,
+    speed: '오늘 등락은 30초마다(업종 지수), 기간 등락은 업종 지수 일봉(하루 한 번)',
+    examples: ['HMAP', 'HMAP KOSDAQ', 'HMAP KOSPI2'],
+    similar: ['IMAP'],
+    args: { kind: 'index', label: '지수', choices: SECTOR_INDEXES, max: 1 },
+  },
+  {
+    code: 'IMAP',
+    nameKo: '업종 타일',
+    nameEn: 'Intraday Market Map',
+    summary: '업종별 종목 등락 타일',
+    detail: '업종별로 묶은 종목 타일이에요. 넓이는 시가총액, 색은 오늘 등락률. 타일을 누르면 연동 그룹이 그 종목으로 바뀌어요. 기능 뒤에 지수를 붙여요: IMAP KOSPI(시가총액 상위 200), IMAP KOSDAQ, IMAP KOSPI2.',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['업종', '업종타일', '맵'],
+    version: 'v0.2',
+    implemented: true,
+    speed: '종목 시세 1분마다(30종목씩 조회), 업종 지수 30초마다',
+    examples: ['IMAP', 'IMAP KOSDAQ', 'IMAP KOSPI2'],
+    similar: ['HMAP'],
+    args: { kind: 'index', label: '지수', choices: SECTOR_INDEXES, max: 1 },
+  },
+  {
     code: 'N',
     nameKo: '뉴스·공시',
     nameEn: 'News',
@@ -216,8 +249,6 @@ const BUILT: FunctionDef[] = [
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
-  HMAP: { security: 'none', assetClasses: [], keywords: ['히트맵'], summary: '업종 기간별 등락 색' },
-  IMAP: { security: 'none', assetClasses: [], keywords: ['업종'], summary: '업종별 등락 타일' },
   FA: { security: 'one', assetClasses: ['EQUITY'], keywords: ['재무', '재무제표'], summary: '손익·재무상태·현금흐름' },
   ECO: { security: 'none', assetClasses: [], keywords: ['경제지표', '캘린더'], summary: '경제지표 발표 일정' },
   GC: { security: 'none', assetClasses: [], keywords: ['금리', '커브'], summary: '국고채·미국채 금리 커브' },

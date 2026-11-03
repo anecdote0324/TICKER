@@ -460,3 +460,16 @@ describe('기능 인자(05 §3.1, v0.2): COMP 비교 종목', () => {
   });
 });
 
+
+describe('기능 인자(05 §3.1, v0.2): HMAP·IMAP 지수', () => {
+  it('지수 이름·KS·KQ·한글 이름을 인자로', () => {
+    expect(run('HMAP KOSDAQ').plan).toMatchObject({ exec: { fn: 'HMAP', args: ['KOSDAQ'], canonical: 'HMAP KOSDAQ' } });
+    expect(run('IMAP KS').plan).toMatchObject({ exec: { fn: 'IMAP', args: ['KOSPI'] } });
+    expect(run('IMAP 코스피200').plan).toMatchObject({ exec: { args: ['KOSPI2'] } });
+    expect(run('HMAP KOSPI200').plan).toMatchObject({ exec: { args: ['KOSPI2'] } });
+  });
+  it('빈 칸이면 지수 줄 세 개, 모르는 지수는 실행 안 됨', () => {
+    expect(run('IMAP ').rows.map((r) => r.code)).toEqual(['KOSPI', 'KOSDAQ', 'KOSPI2']);
+    expect(run('HMAP SPX').plan.kind).toBe('error');
+  });
+});

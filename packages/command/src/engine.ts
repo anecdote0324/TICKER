@@ -159,7 +159,7 @@ export function argValue(fn: FunctionDef, w: string): string | undefined {
   const a = fn.args;
   if (!a) return undefined;
   const up = w.toUpperCase();
-  const byLabel = a.choices.find((c) => c.label === w || c.code === up);
+  const byLabel = a.choices.find((c) => c.label === w || c.code === up || c.aliases?.includes(up));
   if (byLabel) return byLabel.code;
   if (a.kind === 'market') {
     const m = MARKET_WORDS[up];

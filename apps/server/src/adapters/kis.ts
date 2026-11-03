@@ -22,6 +22,7 @@ import {
   type MostKind,
   type MostRow,
   type ProfileLive,
+  type SectorIndex,
   type Quote,
   type SourceStatus,
 } from '@bt/shared';
@@ -135,6 +136,14 @@ function closeTime(inst: Instrument, now: number): number {
   const exId = exchangeOf(inst);
   const ex = exId ? EXCHANGES[exId] : undefined;
   return ex ? lastRegularClose(ex, now) : now;
+}
+
+/** 주기 조회 값의 신선도: 장이 닫혔으면 마감 값이라 기준 시각을 마감 시각으로(`마감 15:30`) */
+export function kisPollFresh(market: 'KS' | 'KQ' | 'US', intervalMs: number, t = Date.now()): Freshness {
+  const probe: Instrument = { id: `EQ:${market}:_`, assetClass: 'EQUITY', market, code: '_', exchange: market === 'US' ? 'NAS' : 'KRX' };
+  return tradingNow(probe, t) === false
+    ? { source: 'KIS', mode: 'poll', asOf: closeTime(probe, t), receivedAt: t, intervalMs }
+    : { source: 'KIS', mode: 'poll', asOf: t, receivedAt: t, intervalMs, asOfFromReceipt: true };
 }
 
 export class KisAdapter implements Adapter {
@@ -983,18 +992,92 @@ export class KisAdapter implements Adapter {
   }
 
   /**
+   * 업종 지수 한꺼번에(HMAP·IMAP, 03 v0.2): 국내업종 구분별전체시세(FHPUP02140000). 공식 예제
+   * examples_llm/domestic_stock/inquire_index_category_price의 변수: 코스피 0001·K, 코스닥 1001·Q, 코스피200 2001·K2, 0 = 전업종
+   */
+  async sectorIndices(index: SectorIndex): Promise<Map<string, { name: string; last: number; changePct: number; turnover?: number }>> {
+    const [iscd, mkt] = index === 'KOSPI' ? ['0001', 'K'] : index === 'KOSDAQ' ? ['1001', 'Q'] : ['2001', 'K2'];
+    const r = await this.get(
+      '/uapi/domestic-stock/v1/quotations/inquire-index-category-price',
+      'FHPUP02140000',
+      { FID_COND_MRKT_DIV_CODE: 'U', FID_INPUT_ISCD: iscd, FID_COND_SCR_DIV_CODE: '20214', FID_MRKT_CLS_CODE: mkt, FID_BLNG_CLS_CODE: '0' },
+      1,
+    );
+    const out = new Map<string, { name: string; last: number; changePct: number; turnover?: number }>();
+    for (const o of r.output2 ?? []) {
+      const code = String(o.bstp_cls_code ?? '').trim();
+      const last = Number(o.bstp_nmix_prpr);
+      if (!code || !Number.isFinite(last)) continue;
+      const pct = Number(o.bstp_nmix_prdy_ctrt);
+      out.set(code, {
+        name: String(o.hts_kor_isnm ?? '').trim(),
+        last,
+        changePct: o.prdy_vrss_sign === '4' || o.prdy_vrss_sign === '5' ? -Math.abs(pct) : pct,
+        turnover: Number(o.acml_tr_pbmn) || undefined,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * 여러 종목 시세를 30개씩(IMAP 타일): 관심종목(멀티종목) 시세조회(FHKST11300006). 공식 예제
+   * examples_llm/domestic_stock/intstock_multprice처럼 FID_COND_MRKT_DIV_CODE_n·FID_INPUT_ISCD_n(n = 1~30). 뒤에서 받아요(우선순위 2)
+   */
+  async multiQuote(codes: string[]): Promise<Map<string, { last: number; changePct: number; turnover?: number }>> {
+    const out = new Map<string, { last: number; changePct: number; turnover?: number }>();
+    for (let i = 0; i < codes.length; i += 30) {
+      const chunk = codes.slice(i, i + 30);
+      const params: Record<string, string> = {};
+      chunk.forEach((c, k) => {
+        params[`FID_COND_MRKT_DIV_CODE_${k + 1}`] = 'J';
+        params[`FID_INPUT_ISCD_${k + 1}`] = c;
+      });
+      const r = await this.get('/uapi/domestic-stock/v1/quotations/intstock-multprice', 'FHKST11300006', params, 2);
+      for (const o of asRows(r.output)) {
+        const code = String(o.inter_shrn_iscd ?? '').trim();
+        const last = Number(o.inter2_prpr);
+        if (!code || !(last > 0)) continue;
+        const pct = Number(o.prdy_ctrt);
+        out.set(code, { last, changePct: o.prdy_vrss_sign === '4' || o.prdy_vrss_sign === '5' ? -Math.abs(pct) : pct, turnover: Number(o.acml_tr_pbmn) || undefined });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 업종 지수 일봉 종가(HMAP 기간별 등락). 한 번에 100건까지라 135일씩 나눠 약 320일(작년 12월 중순부터, 올해 등락의 기준이 보이게)
+   */
+  async sectorDaily(code: string): Promise<Bar[]> {
+    const end = Date.now();
+    const day = 86400_000;
+    const out: Bar[] = [];
+    for (const [from, to] of [
+      [end - 135 * day, end],
+      [end - 270 * day, end - 136 * day],
+      [end - 320 * day, end - 271 * day],
+    ]) {
+      const r = await this.get(
+        '/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice',
+        'FHKUP03500100',
+        { FID_COND_MRKT_DIV_CODE: 'U', FID_INPUT_ISCD: code, FID_INPUT_DATE_1: ymdKst(from), FID_INPUT_DATE_2: ymdKst(to), FID_PERIOD_DIV_CODE: 'D' },
+        2,
+      );
+      for (const x of r.output2 ?? []) {
+        if (!x.stck_bsop_date || !(Number(x.bstp_nmix_prpr) > 0)) continue;
+        out.push({ t: dateSec(x.stck_bsop_date), o: +x.bstp_nmix_oprc, h: +x.bstp_nmix_hgpr, l: +x.bstp_nmix_lwpr, c: +x.bstp_nmix_prpr, v: +x.acml_vol });
+      }
+    }
+    const m = new Map(out.map((b) => [b.t, b]));
+    return [...m.values()].sort((a, b) => a.t - b.t);
+  }
+
+  /**
    * MOST 상위 종목(03 v0.2). 국내는 거래량순위(FHPST01710000, 거래량·거래대금)와 등락률 순위(FHPST01700000),
    * 미국은 거래소별 거래량·거래대금·상승률/하락률 순위(HHDFS76310010·HHDFS76320010·HHDFS76290000)를 나스닥과 뉴욕에서 받아 합쳐요.
    * 요청 변수는 공식 예제(examples_llm/domestic_stock/volume_rank·fluctuation, overseas_stock/trade_vol·trade_pbmn·updown_rate)와 같아요
    */
   async ranking(market: 'KS' | 'KQ' | 'US', kind: MostKind): Promise<{ rows: MostRow[]; fresh: Freshness }> {
-    const t = Date.now();
-    // 장이 닫혔으면 마감 값이라 기준 시각을 마감 시각으로(`마감 15:30`)
-    const probe: Instrument = { id: `EQ:${market}:_`, assetClass: 'EQUITY', market, code: '_', exchange: market === 'US' ? 'NAS' : 'KRX' };
-    const fresh: Freshness =
-      tradingNow(probe, t) === false
-        ? { source: 'KIS', mode: 'poll', asOf: closeTime(probe, t), receivedAt: t, intervalMs: MOST_REFRESH_MS }
-        : { source: 'KIS', mode: 'poll', asOf: t, receivedAt: t, intervalMs: MOST_REFRESH_MS, asOfFromReceipt: true };
+    const fresh = kisPollFresh(market, MOST_REFRESH_MS);
     const signed = (v: unknown, sign: unknown) => {
       const n = Number(v);
       if (!Number.isFinite(n)) return undefined;

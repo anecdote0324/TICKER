@@ -1,11 +1,11 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type MostKind, type MostResponse, type SecurityProfile, type ServerMessage, type SourceStatus, CRYPTO_EXCLUDED_BASES } from '@bt/shared';
+import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type MostKind, type MostResponse, type SectorHistoryResponse, type SectorIndex, type SectorMapResponse, type SectorMember, type SectorRow, type SecurityProfile, type ServerMessage, type SourceStatus, CRYPTO_EXCLUDED_BASES } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
-import type { KisAdapter } from './adapters/kis';
+import { kisPollFresh, type KisAdapter } from './adapters/kis';
 import type { Adapter, AdapterHost } from './adapters/types';
 import { mergeBars, type History } from './history';
 import { krMaster } from './kr-master';
@@ -19,6 +19,13 @@ export interface Client {
 }
 
 const FLUSH_MS = 100;
+/** IMAP 종목 시세(30개씩 조회)와 업종 지수를 이만큼 다시 써요 */
+const SECTOR_QUOTES_MS = 60_000;
+const SECTOR_INDEX_MS = 30_000;
+/** 코스피·코스닥 타일은 시가총액 상위 이만큼만(조회 7번) */
+const SECTOR_TOP = 200;
+/** 업종 지수 일봉을 다시 받는 간격 */
+const SECTOR_HISTORY_MS = 20 * 3600_000;
 /** MOST 순위를 이만큼(20초) 다시 써요 */
 const MOST_CACHE_MS = 20_000;
 /** DES 종목 개요를 이만큼(30초) 다시 써요. 여러 창에서 같은 종목을 열어도 한 번만 조회해요 */
@@ -502,6 +509,110 @@ export class Hub implements AdapterHost {
       fresh,
       note: market === 'US' ? `한국투자증권 · 나스닥과 뉴욕 순위를 합침${kind === 'gainers' || kind === 'losers' ? ' · 1만 주 이상' : ''}` : '한국투자증권 순위',
     };
+  }
+
+  private sectorQuotes = new Map<string, { at: number; p: Promise<Map<string, { last: number; changePct: number; turnover?: number }>> }>();
+  private sectorIdx = new Map<string, { at: number; p: Promise<Map<string, { name: string; last: number; changePct: number; turnover?: number }>> }>();
+
+  private cached<T>(m: Map<string, { at: number; p: Promise<T> }>, key: string, ms: number, load: () => Promise<T>): Promise<T> {
+    const hit = m.get(key);
+    if (hit && Date.now() - hit.at < ms) return hit.p;
+    const p = load();
+    m.set(key, { at: Date.now(), p });
+    p.catch(() => m.delete(key));
+    return p;
+  }
+
+  /** HMAP·IMAP(03 v0.2): 공용 업종 분류(종목 마스터)로 업종과 종목을 묶고, 업종 지수와 종목 시세를 붙여요 */
+  async sectorMap(index: SectorIndex): Promise<SectorMapResponse> {
+    const isPref = (id: string) => this.instruments.get(id)?.flags?.includes('PREF') ?? false;
+    const uni = krMaster.universe(index, isPref);
+    const byMcap = [...uni].sort((a, b) => (b.info.marketCap ?? 0) - (a.info.marketCap ?? 0));
+    const top = index === 'KOSPI2' ? byMcap : byMcap.slice(0, SECTOR_TOP);
+    const out: SectorMapResponse = { index, sectors: [], asOf: krMaster.asOfDate(index === 'KOSDAQ' ? 'KQ' : 'KS') };
+    let quotes = new Map<string, { last: number; changePct: number; turnover?: number }>();
+    let idx = new Map<string, { name: string; last: number; changePct: number; turnover?: number }>();
+    if (!this.kis) out.liveError = '한국투자증권 키를 넣으면 등락 색이 보여요(지금은 종목 마스터의 업종과 시가총액만)';
+    else {
+      const kis = this.kis;
+      const [q, s] = await Promise.allSettled([
+        this.cached(this.sectorQuotes, index, SECTOR_QUOTES_MS, () => kis.multiQuote(top.map((x) => x.code))),
+        this.cached(this.sectorIdx, index, SECTOR_INDEX_MS, () => kis.sectorIndices(index)),
+      ]);
+      if (q.status === 'fulfilled') quotes = q.value;
+      if (s.status === 'fulfilled') idx = s.value;
+      const err = [q, s].find((x) => x.status === 'rejected') as PromiseRejectedResult | undefined;
+      if (err) out.liveError = `한국투자증권 조회 실패: ${(err.reason as Error).message}`;
+      out.fresh = kisPollFresh(index === 'KOSDAQ' ? 'KQ' : 'KS', SECTOR_QUOTES_MS);
+    }
+    const topIds = new Set(top.map((x) => x.id));
+    const groups = new Map<string, SectorRow>();
+    for (const x of byMcap) {
+      let g = groups.get(x.sector);
+      if (!g) {
+        const live = idx.get(x.sector);
+        g = { code: x.sector, name: x.sectorName, changePct: live?.changePct, last: live?.last, turnover: live?.turnover, mcap: 0, count: 0, members: [] };
+        groups.set(x.sector, g);
+      }
+      g.count++;
+      g.mcap += x.info.marketCap ?? 0;
+      if (!topIds.has(x.id)) continue;
+      const q = quotes.get(x.code);
+      const inst = this.instruments.get(x.id);
+      const m: SectorMember = {
+        id: x.id,
+        code: x.code,
+        name: inst?.nameKo ?? x.code,
+        mcap: q && x.info.shares ? q.last * x.info.shares : (x.info.marketCap ?? 0),
+        last: q?.last,
+        changePct: q?.changePct,
+        turnover: q?.turnover,
+      };
+      g.members.push(m);
+    }
+    for (const g of groups.values()) g.members.sort((a, b) => b.mcap - a.mcap);
+    out.sectors = [...groups.values()].sort((a, b) => b.mcap - a.mcap);
+    return out;
+  }
+
+  private sectorFill = new Set<SectorIndex>();
+  private sectorBars = new Map<string, { at: number; bars: Bar[] }>();
+
+  /** HMAP 기간별 등락: 업종 지수 일봉. 있는 것만 바로 돌려주고 모자란 것은 뒤에서 받아요(다음 요청에 보여요) */
+  sectorHistory(index: SectorIndex): SectorHistoryResponse {
+    const isPref = (id: string) => this.instruments.get(id)?.flags?.includes('PREF') ?? false;
+    const sectors = new Map<string, string>();
+    for (const x of krMaster.universe(index, isPref)) sectors.set(x.sector, x.sectorName);
+    const rows: SectorHistoryResponse['rows'] = [];
+    const missing: string[] = [];
+    for (const [code, name] of sectors) {
+      let hit = this.sectorBars.get(code);
+      if (!hit && this.history) {
+        const saved = this.history.load(`SECT:${code}`, '1d');
+        if (saved.bars.length > 0 && saved.savedAt) this.sectorBars.set(code, (hit = { at: saved.savedAt, bars: saved.bars }));
+      }
+      if (hit) rows.push({ code, name, closes: hit.bars.map((b) => ({ t: b.t, c: b.c })) });
+      if (!hit || Date.now() - hit.at > SECTOR_HISTORY_MS) missing.push(code);
+    }
+    if (!this.kis) return { index, rows, error: rows.length ? undefined : '한국투자증권 키를 넣으면 업종 지수의 기간별 등락이 보여요' };
+    if (missing.length > 0 && !this.sectorFill.has(index)) {
+      this.sectorFill.add(index);
+      const kis = this.kis;
+      void (async () => {
+        for (const code of missing) {
+          try {
+            const bars = await kis.sectorDaily(code);
+            if (bars.length === 0) continue;
+            this.sectorBars.set(code, { at: Date.now(), bars });
+            this.history?.save(`SECT:${code}`, '1d', bars);
+          } catch (e) {
+            this.log.warn(`업종 지수 ${code} 일봉을 받지 못했어요: ${(e as Error).message}`);
+          }
+        }
+      })().finally(() => this.sectorFill.delete(index));
+    }
+    const t = Date.now();
+    return { index, rows, fresh: { source: 'KIS', mode: 'daily', asOf: t, receivedAt: t, asOfDate: new Date(t + 9 * 3600_000).toISOString().slice(0, 10) } };
   }
 
   quoteSnapshot(ids: string[]): Quote[] {

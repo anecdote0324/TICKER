@@ -44,6 +44,8 @@ export interface PanelState {
   /** N에서 고른 탭(전체·공시·국내 뉴스·해외 뉴스)과 종목이 있어도 전체를 볼지 */
   newsTab?: string;
   newsAll?: boolean;
+  /** HMAP에서 펼친 업종 */
+  hmapSector?: string;
   /** COMP에서 고른 기간 */
   compRange?: string;
   /** MOST에서 고른 순위 종류(거래량·거래대금·상승률·하락률) */

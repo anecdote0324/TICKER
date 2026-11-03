@@ -17,6 +17,8 @@ import { Comp } from '../widgets/Comp';
 import { Cryp } from '../widgets/Cryp';
 import { Des } from '../widgets/Des';
 import { Fxc } from '../widgets/Fxc';
+import { Hmap } from '../widgets/Hmap';
+import { Imap } from '../widgets/Imap';
 import { Mon } from '../widgets/Mon';
 import { News } from '../widgets/News';
 import { Most } from '../widgets/Most';
@@ -98,6 +100,10 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Comp panel={p} />;
     case 'N':
       return <News panel={p} />;
+    case 'HMAP':
+      return <Hmap panel={p} />;
+    case 'IMAP':
+      return <Imap panel={p} />;
     default: {
       const fn = p.fn ? FUNCTIONS.find((f) => f.code === p.fn) : undefined;
       return (
@@ -247,7 +253,10 @@ export function addPanel(api: DockviewApi, state?: PanelState, position?: Parame
   return panel;
 }
 
-/** v0.1 기본 배치(02): 1 MON · 2 GP · 3 WEI / 4 MON(두 번째 목록) · 5 GIP · 6 FXC · 7 CRYP */
+/**
+ * 기본 배치(02, v0.2): 1 MON · 2 GP · 3 WEI / 4 N · 5 HMAP · 6 FXC · 7 CRYP. 처음 켤 때(저장된 배치가 없을 때)만 써요.
+ * 4번 N과 5번 HMAP은 연동 그룹 없이 전체 뉴스와 코스피 업종을 보여 줘요
+ */
 export function buildDefaultLayout(api: DockviewApi) {
   const add = (s: PanelState, position?: Parameters<DockviewApi['addPanel']>[0]['position']) => {
     upsertPanel(s);
@@ -263,11 +272,11 @@ export function buildDefaultLayout(api: DockviewApi) {
     fwd: [],
     ...extra,
   });
-  const p1 = add(mk(1, 'MON', undefined, 'blue', { watchGroups: ['kr', 'us'] }));
+  const p1 = add(mk(1, 'MON', undefined, 'blue', { watchGroups: ['kr', 'us', 'crypto', 'fx'] }));
   const p2 = add(mk(2, 'GP', 'EQ:KS:005930', 'blue'), { referencePanel: p1, direction: 'right' });
   const p3 = add(mk(3, 'WEI'), { referencePanel: p2, direction: 'right' });
-  const p4 = add(mk(4, 'MON', undefined, 'blue', { watchGroups: ['crypto', 'fx'] }), { referencePanel: p1, direction: 'below' });
-  const p5 = add(mk(5, 'GIP', 'EQ:KS:005930', 'blue'), { referencePanel: p2, direction: 'below' });
+  const p4 = add(mk(4, 'N'), { referencePanel: p1, direction: 'below' });
+  const p5 = add(mk(5, 'HMAP', undefined, null, { args: ['KOSPI'] }), { referencePanel: p2, direction: 'below' });
   const p6 = add(mk(6, 'FXC'), { referencePanel: p3, direction: 'below' });
   const p7 = add(mk(7, 'CRYP'), { referencePanel: p6, direction: 'below' });
   const W = api.width || 1920;
