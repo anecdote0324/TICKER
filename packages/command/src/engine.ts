@@ -121,7 +121,7 @@ function functionPrefixHits(word: string, opts: { closedSlot: boolean; hanEng: b
     for (const f of FUNCTIONS) if (f.code !== up && f.code.startsWith(up)) push({ fn: f, tier: 2, via: 'code', exact: false });
     // T9 오타 허용(v0.2): 4글자 이상, 앞부분이 맞는 기능이 없을 때만, 만든 기능 코드와 한 글자 차이(CRPY → CRYP)
     if (hits.length === 0 && up.length >= 4 && /^[A-Z]+$/.test(up)) {
-      for (const f of FUNCTIONS) if (f.implemented && f.code.length >= 4 && withinOneEdit(up, f.code)) push({ fn: f, tier: 9, via: 'typo', exact: false });
+      for (const f of FUNCTIONS) if (f.implemented && f.code !== up && f.code.length >= 4 && withinOneEdit(up, f.code)) push({ fn: f, tier: 9, via: 'typo', exact: false });
     }
   } else if (hasHangul(word)) {
     const syllable = [...word].some(isSyllable);

@@ -802,6 +802,11 @@ export class KisAdapter implements Adapter {
     }
   }
 
+  /** 설명 창 간단 시세(05 §4.6, v0.2): 한 번만 조회해요(구독하지 않음) */
+  snapshot(inst: Instrument): Promise<Quote | undefined> {
+    return this.fetchQuote(inst, 0, this.intervalFor(inst));
+  }
+
   private async fetchQuote(inst: Instrument, pri: Priority, intervalMs: number): Promise<Quote | undefined> {
     const now = () => Date.now();
     // 장이 끝난 뒤 조회한 값은 마감 값이라 기준 시각을 마감 시각으로 둬요(`마감 15:30`, `마감 10/30`)

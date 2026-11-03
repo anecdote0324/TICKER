@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis, ChosenToken, EngineContext, Execution, Row } from '@bt/command';
 import { ASSET_LABEL, canonicalSecurity, displayName, FUNCTIONS, MARKET_LABEL, type AssetClass, type Instrument } from '@bt/shared';
-import { api } from '../api';
+import { api, isMac } from '../api';
 import { logIme } from '../imeLog';
 import { isShortcut } from '../keys';
 import { recordAnalyze } from '../perf';
@@ -18,6 +18,7 @@ import { appState, removeAlias, setAlias, updateState, usageScore } from '../sto
 import { useStore } from '../stores/store';
 import { openHelp, openSettings, showToast, ui } from '../stores/ui';
 import { CandidateList } from './CandidateList';
+import { openInNewPanel } from './Workspace';
 
 interface Props {
   panelId: string;
@@ -70,6 +71,13 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
   const [chosen, setChosen] = useState<ChosenToken[]>([]);
   const [labelFlash, setLabelFlash] = useState(false);
   const [historyPos, setHistoryPos] = useState(-1);
+  /** ↑ 기록을 거르는 글자(줄에 글자가 있을 때 ↑, v0.2) */
+  const [historyQuery, setHistoryQuery] = useState('');
+  /** Ctrl+R 기록 검색(v0.2): 강조한 줄 */
+  const [hist, setHist] = useState<{ pos: number } | null>(null);
+  /** Shift+Enter·Mod+Enter: 옆 새 패널·새 창에서 실행(v0.2) */
+  const openTarget = useRef<'right' | 'window' | null>(null);
+  const programmatic = useRef(false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const helped = useRef(false);
   const intent = useRef<Intent | null>(null);
@@ -116,6 +124,38 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     return a;
   }, [text, cursor, ctx, composing, listSegment, expanded]);
 
+  // Ctrl+R 기록 검색 줄: 친 글자가 들어간 기록(최신순, 같은 명령은 한 번)
+  const histRows: Row[] = useMemo(() => {
+    if (!hist) return [];
+    const q = text.trim().toLowerCase();
+    const seen = new Set<string>();
+    const out: Row[] = [];
+    for (const h of app.history) {
+      if (seen.has(h.cmd) || (q && !h.cmd.toLowerCase().includes(q))) continue;
+      seen.add(h.cmd);
+      const d = new Date(h.at);
+      out.push({
+        id: `rhist:${h.cmd}`,
+        kind: 'history',
+        badge: 'HIST',
+        code: '',
+        name: h.cmd,
+        info: `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+        flags: [],
+        canonical: h.cmd,
+        tier: 0,
+        insert: h.cmd,
+        replaceLine: h.cmd,
+      });
+      if (out.length >= 50) break;
+    }
+    return out;
+  }, [hist, text, app.history]);
+  const histPick = hist ? histRows[Math.min(hist.pos, Math.max(0, histRows.length - 1))] : undefined;
+  const shown: Analysis = hist
+    ? { ...analysis, rows: histRows, more: 0, ghost: null, plan: { kind: 'empty' }, label: histPick ? `⏎ 기록 실행: ${histPick.name}` : `기록 검색: '${text.trim()}' 일치 없음`, needsAttention: false }
+    : analysis;
+
   // 목록이 바뀌면 강조를 1번·선택 없음으로(K5)
   const rowsKey = analysis.rows.map((r) => r.id).join('|');
   useEffect(() => {
@@ -153,18 +193,22 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     else showList = listOpen;
   }
   showList = showList && analysis.rows.length > 0;
+  if (hist) showList = focused && histRows.length > 0;
   const ghost = assist !== 'off' && focused && !dismissed ? analysis.ghost : null;
 
   // ── 입력칸 쓰기: execCommand로 써서 Ctrl+Z 되돌리기 기록을 살려요(05 §9.2) ──
   const writeInput = useCallback((next: string, caret: number) => {
     const inp = inputRef.current;
     if (!inp) return;
+    // 앱이 쓴 글자로 생기는 input 이벤트는 사람이 친 것이 아니라서 ↑ 기록 위치·기록 검색을 그대로 둬요
+    programmatic.current = true;
     inp.focus();
     inp.setSelectionRange(0, inp.value.length);
     const doc = inp.ownerDocument;
     const ok = next === '' ? doc.execCommand('delete') : doc.execCommand('insertText', false, next);
     if (!ok || inp.value !== next) inp.value = next;
     inp.setSelectionRange(caret, caret);
+    programmatic.current = false;
     setText(next);
     setCursor(caret);
   }, []);
@@ -213,7 +257,8 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       } else if (exec.kind === 'asset-list') {
         showToast(`${exec.asset === 'EQUITY' ? '주식' : '종목'}은 코드나 이름으로 찾아요. 예: 005930, 삼성, AAPL`);
       } else {
-        applyExecution(panelId, exec);
+        const where = openTarget.current;
+        if (!(where && exec.kind === 'function' && openInNewPanel(panelId, exec, where))) applyExecution(panelId, exec);
         checkSlots();
       }
       // 기억된 선택(↺)과 겹침 기본값(05 §7.4)
@@ -273,6 +318,13 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     },
     [analysis, assist, onDone, panelId, resetLine, st.commandLine.tips, writeInput],
   );
+
+  /** ↑ 기록 목록: 이 패널 먼저, 그다음 모든 패널, 최신순. q가 있으면 그 글자가 든 명령만 */
+  const historyList = (q: string): string[] => {
+    const all = [...app.history.filter((h) => h.panel === panelId), ...app.history.filter((h) => h.panel !== panelId)].map((h) => h.cmd);
+    const low = q.toLowerCase();
+    return [...new Set(all)].filter((c) => !low || c.toLowerCase().includes(low));
+  };
 
   const flashLabel = () => {
     setLabelFlash(true);
@@ -419,6 +471,45 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       return;
     }
 
+    // Ctrl+R 명령 기록 검색(05 §10.2, v0.2): 한 번 더 누르면 더 오래된 기록으로
+    if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && code === 'KeyR') {
+      e.preventDefault();
+      setListOpen(true);
+      setDismissed(false);
+      setHist((h) => (h ? { pos: Math.min(h.pos + 1, Math.max(0, histRows.length - 1)) } : { pos: 0 }));
+      return;
+    }
+    if (hist) {
+      if (key === 'Escape') {
+        e.preventDefault();
+        setHist(null);
+        return;
+      }
+      if (key === 'ArrowDown' || key === 'ArrowUp') {
+        e.preventDefault();
+        setHist({ pos: Math.max(0, Math.min(histRows.length - 1, hist.pos + (key === 'ArrowDown' ? 1 : -1))) });
+        return;
+      }
+      if (key === 'Tab' && histPick) {
+        e.preventDefault();
+        setHist(null);
+        writeInput(histPick.name, histPick.name.length);
+        return;
+      }
+      if (key === 'Enter') {
+        e.preventDefault();
+        setHist(null);
+        if (!histPick) return;
+        const a = engine.analyze(histPick.name, histPick.name.length, { ...ctx, chosen: [] });
+        if (a.plan.kind === 'execute') {
+          openTarget.current = e.shiftKey ? 'right' : (isMac ? e.metaKey : e.ctrlKey) ? 'window' : null;
+          run(a.plan.exec);
+          openTarget.current = null;
+        } else writeInput(histPick.name, histPick.name.length);
+        return;
+      }
+    }
+
     // 자산군 단축키 Mod+Shift+E/C/X/I(05 §10.2). 설정에서 바꿀 수 있어요
     const asset = ASSET_SHORTCUTS.find(([id]) => isShortcut(ne, id))?.[1];
     if (asset) {
@@ -481,11 +572,24 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       }
       case 'Enter': {
         e.preventDefault();
+        // Shift+Enter: 옆 새 패널, Ctrl+Enter(Mac ⌘Return): 새로 떼어낸 창(v0.2)
+        openTarget.current = e.shiftKey ? 'right' : (isMac ? e.metaKey : e.ctrlKey) ? 'window' : null;
         doEnter();
+        openTarget.current = null;
         return;
       }
       case 'ArrowDown': {
         e.preventDefault();
+        // ↑로 꺼낸 기록에서 ↓: 더 새 기록으로, 맨 끝이면 처음 친 글자로
+        if (historyPos >= 0) {
+          const list = historyList(historyQuery);
+          const pos = historyPos - 1;
+          setHistoryPos(pos);
+          const t = pos >= 0 ? list[pos] : historyQuery;
+          writeInput(t, t.length);
+          setDismissed(true);
+          return;
+        }
         if (!showList) {
           setListOpen(true);
           setDismissed(false);
@@ -496,16 +600,17 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       }
       case 'ArrowUp': {
         e.preventDefault();
-        // 빈 줄: 기록(이 패널 먼저, 그다음 모든 패널, 최신순)
-        if (!hasText || historyPos >= 0) {
-          const hist = [...app.history.filter((h) => h.panel === panelId), ...app.history.filter((h) => h.panel !== panelId)].map((h) => h.cmd);
-          const uniq = [...new Set(hist)];
+        // 빈 줄: 기록(이 패널 먼저, 그다음 모든 패널, 최신순). 글자가 있고 목록이 닫혀 있으면 그 글자가 든 기록만(v0.2)
+        if (!hasText || historyPos >= 0 || !showList) {
+          const q = historyPos >= 0 ? historyQuery : text.trim();
+          if (historyPos < 0) setHistoryQuery(q);
+          const list = historyList(q);
           const pos = historyPos + 1;
-          if (pos < uniq.length) {
+          if (pos < list.length) {
             setHistoryPos(pos);
-            writeInput(uniq[pos], uniq[pos].length);
+            writeInput(list[pos], list[pos].length);
             setDismissed(true);
-          }
+          } else flashLabel();
           return;
         }
         if (highlight <= analysis.rows.findIndex((r) => r.kind !== 'header')) {
@@ -594,8 +699,10 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
     const inp = e.currentTarget;
     setText(inp.value);
     setCursor(inp.selectionStart ?? inp.value.length);
+    if (programmatic.current) return;
     setDismissed(false);
     setHistoryPos(-1);
+    if (hist) setHist({ pos: 0 });
     if (!composingRef.current) setListSegment(undefined);
     syncScroll();
   };
@@ -657,13 +764,13 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       inputRef.current?.setSelectionRange(seg.start, seg.end);
     }
   };
-  const label = !hasText ? (focused && assist === 'beginner' ? '⏎ 시작 목록' : '') : analysis.label;
+  const label = hist ? shown.label : !hasText ? (focused && assist === 'beginner' ? '⏎ 시작 목록' : '') : analysis.label;
   const labelText = variant === 'panel' && fieldRef.current && fieldRef.current.clientWidth < 220 ? shortenLabel(label) : label;
-  const chip = analysis.contextChip ? `[${analysis.contextChip} ›]` : '';
+  const chip = hist ? '기록 검색 (Ctrl+R)' : analysis.contextChip ? `[${analysis.contextChip} ›]` : '';
 
   return (
     <div className="cmd" onMouseDown={(e) => e.stopPropagation()}>
-      {chip && hasText && <span className="cmd-chip">{chip}</span>}
+      {chip && (hasText || hist) && <span className="cmd-chip">{chip}</span>}
       <div className={`cmd-field ${composing ? 'composing' : ''}`} ref={fieldRef}>
         <div className="cmd-mirror" ref={mirrorRef} aria-hidden="true">
           {hasText ? mirror : <span className="placeholder">{placeholder}</span>}
@@ -721,6 +828,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
             setFocused(false);
             setListOpen(false);
             setSelectedId(null);
+            setHist(null);
           }}
           onPaste={() => {
             // 붙여넣기는 절대 실행하지 않아요. 목록도 열지 않아요(05 §13)
@@ -767,9 +875,9 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
         <CandidateList
           doc={inputRef.current.ownerDocument}
           anchor={anchor}
-          analysis={analysis}
+          analysis={shown}
           assist={assist}
-          highlight={highlight}
+          highlight={hist ? Math.min(hist.pos, Math.max(0, histRows.length - 1)) : highlight}
           selectedId={selectedId}
           showDesc={desc === 'auto' ? 'auto' : desc}
           onHover={() => undefined}
@@ -783,6 +891,16 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
               const inp = inputRef.current;
               inp?.blur();
               inp?.focus();
+              return;
+            }
+            if (hist) {
+              // 기록 검색 줄: 클릭은 줄에 넣기, 더블클릭은 실행
+              setHist(null);
+              if (runNow) {
+                const a = engine.analyze(row.name, row.name.length, { ...ctx, chosen: [] });
+                if (a.plan.kind === 'execute') run(a.plan.exec);
+                else writeInput(row.name, row.name.length);
+              } else writeInput(row.name, row.name.length);
               return;
             }
             if (runNow) {

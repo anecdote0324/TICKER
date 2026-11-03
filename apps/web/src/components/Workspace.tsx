@@ -26,7 +26,8 @@ import { Most } from '../widgets/Most';
 import { PriceChart } from '../widgets/PriceChart';
 import { Wei } from '../widgets/Wei';
 import { TitleBar } from '../widgets/common';
-import { activePanelId, LINK_COLORS, nextPanelNumber, panels, removePanel, upsertPanel, type LinkColor, type PanelState } from '../stores/panels';
+import type { Execution } from '@bt/command';
+import { activePanelId, applyExecution, LINK_COLORS, nextPanelNumber, panels, removePanel, upsertPanel, type LinkColor, type PanelState } from '../stores/panels';
 import { preparePopoutDocument, releasePopoutDocument } from '../popout';
 import { useStore } from '../stores/store';
 import { CommandLine } from './CommandLine';
@@ -237,6 +238,23 @@ function Watermark(props: IWatermarkPanelProps) {
 export function newPanelState(fn?: string, securityId?: string, link: LinkColor | null = null, extra: Partial<PanelState> = {}): PanelState {
   const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   return { id, num: nextPanelNumber(), fn, securityId, link, back: [], fwd: [], ...extra };
+}
+
+/**
+ * Shift+Enter·Mod+Enter(05 §10.2, v0.2): 명령을 지금 패널 대신 옆 새 패널(right)이나 새로 떼어낸 창(window)에서 실행해요.
+ * 새 패널은 연동 그룹 없이 만들어요(원래 패널의 종목이 함께 바뀌지 않게)
+ */
+export function openInNewPanel(fromPanelId: string, exec: Execution, where: 'right' | 'window'): boolean {
+  for (const api of dockApis.values()) {
+    const from = api.getPanel(fromPanelId);
+    if (!from) continue;
+    const s = newPanelState();
+    const created = addPanel(api, s, { referencePanel: from, direction: 'right' });
+    applyExecution(s.id, exec);
+    if (where === 'window') void api.addPopoutGroup(created.group, { popoutUrl: 'popout.html' });
+    return true;
+  }
+  return false;
 }
 
 export function addPanel(api: DockviewApi, state?: PanelState, position?: Parameters<DockviewApi['addPanel']>[0]['position']) {

@@ -19,6 +19,8 @@ export interface Client {
 }
 
 const FLUSH_MS = 100;
+/** 설명 창 간단 시세를 이만큼(10초) 다시 써요(05 §4.6) */
+const SNAPSHOT_REUSE_MS = 10_000;
 /** IMAP 종목 시세(30개씩 조회)와 업종 지수를 이만큼 다시 써요 */
 const SECTOR_QUOTES_MS = 60_000;
 const SECTOR_INDEX_MS = 30_000;
@@ -409,6 +411,38 @@ export class Hub implements AdapterHost {
     } finally {
       this.backfilling = false;
     }
+  }
+
+  /**
+   * 설명 창 간단 시세(05 §4.6, v0.2): 받아 둔 시세가 10초 안이면 그것을, 아니면 소스에 한 번만 물어봐요(구독하지 않음).
+   * 키가 없는 주식·지수는 데모 시세가 있을 때만
+   */
+  async snapshotQuote(id: string): Promise<Quote | undefined> {
+    const have = this.quotes.get(id);
+    if (have && Date.now() - have.fresh.receivedAt < SNAPSHOT_REUSE_MS) return have;
+    const inst = this.instruments.get(id);
+    if (!inst) return undefined;
+    const ad = this.route(inst);
+    if (ad === this.kis && this.kis) return (await this.kis.snapshot(inst)) ?? have;
+    if (ad === this.binance && inst.feedSymbol) {
+      const t = await this.binance.rest<{ lastPrice: string; openPrice: string; highPrice: string; lowPrice: string; volume: string; quoteVolume: string; closeTime: number }>(`/api/v3/ticker/24hr?symbol=${encodeURIComponent(inst.feedSymbol)}`);
+      const last = Number(t.lastPrice);
+      const open = Number(t.openPrice);
+      const now = Date.now();
+      return {
+        id,
+        last,
+        change: last - open,
+        changePct: open ? ((last - open) / open) * 100 : 0,
+        prevClose: open,
+        high: Number(t.highPrice),
+        low: Number(t.lowPrice),
+        volume: Number(t.volume),
+        turnover: Number(t.quoteVolume),
+        fresh: { source: 'BINANCE', mode: 'poll', asOf: t.closeTime || now, receivedAt: now, intervalMs: SNAPSHOT_REUSE_MS },
+      };
+    }
+    return have;
   }
 
   private profiles = new Map<string, { at: number; p: Promise<SecurityProfile> }>();

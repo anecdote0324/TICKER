@@ -2,7 +2,10 @@
 
 import { createPortal } from 'react-dom';
 import type { Analysis, Range, Row } from '@bt/command';
-import { ASSET_LABEL, FUNCTIONS, MARKET_LABEL, versionLabel, type AssistLevel } from '@bt/shared';
+import { ASSET_LABEL, FUNCTIONS, MARKET_LABEL, versionLabel, type AssistLevel, type Instrument } from '@bt/shared';
+import { arrow, dirClass, fmtPct, fmtPrice } from '../format';
+import { FreshBadge } from './FreshBadge';
+import { useQuickQuote } from '../stores/quickQuote';
 import { shortcutLabel } from '../keys';
 import { feedStatus } from '../stores/feed';
 import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
@@ -215,6 +218,24 @@ function DefaultButton({ row, analysis }: { row: Row; analysis: Analysis }) {
   );
 }
 
+/** 설명 창 간단 시세 한 줄(v0.2) */
+function QuickQuote({ inst }: { inst: Instrument }) {
+  const { q, loading } = useQuickQuote(inst.id);
+  if (!q) return <div className="k">{loading ? '시세 받는 중…' : '시세 없음'}</div>;
+  return (
+    <div className="ac-quote">
+      <span className="num" style={{ color: 'var(--value-hi)' }}>
+        {fmtPrice(inst, q.last)}
+      </span>
+      <span className={`num ${dirClass(q.changePct)}`}>
+        {arrow(q.changePct)}
+        {q.changePct !== undefined ? fmtPct(Math.abs(q.changePct)).replace('+', '') : ''}
+      </span>
+      <FreshBadge fresh={q.fresh} inst={inst} variant="short" />
+    </div>
+  );
+}
+
 export function DescCard({ row, analysis }: { row: Row; analysis?: Analysis }) {
   if (row.kind === 'security' && row.instrumentId) {
     const inst = getInstrument(row.instrumentId);
@@ -226,6 +247,7 @@ export function DescCard({ row, analysis }: { row: Row; analysis?: Analysis }) {
           {inst.nameKo ?? inst.nameEn ?? inst.code} <span className="k">{inst.code}</span>
         </h4>
         {inst.nameKo && inst.nameEn && <div className="k">{inst.nameEn}</div>}
+        <QuickQuote inst={inst} />
         <div>
           <span className="k">자산군 </span>
           {inst.assetClass} {ASSET_LABEL[inst.assetClass]}

@@ -507,3 +507,10 @@ describe('찾기 넓히기(v0.2): 오타 허용 T9, 영문 머리글자, 사용�
     expect(run('ALIAS SS').label).toContain('종목을 넣어');
   });
 });
+
+describe('줄 id는 겹치지 않아요', () => {
+  it.each(['MOST', 'COMP', 'CRYP', 'MO', 'IMAP '])('%s', (t) => {
+    const ids = run(t).rows.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
