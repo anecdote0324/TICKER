@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Instrument } from './instrument';
-import { aggregateBars, bucketStart, intradayAt, tradingNow } from './session';
+import { aggregateBars, bucketStart, intradayAt, overlapsRegular, regularAt, tradingNow } from './session';
 
 const kr: Instrument = { id: 'EQ:KS:005380', assetClass: 'EQUITY', market: 'KS', code: '005380' };
 const us: Instrument = { id: 'EQ:US:AAPL', assetClass: 'EQUITY', market: 'US', code: 'AAPL' };
@@ -57,5 +57,23 @@ describe('시간봉 칸', () => {
     const hours = aggregateBars(kr, one, 60);
     expect(hours.map((b) => b.v)).toEqual([60, 60, 60, 60, 60, 60, 30]);
     expect(hours[0]).toEqual({ t: start, o: 1, h: 61, l: 1, c: 60, v: 60 });
+  });
+});
+
+describe('정규장 시간봉', () => {
+  it('미국 시간봉은 정규장과 겹치는 칸만(09시 칸은 09:30부터 정규장이라 남기고, 16시 칸은 빼요)', () => {
+    // 10월 30일 뉴욕(서머타임): 09:00 = 한국 22:00, 16:00 = 한국 다음 날 05:00, 08:00 = 한국 21:00
+    expect(overlapsRegular(us, kst(30, 22) / 1000, 60)).toBe(true);
+    expect(overlapsRegular(us, kst(31, 4) / 1000, 60)).toBe(true);
+    expect(overlapsRegular(us, kst(31, 5) / 1000, 60)).toBe(false);
+    expect(overlapsRegular(us, kst(30, 21) / 1000, 60)).toBe(false);
+  });
+
+  it('시간봉을 고쳐도 되는 시세: 정규장 중이거나 막 끝난 1분 안(미국 애프터마켓 체결은 빼요)', () => {
+    expect(regularAt(us, kst(31, 0))).toBe(true);
+    expect(regularAt(us, kst(31, 5, 0))).toBe(true);
+    expect(regularAt(us, kst(31, 6))).toBe(false);
+    expect(regularAt(kr, kst(30, 15, 30))).toBe(true);
+    expect(regularAt(kr, kst(30, 16))).toBe(false);
   });
 });

@@ -141,7 +141,7 @@ describe('시간봉 저장과 지난 봉 채우기', () => {
     const adapter = {
       source: 'KIS',
       bars: async (_i: Instrument, interval: string, opts?: { after?: number }) => {
-        afters.push(opts?.after);
+        if (interval === '1h') afters.push(opts?.after);
         return { id: sam.id, interval, bars: dayBars(mon), fresh: { source: 'KIS', mode: 'poll', asOf: Date.now(), receivedAt: Date.now() } };
       },
       // 앞의 두 주(평일 10일)까지만 있어요
@@ -168,5 +168,63 @@ describe('시간봉 저장과 지난 봉 채우기', () => {
     expect(four.bars.slice(-2).map((b) => b.t)).toEqual([mon, mon + 4 * H]);
     // 지수·환율은 시간봉이 없어요
     await expect(hub.bars('FX:USDKRW', '1h')).rejects.toThrow('시간봉');
+  });
+});
+
+describe('국내 장 마감 동시호가 체결', () => {
+  const kia: Instrument = { id: 'EQ:KS:005930', assetClass: 'EQUITY', market: 'KS', code: '005930' };
+  const aapl: Instrument = { id: 'EQ:US:AAPL', assetClass: 'EQUITY', market: 'US', code: 'AAPL', exchange: 'NAS' };
+  const KST = 9 * 3600;
+  /** 15:30이 지난 가장 최근 평일(한국 시간)의 0시(초) */
+  function lastClosedDay(now = Date.now()): number {
+    for (let back = 0; ; back++) {
+      const day = Math.floor((now / 1000 + KST) / 86400) - back;
+      const wd = new Date(day * 86400 * 1000).getUTCDay();
+      if (wd !== 0 && wd !== 6 && (day * 86400 - KST + 15.5 * 3600 + 60) * 1000 < now) return day * 86400 - KST;
+    }
+  }
+  const at = (d0: number, h: number, m = 0) => d0 + h * 3600 + m * 60;
+
+  async function hubWith(inst: Instrument, byInterval: Record<string, Bar[]>) {
+    const hub = new Hub(consoleLogger('test', true));
+    hub.history = (await tmpHistory()).history;
+    hub.kis = {
+      source: 'KIS',
+      bars: async (_i: Instrument, interval: string) => ({ id: inst.id, interval, bars: byInterval[interval] ?? [], fresh: { source: 'KIS', mode: 'poll', asOf: Date.now(), receivedAt: Date.now() } }),
+    } as never;
+    hub.setInstruments([inst]);
+    return hub;
+  }
+
+  it('분봉에 15:30 봉이 없으면 일봉의 종가와 남은 거래량으로 15:30 봉을 더해요', async () => {
+    const d0 = lastClosedDay();
+    const b = (t: number, c: number, v: number): Bar => ({ t, o: c, h: c, l: c, c, v });
+    const hub = await hubWith(kia, {
+      '1d': [{ t: Math.floor((d0 + KST) / 86400) * 86400, o: 1, h: 1, l: 1, c: 219_500, v: 2_000_000 }],
+      '1m': [b(at(d0, 9), 220_000, 100), b(at(d0, 15, 20), 218_500, 100)],
+    });
+    const s = await hub.bars(kia.id, '1m');
+    expect(s.bars[s.bars.length - 1]).toEqual({ t: at(d0, 15, 30), o: 219_500, h: 219_500, l: 219_500, c: 219_500, v: 2_000_000 - 200 });
+  });
+
+  it('시간봉은 15시 칸의 종가를 일봉 종가로 고치고 남은 거래량을 더해요', async () => {
+    const d0 = lastClosedDay();
+    const hub = await hubWith(kia, {
+      '1d': [{ t: Math.floor((d0 + KST) / 86400) * 86400, o: 1, h: 1, l: 1, c: 219_500, v: 2_000_000 }],
+      '1h': [
+        { t: at(d0, 9), o: 220_000, h: 221_000, l: 219_000, c: 220_000, v: 1000 },
+        { t: at(d0, 15), o: 219_000, h: 219_000, l: 218_000, c: 218_500, v: 600 },
+      ],
+    });
+    const last = (await hub.bars(kia.id, '1h')).bars.at(-1)!;
+    expect([last.t, last.c, last.h, last.l, last.v]).toEqual([at(d0, 15), 219_500, 219_500, 218_000, 600 + 2_000_000 - 1600]);
+  });
+
+  it('미국 시간봉은 정규장과 겹치는 칸만 남겨요(애프터마켓 체결이 현재가처럼 보이지 않게)', async () => {
+    // 2026-10-30(금) 뉴욕 서머타임: 08:00 = 12:00Z, 09:00 = 13:00Z, 15:00 = 19:00Z, 16:00 = 20:00Z
+    const z = (h: number) => Date.UTC(2026, 9, 30, h) / 1000;
+    const b = (t: number): Bar => ({ t, o: 1, h: 1, l: 1, c: 1, v: 1 });
+    const hub = await hubWith(aapl, { '1h': [b(z(12)), b(z(13)), b(z(19)), b(z(20)), b(z(23))] });
+    expect((await hub.bars(aapl.id, '1h')).bars.map((x) => x.t)).toEqual([z(13), z(19)]);
   });
 });

@@ -1,7 +1,7 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { aggregateBars, intervalMinutes, intradayAt, isHourInterval, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
+import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type ServerMessage, type SourceStatus } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
@@ -304,7 +304,60 @@ export class Hub implements AdapterHost {
     } catch (e) {
       this.log.warn(`봉 저장 실패: ${(e as Error).message}`);
     }
-    return { ...series, bars: inSession(inst, interval, series.bars) };
+    let bars = inSession(inst, interval, series.bars);
+    if (inst.assetClass === 'EQUITY' && inst.market !== 'US' && (interval === '1m' || interval === '1h')) bars = await this.withKrClose(inst, interval, bars);
+    return { ...series, bars };
+  }
+
+  /**
+   * 국내 장 마감 동시호가(15:30) 체결을 분봉·시간봉에 넣어요. 한국투자증권 분봉에는 15:20 뒤 봉이 없어서
+   * 마지막 봉이 그날 종가와 달랐어요(v0.1.0-beta.11 점검: GIP 마지막 봉 15:20 218,500, 종가 219,500).
+   * 끝난 날마다 일봉의 종가·거래량(오늘은 장이 끝난 뒤의 지금 시세)으로 15:30 봉(1분봉)을 더하거나 15시 칸(시간봉)을 고쳐요
+   */
+  private async withKrClose(inst: Instrument, interval: '1m' | '1h', bars: Bar[]): Promise<Bar[]> {
+    if (bars.length === 0) return bars;
+    const KST = 9 * 3600;
+    const dayOf = (t: number) => Math.floor((t + KST) / 86400);
+    const close = new Map<number, { c: number; v?: number }>();
+    const now = Date.now();
+    const lastClose = lastRegularClose(EXCHANGES.KRX, now);
+    // 일봉이 없을 때를 대비해 오늘(장이 끝났으면)은 지금 시세를 종가로 먼저 넣어 둬요
+    const q = this.quotes.get(inst.id);
+    if (q && sessionState(EXCHANGES.KRX, now) !== 'open' && q.fresh.asOf >= lastClose) close.set(dayOf(lastClose / 1000), { c: q.last, v: q.volume });
+    // 일봉의 종가가 기준이에요. 마감 전에 받아 메모리에 둔 일봉이면 다시 받아요
+    const key = `${inst.id}|1d`;
+    if ((this.barCache.get(key)?.at ?? 0) < lastClose) this.barCache.delete(key);
+    try {
+      // 일봉의 시각은 그날 0시(UTC)예요
+      for (const d of (await this.bars(inst.id, '1d')).bars) if (d.t % 86400 === 0) close.set(d.t / 86400, { c: d.c, v: d.v });
+    } catch {
+      // 일봉을 못 받으면 오늘(지금 시세)만 고쳐요
+    }
+    const out = bars.map((b) => ({ ...b }));
+    const days = [...new Set(out.map((b) => dayOf(b.t)))];
+    for (const day of days) {
+      const auction = (day * 86400 - KST) + 15.5 * 3600;
+      const info = close.get(day);
+      // 아직 안 끝난 날(오늘 장중)은 건드리지 않아요
+      if (!info || !(info.c > 0) || auction * 1000 > lastClose) continue;
+      const own = out.filter((b) => dayOf(b.t) === day);
+      const missingVol = info.v !== undefined ? Math.max(0, info.v - own.reduce((a, b) => a + b.v, 0)) : 0;
+      if (interval === '1m') {
+        if (own.some((b) => b.t >= auction)) continue;
+        out.push({ t: auction, o: info.c, h: info.c, l: info.c, c: info.c, v: missingVol });
+      } else {
+        const slot = auction - 1800; // 15시 칸
+        const bar = own.find((b) => b.t === slot);
+        if (bar) {
+          if (bar.c === info.c) continue;
+          bar.c = info.c;
+          bar.h = Math.max(bar.h, info.c);
+          bar.l = Math.min(bar.l, info.c);
+          bar.v += missingVol;
+        } else out.push({ t: slot, o: info.c, h: info.c, l: info.c, c: info.c, v: missingVol });
+      }
+    }
+    return out.sort((a, b) => a.t - b.t);
   }
 
   /** 지난 시간봉을 뒤에서 조금씩 채워요(한 번에 한 종목, 가장 최근에 연 종목 먼저). 다음 새로 고침 때 차트에 보여요 */
@@ -351,8 +404,12 @@ export class Hub implements AdapterHost {
   }
 }
 
-/** 분봉은 장중 봉만 보여 줘요. 예전에 장이 닫힌 뒤 만든 봉이나 정규장 밖의 봉이 저장돼 있어도 차트에 섞지 않아요 */
+/**
+ * 분봉은 장중 봉만 보여 줘요. 예전에 장이 닫힌 뒤 만든 봉이나 정규장 밖의 봉이 저장돼 있어도 차트에 섞지 않아요.
+ * 미국 시간봉은 정규장과 겹치는 칸만(한국투자증권 60분봉은 프리·애프터마켓까지 와서, 애프터마켓 16주 체결이 현재가처럼 보였어요)
+ */
 function inSession(inst: Instrument, interval: BarInterval, bars: Bar[]): Bar[] {
+  if (interval === '1h') return inst.assetClass === 'EQUITY' && inst.market === 'US' ? bars.filter((b) => overlapsRegular(inst, b.t, 60)) : bars;
   if (interval !== '1m' && interval !== '5m') return bars;
   return bars.filter((b) => intradayAt(inst, b.t * 1000));
 }

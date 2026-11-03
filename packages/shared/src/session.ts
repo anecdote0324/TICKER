@@ -87,3 +87,22 @@ export function aggregateBars(inst: Instrument, bars: Bar[], minutes: number): B
   }
   return out;
 }
+
+/**
+ * 이 시각의 시세로 시간봉을 고치거나 새로 만들어도 되는지: 정규장 중이거나 정규장이 막 끝난 1분 안(종가).
+ * 시간봉(GP)은 정규장 봉만 그려서, 미국 프리·애프터마켓 체결로 봉을 만들지 않아요. 장 시간이 없는 종목(코인)은 참이에요
+ */
+export function regularAt(inst: Instrument, at: number): boolean {
+  const ex = exchangeOf(inst);
+  const hours = ex ? EXCHANGES[ex] : undefined;
+  if (!hours) return inst.assetClass === 'CRYPTO';
+  return sessionState(hours, at) === 'open' || at - lastRegularClose(hours, at) < 60_000;
+}
+
+/** 이 칸(시작 start초, minutes분)이 정규장과 겹치는지. 미국 시간봉에서 프리·애프터마켓 칸을 빼는 데 써요 */
+export function overlapsRegular(inst: Instrument, start: number, minutes: number): boolean {
+  const ex = exchangeOf(inst);
+  const hours = ex ? EXCHANGES[ex] : undefined;
+  if (!hours) return true;
+  return sessionState(hours, start * 1000) === 'open' || sessionState(hours, (start + minutes * 60 - 1) * 1000) === 'open';
+}

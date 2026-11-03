@@ -1107,6 +1107,7 @@ export class KisAdapter implements Adapter {
         pri,
       );
       const rows = (r.output2 ?? []).filter((x) => x.xymd && x.xhms);
+      if (page === 0) this.sampleRows(`HHDFS76950200/${nmin}`, inst.code, keyb || '처음', r.output2 ?? [], (x) => [x.xymd, x.xhms, x.kymd, x.khms, x.last, x.evol]);
       if (rows.length === 0) break;
       for (const x of rows) {
         // 현지 시각을 그대로 UTC로 바꾸려면 시차가 필요해요. 한국 시각(kymd·khms)이 있으면 그걸 써요

@@ -65,6 +65,8 @@ export class EcbAdapter implements Adapter {
    */
   private liveRates = new Map<string, { cur: number; prev?: number; at: number }>();
   private liveWarnedAt = 0;
+  /** 한국투자증권 환율을 쓰기 시작한 시각(첫 값을 받는 동안 상태 표시줄이 ECB로 보이지 않게) */
+  private liveSince = 0;
 
   constructor(private host: AdapterHost) {}
 
@@ -91,6 +93,7 @@ export class EcbAdapter implements Adapter {
   setLive(src: LiveFxSource | undefined) {
     this.live = src;
     this.liveRates.clear();
+    this.liveSince = Date.now();
     if (this.liveTimer) clearInterval(this.liveTimer);
     this.liveTimer = null;
     if (src) {
@@ -270,7 +273,8 @@ export class EcbAdapter implements Adapter {
   }
 
   status(): SourceStatus {
-    const live = !!this.live && [...this.liveRates.keys()].some((c) => this.liveRate(c));
+    // 키를 넣은 뒤 첫 값을 받는 1분 동안도 '10초마다'로 보여요(켜자마자 '30분마다'로 보였어요)
+    const live = !!this.live && ([...this.liveRates.keys()].some((c) => this.liveRate(c)) || (this.liveRates.size === 0 && Date.now() - this.liveSince < LIVE_STALE_MS));
     if (live) return { source: 'ECB', state: 'connected', message: '한국투자증권 환율 10초마다(차트 봉도 한국투자증권)', intervalMs: LIVE_MS, updatedAt: Date.now() };
     return { source: 'ECB', state: this.state, message: this.message, intervalMs: POLL_MS, updatedAt: Date.now() };
   }

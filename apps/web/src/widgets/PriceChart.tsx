@@ -20,7 +20,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { bucketStart, intervalMinutes, intradayAt, isHourInterval, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument } from '@bt/shared';
+import { bucketStart, intervalMinutes, intradayAt, isHourInterval, regularAt, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument } from '@bt/shared';
 import { FreshBadge } from '../components/FreshBadge';
 import { fmtPrice, fmtBig, josa, priceDigits } from '../format';
 import { getBars } from '../stores/bars';
@@ -303,8 +303,11 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     if (!c || !quote || bars.length === 0 || quote.id !== barsIdRef.current) return;
     const last = bars[bars.length - 1];
     if ((intraday || hourly) && inst) {
-      // 이 시세가 들어갈 봉 칸(1분봉, 시간봉은 정규장 시작에 맞춘 칸)
-      const t = intraday ? Math.floor(quote.fresh.asOf / 60_000) * 60 : bucketStart(inst, Math.floor(quote.fresh.asOf / 1000), intervalMinutes(interval as '1h'));
+      // 시간봉은 정규장 시세로만 고쳐요(미국 애프터마켓 체결로 봉을 고치거나 만들지 않아요)
+      if (hourly && !regularAt(inst, quote.fresh.asOf)) return;
+      // 이 시세가 들어갈 봉 칸(1분봉, 시간봉은 정규장 시작에 맞춘 칸). 시간봉에서 마감 시각 정각의 종가(미국 16:00)는
+      // 마지막 장중 칸에 넣어요(16시 칸을 새로 만들지 않게)
+      const t = intraday ? Math.floor(quote.fresh.asOf / 60_000) * 60 : bucketStart(inst, Math.floor((quote.fresh.asOf - 1) / 1000), intervalMinutes(interval as '1h'));
       // 새 봉은 장중 체결로만 만들어요(장이 닫힌 뒤 조회한 값으로 봉을 더하면 가로축이 건너뛰어요)
       if (t > last.t) {
         if (!intradayAt(inst, quote.fresh.asOf)) return;

@@ -103,4 +103,12 @@ describe('환율', () => {
     expect(s.bars.map((b) => b.c)).toEqual([1410 / 0.9]);
     fx.stop();
   });
+
+  it('키를 넣은 뒤 첫 환율을 받는 동안에도 상태 표시줄은 10초마다예요', () => {
+    const { fx } = setup();
+    expect(fx.status().intervalMs).toBe(30 * 60_000);
+    fx.setLive({ fxPerUsd: () => new Promise(() => undefined) });
+    expect(fx.status().intervalMs).toBe(10_000);
+    fx.stop();
+  });
 });
