@@ -78,3 +78,37 @@ describe('뉴스 아카이브', () => {
     a.close();
   });
 });
+
+describe('DART 기업개황(DES)', () => {
+  it('고유번호를 찾아 대표이사·설립일·홈페이지·KSIC를 읽고, 하루 동안 다시 써요', async () => {
+    const { zipSync, strToU8 } = await import('fflate');
+    const { NewsService } = await import('./news');
+    const { consoleLogger } = await import('./util');
+    const { vi } = await import('vitest');
+    const zip = zipSync({ 'CORPCODE.xml': strToU8('<result><list><corp_code>00126380</corp_code><stock_code>005930</stock_code></list></result>') });
+    let companyCalls = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('corpCode.xml')) return new Response(zip);
+      if (url.includes('company.json')) {
+        companyCalls++;
+        return new Response(JSON.stringify({ status: '000', message: '정상', ceo_nm: '전영현', est_dt: '19690113', hm_url: 'www.samsung.com/sec', adres: '경기도 수원시', induty_code: '264', acc_mt: '12' }));
+      }
+      return new Response('{}');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const dir = await mkdtemp(join(tmpdir(), 'bt-dart-'));
+      const svc = new NewsService(dir, consoleLogger('test', true), undefined, []);
+      expect(await svc.company('005930')).toBeUndefined(); // 인증키가 없으면 안 물어봐요
+      svc.setDartKey('k'.repeat(40));
+      const c = await svc.company('005930');
+      expect(c).toEqual({ ceo: '전영현', established: '1969-01-13', homepage: 'http://www.samsung.com/sec', address: '경기도 수원시', ksic: '264', settleMonth: '12' });
+      await svc.company('005930');
+      expect(companyCalls).toBe(1);
+      expect(await svc.company('999999')).toBeUndefined();
+      svc.stop();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

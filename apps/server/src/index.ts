@@ -68,6 +68,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   // N 뉴스·공시: RSS·DART를 받아 뉴스 아카이브(news.db)에 쌓아요(03 v0.2)
   const news = new NewsService(opts.dataDir, log, join(opts.dataDir, 'news.db'));
   news.start();
+  hub.news = news;
   void withTimeout(store.getSecret('dart'), 15_000, '보안 저장소가 15초 동안 응답하지 않았어요')
     .then((raw) => raw && news.setDartKey((JSON.parse(raw) as { key: string }).key))
     .catch((e: Error) => log.warn(`저장된 DART 인증키를 읽지 못했어요: ${e.message}`));

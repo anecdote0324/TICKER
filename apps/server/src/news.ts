@@ -8,7 +8,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { unzipSync } from 'fflate';
-import type { Freshness, Instrument, NewsItem, NewsResponse, NewsSourceStatus } from '@bt/shared';
+import type { Freshness, Instrument, NewsItem, NewsResponse, NewsSourceStatus, ProfileCompany } from '@bt/shared';
 import { fetchBytes, fetchJson, type Logger } from './util';
 
 export interface RssFeed {
@@ -440,6 +440,40 @@ export class NewsService {
     const files = unzipSync(bytes);
     const xml = new TextDecoder('utf-8').decode(files[Object.keys(files)[0]]);
     return parseCorpCodes(xml);
+  }
+
+  private companies = new Map<string, { at: number; v?: ProfileCompany }>();
+
+  /**
+   * DART 기업개황(company.json): 대표이사, 설립일, 홈페이지, 주소, 업종코드(KSIC). DES가 써요. 하루 동안 다시 써요.
+   * 인증키가 없거나 상장사 고유번호가 없으면 undefined
+   */
+  async company(stockCode: string): Promise<ProfileCompany | undefined> {
+    const key = this.dartKey;
+    if (!key) return undefined;
+    const hit = this.companies.get(stockCode);
+    if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.v;
+    this.corpCodes ??= this.loadCorpCodes(key);
+    const corp = (await this.corpCodes).get(stockCode);
+    if (!corp) {
+      this.companies.set(stockCode, { at: Date.now() });
+      return undefined;
+    }
+    const q = new URLSearchParams({ crtfc_key: key, corp_code: corp });
+    const r = await fetchJson<Record<string, string>>(`${DART_BASE}/company.json?${q}`, { timeoutMs: 15_000, headers: { 'user-agent': UA } });
+    if (r.status !== '000') throw new Error(DART_STATUS[r.status] ?? `DART 오류 ${r.status}: ${r.message}`);
+    const d = (r.est_dt ?? '').trim();
+    const url = (r.hm_url ?? '').trim();
+    const v: ProfileCompany = {
+      ceo: r.ceo_nm?.trim() || undefined,
+      established: /^\d{8}$/.test(d) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : undefined,
+      homepage: url ? (/^https?:\/\//.test(url) ? url : `http://${url}`) : undefined,
+      address: r.adres?.trim() || undefined,
+      ksic: r.induty_code?.trim() || undefined,
+      settleMonth: /^\d{2}$/.test(r.acc_mt ?? '') ? r.acc_mt : undefined,
+    };
+    this.companies.set(stockCode, { at: Date.now(), v });
+    return v;
   }
 
   sources(): NewsSourceStatus[] {

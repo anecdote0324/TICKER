@@ -9,6 +9,7 @@ import { kisPollFresh, type KisAdapter } from './adapters/kis';
 import type { Adapter, AdapterHost } from './adapters/types';
 import { mergeBars, type History } from './history';
 import { krMaster } from './kr-master';
+import type { NewsService } from './news';
 import type { UsActivity } from './us-activity';
 import type { Logger } from './util';
 
@@ -54,6 +55,8 @@ export class Hub implements AdapterHost {
   instruments = new Map<string, Instrument>();
   /** 미국 종목 인기도 보강용 거래대금 기록(v0.2) */
   usActivity?: UsActivity;
+  /** 뉴스·공시(DES의 DART 기업개황도 여기서) */
+  news?: NewsService;
   private quotes = new Map<string, Quote>();
   private clients = new Set<Client>();
   private refs = new Map<string, number>();
@@ -468,6 +471,11 @@ export class Hub implements AdapterHost {
     if (!inst) throw new Error(`종목 ${id}을(를) 찾지 못했어요`);
     if (inst.assetClass !== 'EQUITY') throw new Error('종목 개요는 주식만 볼 수 있어요');
     const out: SecurityProfile = { id, currency: inst.currency ?? (inst.market === 'US' ? 'USD' : 'KRW'), master: krMaster.profile(inst) };
+    // DART 기업개황(국내, 인증키가 있을 때). 실패해도 나머지는 보여 줘요
+    if (inst.market === 'KS' || inst.market === 'KQ') out.company = await this.news?.company(inst.code).catch((e: Error) => {
+      this.log.warn(`DART 기업개황 ${inst.code}: ${e.message}`);
+      return undefined;
+    });
     if (!this.kis) out.liveError = '한국투자증권 키를 넣으면 PER·PBR·52주 고저도 보여요';
     else {
       try {

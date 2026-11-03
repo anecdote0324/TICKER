@@ -161,6 +161,34 @@ function DesBody({ inst, data, last, volume, turnover }: { inst: Instrument; dat
             <Kv k="ROE" v={m.roe !== undefined ? `${fmtNum(m.roe, 2)}%` : '—'} />
           </Section>
         )}
+        {data.company && (
+          <Section title="회사" note="DART 기업개황">
+            <Kv k="대표이사" v={data.company.ceo ?? '—'} />
+            <Kv k="설립일" v={data.company.established ?? '—'} />
+            <Kv
+              k="홈페이지"
+              v={
+                data.company.homepage ? (
+                  <a
+                    href={data.company.homepage}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (window.btBridge?.openExternal) window.btBridge.openExternal(data.company!.homepage!);
+                      else window.open(data.company!.homepage!, '_blank', 'noopener');
+                    }}
+                    style={{ color: 'var(--value-hi)' }}
+                  >
+                    {data.company.homepage.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                  </a>
+                ) : (
+                  '—'
+                )
+              }
+            />
+            <Kv k="주소" v={<span title={data.company.address}>{data.company.address ?? '—'}</span>} />
+            <Kv k="산업분류(KSIC)" v={data.company.ksic ?? '—'} />
+          </Section>
+        )}
         <Section title="기본 정보" note={m ? `종목 마스터 · ${m.asOf}` : undefined}>
           <Kv k="업종" v={m?.sector?.join(' > ') ?? live?.sector ?? '—'} />
           {inst.market !== 'US' && <Kv k="상장일" v={m?.listedDate ?? '—'} />}

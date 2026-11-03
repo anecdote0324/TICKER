@@ -145,7 +145,7 @@
 
 | 소스 | 내용 | 단계 |
 |---|---|---|
-| DART OpenAPI | 국내 공시. 무료지만 인증키 발급이 필요해요(설정의 데이터 연결에서 입력, 40자리). 재무제표(XBRL), 지분공시, 임원, 배당, 주요사항보고서, 증권신고서도 제공해요. N은 공시검색(`list.json`)으로 2분마다 오늘 공시 100건, 종목을 열면 고유번호(`corpCode.xml`, 하루 한 번 받아 둠)로 그 회사의 지난 1년 공시를 받아요. 공시 링크는 `dart.fss.or.kr/dsaf001/main.do?rcpNo=접수번호` | v0.2 |
+| DART OpenAPI | 국내 공시. 무료지만 인증키 발급이 필요해요(설정의 데이터 연결에서 입력, 40자리). 재무제표(XBRL), 지분공시, 임원, 배당, 주요사항보고서, 증권신고서도 제공해요. DES는 기업개황(`company.json`: `ceo_nm`·`est_dt`·`hm_url`·`adres`·`induty_code` KSIC·`acc_mt`, 하루 동안 다시 씀). N은 공시검색(`list.json`)으로 2분마다 오늘 공시 100건, 종목을 열면 고유번호(`corpCode.xml`, 하루 한 번 받아 둠)로 그 회사의 지난 1년 공시를 받아요. 공시 링크는 `dart.fss.or.kr/dsaf001/main.do?rcpNo=접수번호` | v0.2 |
 | RSS | 국내외 뉴스 헤드라인. 뉴스 아카이브는 v0.2부터 쌓기 시작해요(검색 기능 NSE는 쌓기 시작한 뒤의 뉴스만 찾을 수 있어요). 기본: 한국경제(증권 `feed/finance`·경제 `feed/economy`), 서울경제(`rss/finance`), 전자신문(`Section901`), MarketWatch(`mw_topstories`·`mw_marketpulse`), Investing.com(`news.rss`). 5분마다. 앱 이름(User-Agent)으로 받을 수 있는 곳만 넣었어요: 연합뉴스·매일경제·WSJ는 자동 요청을 403으로 막고, CNBC는 403, Yahoo는 404예요. 막는 곳을 우회하지 않아요. 제목·링크·시각만 보관해요(연합뉴스 RSS는 재배포·AI 학습 금지를 적어 둠) | v0.2 |
 | SEC EDGAR | 미국 공시·재무제표(companyfacts), 13F, Form 4, 8-K. 무료, 초당 10건 이하, 요청에 연락처(User-Agent) 필요. 한도를 넘으면 IP 차단 | v0.3 |
 | 네이버 검색 API(뉴스) | 종목 뉴스(CN), 뉴스 검색. 무료, 앱 등록 필요, 하루 한도 확인 필요. 본문은 원문 링크로 열어요 | v0.4 |

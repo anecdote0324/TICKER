@@ -57,11 +57,25 @@ export interface ProfileMaster {
   asOf: string;
 }
 
+/** DART 기업개황(국내, 인증키가 있을 때): 회사 정보와 국내 산업분류(KSIC) 코드 */
+export interface ProfileCompany {
+  ceo?: string;
+  /** 'YYYY-MM-DD' */
+  established?: string;
+  homepage?: string;
+  address?: string;
+  /** 업종코드(KSIC, 한국표준산업분류) */
+  ksic?: string;
+  /** 결산 월 */
+  settleMonth?: string;
+}
+
 export interface SecurityProfile {
   id: string;
   currency: string;
   live?: ProfileLive;
   master?: ProfileMaster;
+  company?: ProfileCompany;
   /** live를 받지 못한 이유(키가 없음, 조회 실패) */
   liveError?: string;
 }
