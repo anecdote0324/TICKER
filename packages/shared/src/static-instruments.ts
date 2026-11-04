@@ -69,7 +69,29 @@ export const FX_PAIRS: FxPairDef[] = [
   { code: 'GBPUSD', base: 'GBP', quote: 'USD', nameKo: '파운드/달러' },
   { code: 'USDCNY', base: 'USD', quote: 'CNY', nameKo: '달러/위안' },
   { code: 'AUDUSD', base: 'AUD', quote: 'USD', nameKo: '호주달러/달러' },
+  // 교차 환율(v0.2): FXC의 모든 칸이 차트로 이어지게 나머지 통화끼리도 하나씩(시장에서 쓰는 방향)
+  { code: 'EURJPY', base: 'EUR', quote: 'JPY', nameKo: '유로/엔' },
+  { code: 'EURGBP', base: 'EUR', quote: 'GBP', nameKo: '유로/파운드' },
+  { code: 'EURCNY', base: 'EUR', quote: 'CNY', nameKo: '유로/위안' },
+  { code: 'EURAUD', base: 'EUR', quote: 'AUD', nameKo: '유로/호주달러' },
+  { code: 'GBPJPY', base: 'GBP', quote: 'JPY', nameKo: '파운드/엔' },
+  { code: 'GBPCNY', base: 'GBP', quote: 'CNY', nameKo: '파운드/위안' },
+  { code: 'GBPAUD', base: 'GBP', quote: 'AUD', nameKo: '파운드/호주달러' },
+  { code: 'AUDJPY', base: 'AUD', quote: 'JPY', nameKo: '호주달러/엔' },
+  { code: 'AUDCNY', base: 'AUD', quote: 'CNY', nameKo: '호주달러/위안' },
+  { code: 'CNYJPY', base: 'CNY', quote: 'JPY', nameKo: '위안/엔' },
 ];
+
+/**
+ * 두 통화의 환율 종목(FXC 칸 → 연동 차트, v0.2). 그 방향의 쌍이 없으면 뒤집은 쌍을 줘요
+ * (FXC의 KRW 행·USD 열 칸 = 원화 1원당 달러 → 차트는 원/달러 USDKRW)
+ */
+export function fxPairFor(base: string, quote: string): { pair: FxPairDef; inverted: boolean } | undefined {
+  const direct = FX_PAIRS.find((p) => p.base === base && p.quote === quote);
+  if (direct) return { pair: direct, inverted: false };
+  const inverse = FX_PAIRS.find((p) => p.base === quote && p.quote === base);
+  return inverse ? { pair: inverse, inverted: true } : undefined;
+}
 
 /** 주요 코인 한글 이름(05 §6.1). 순서가 인기도예요 */
 export const CRYPTO_KO: Array<[string, string]> = [

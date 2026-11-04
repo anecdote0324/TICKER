@@ -6,6 +6,7 @@ import { canonicalSecurity, type FunctionDef } from '@bt/shared';
 import { getInstrument } from './instruments';
 import { recordHistory, recordUsage } from './state';
 import { createStore } from './store';
+import { showToast } from './ui';
 
 export type LinkColor = 'blue' | 'purple' | 'teal';
 
@@ -112,9 +113,17 @@ export function applyExecution(panelId: string, exec: Execution) {
 }
 
 /** MON 행 고르기처럼 종목만 바꿀 때 */
+/** 연동 색이 없는 패널에서 줄·칸을 눌렀다고 알려 준 패널(이번 실행 동안 패널마다 한 번) */
+const noLinkHinted = new Set<string>();
+
+/** 목록 위젯(MON·WEI·CRYP·MOST·FXC 등)에서 고른 종목을 같은 연동 그룹의 패널에 퍼뜨려요 */
 export function setPanelSecurity(panelId: string, securityId: string) {
   const p = panels.get()[panelId];
   if (!p) return;
+  if (!p.link && !noLinkHinted.has(panelId)) {
+    noLinkHinted.add(panelId);
+    showToast('이 패널은 연동 색이 없어서 다른 패널이 바뀌지 않아요 · 제목 줄의 ■를 눌러 차트 패널과 같은 색으로 맞춰요', undefined, 8000);
+  }
   propagateSecurity(p, securityId);
 }
 
