@@ -33,7 +33,7 @@ GitHub 저장소의 [Releases](https://github.com/anecdote0324/BloombergTerminal
 |---|---|---|
 | Windows (권장) | `TICKER.Setup.<버전>.exe` | 설치형. 시작 메뉴와 바탕 화면에 등록되고, 켜는 게 빨라요 |
 | Windows (설치 없이) | `TICKER.<버전>.exe` | 휴대용. 설치하지 않고 바로 실행해요. 켤 때마다 임시 폴더에 압축을 풀어서 조금 느려요 |
-| Mac (Apple Silicon, M1 이상) | `TICKER-<버전>-arm64.dmg` | 인텔 Mac은 지원하지 않아요 |
+| Mac (Apple Silicon, M1 이상) | `TICKER-<버전>-arm64.dmg` | 인텔 Mac은 지원하지 않아요. v0.3.0-beta.1부터는 Mac 설치 파일을 따로 요청한 릴리스에만 올려요(없으면 앞 버전의 dmg를 써요) |
 
 - `Source code (zip)`, `Source code (tar.gz)`는 프로그램 코드라 실행 파일이 아니에요.
 - `Latest` 표시가 붙은 것이 정식 버전이에요(지금은 `v0.1.0`). 저장소 첫 화면 오른쪽의 Releases에도 이 버전이 보여요. 정식 뒤에 나온 시험 버전에는 `Pre-release` 표시가 붙어요.

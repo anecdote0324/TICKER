@@ -89,7 +89,7 @@ docs/design       설계 문서
 | 시기 | 방식 |
 |---|---|
 | 개발 중 | 브라우저 + 실행 스크립트 (Windows `start.bat`, Mac `start.command`). 서버를 켜고 브라우저를 자동으로 열어요 |
-| 완성 후 | Electron 설치 파일 (Windows 설치형 .exe, Mac .dmg). 필요하면 설치 없이 실행하는 버전도 만들어요 |
+| 완성 후 | Electron 설치 파일 (Windows 설치형 .exe, Mac .dmg). 필요하면 설치 없이 실행하는 버전도 만들어요. v0.3.0-beta.1부터 Release는 기본으로 Windows만 만들고, Mac .dmg는 'Mac 설치 파일도 만들기'를 켤 때만(사용자 결정: 아직 Mac에서 쓰지 않아요) |
 
 **설치 파일과 서명**
 

@@ -1,6 +1,8 @@
 name: Release
 
-# Windows·Mac(Apple Silicon) 설치 파일을 만들어 릴리스로 올려요(01 설치 파일과 서명).
+# Windows 설치 파일(그리고 고르면 Mac(Apple Silicon))을 만들어 릴리스로 올려요(01 설치 파일과 서명).
+# - Mac 빌드는 'Mac 설치 파일도 만들기'를 켤 때만 해요(기본 끔, 사용자 결정: 아직 Mac에서 쓰지 않아요.
+#   Mac 실행 환경 배정을 15분 기다리다 취소된 일도 있었어요, v0.3.0-beta.1)
 # - Actions → Release → Run workflow에서 종류만 고르면, 지난 태그를 보고 다음 번호를 자동으로 정해 그 태그를 만들면서 올려요.
 #   미리 보기: 0.1.0-beta.2 → 0.1.0-beta.3 / 정식: 0.1.0-beta.3 → 0.1.0 / 다음 단계: 0.1.x → 0.2.0-beta.1
 # - 버전 태그(v0.1.0 등)를 직접 올려도 돼요. 앱 버전 번호는 태그에서 가져와요(v0.1.0 → 0.1.0).
@@ -27,6 +29,10 @@ on:
         description: '번호를 직접 정할 때만(예: v0.1.0-beta.5). 비우면 위 종류로 자동'
         required: false
         default: ''
+      mac:
+        description: 'Mac 설치 파일도 만들기(끄면 Windows만)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -86,7 +92,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        # Mac은 고를 때만(태그를 직접 올린 실행도 Windows만)
+        os: ${{ fromJSON(inputs.mac && '["windows-latest","macos-latest"]' || '["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -132,7 +139,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # 두 OS의 설치 파일이 다 올라갔으면 공개해요(하나라도 실패하면 초안으로 남고, 다시 실행하면 그 초안에 이어서 올려요)
+  # 만든 OS의 설치 파일이 다 올라갔으면 공개해요(하나라도 실패하면 초안으로 남고, 다시 실행하면 그 초안에 이어서 올려요)
   release:
     needs: [version, build]
     if: needs.version.outputs.publish == 'true'
@@ -141,13 +148,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.version.outputs.tag }}
+      MAC: ${{ inputs.mac && 'true' || 'false' }}
     steps:
       - name: 올라간 설치 파일 확인
         run: |
           names=$(gh release view "$TAG" --json assets --jq '.assets[].name')
           echo "$names"
           echo "$names" | grep -q '\.exe$' || { echo "Windows 설치 파일이 없어요"; exit 1; }
-          echo "$names" | grep -q '\.dmg$' || { echo "Mac 설치 파일이 없어요"; exit 1; }
+          if [ "$MAC" = "true" ]; then echo "$names" | grep -q '\.dmg$' || { echo "Mac 설치 파일이 없어요"; exit 1; }; fi
       # 미리 보기(-가 붙은 태그)는 바로 공개하고, 정식 버전은 초안으로 두고 확인한 뒤 공개해요
       - name: 미리 보기 공개
         if: needs.version.outputs.prerelease == 'true'

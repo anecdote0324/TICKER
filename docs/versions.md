@@ -58,7 +58,7 @@
 | 영역 | 내용 | 상태 |
 |---|---|---|
 | 데스크톱 앱 | Electron 45, 내장 서버를 앱 안에서 실행, 단일 실행, 메인 창을 닫으면 종료, Windows 메뉴 막대 없음(Ctrl+R·Ctrl+W 제거), Mac은 App·Edit·Window 메뉴만 | 확인 필요(Windows·Mac 실기기) |
-| 설치 파일 | GitHub Actions: 버전 태그를 올리면 Windows .exe(설치형·휴대용), Mac Apple Silicon .dmg. 앱 버전 번호는 태그에서 가져와요 | 확인 필요(Actions의 Release로 미리 보기 12번과 정식을 올렸고 Windows 설치형은 확인. 휴대용 .exe·Mac .dmg 첫 실행) |
+| 설치 파일 | GitHub Actions: 버전 태그를 올리면 Windows .exe(설치형·휴대용), Mac Apple Silicon .dmg(v0.3.0-beta.1부터 'Mac 설치 파일도 만들기'를 켤 때만). 앱 버전 번호는 태그에서 가져와요 | 확인 필요(Actions의 Release로 미리 보기 12번과 정식을 올렸고 Windows 설치형은 확인. 휴대용 .exe·Mac .dmg 첫 실행) |
 | 개발 실행 | `start.bat`, `start.command`, `pnpm dev` | 완료 |
 | 보안 | 127.0.0.1에서만 열기, 실행마다 새 토큰, Host·Origin 검사, CORS 없음, contextIsolation·sandbox, 화면에 외부 스크립트 없음 | 완료 |
 | 진단 | 서버 기록 파일(`logs/server.log`), 진단 정보 복사(키·토큰 제외), 한국투자증권 연결 테스트 단계별 시간 제한과 막힌 단계 표시, 서버가 답하지 않으면 상태 표시줄 `⚠ 내장 서버 응답 없음` | 완료 |
