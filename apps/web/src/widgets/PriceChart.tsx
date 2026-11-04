@@ -35,6 +35,7 @@ import { settings } from '../stores/settings';
 import { useStore } from '../stores/store';
 import { GIP_RANGES, GP_HOUR_DEFAULT, GP_RANGES, GIP_DEFAULT, GP_DEFAULT, RIGHT_PAD, visibleBarCount } from './chartRange';
 import { TitleBar } from './common';
+import { IchimokuCloud } from './ichimokuCloud';
 import { activeIndicators, bollinger, futureTimes, ichimoku, INDICATORS, MA_PERIOD, macd, prependBars, rsi, sma, type IndicatorId } from './indicators';
 
 // 십자선 동기화: 한 차트에 마우스를 올리면 다른 차트에도 같은 시점에 세로선(02)
@@ -123,6 +124,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const indRef = useRef(new Map<string, Array<ISeriesApi<SeriesType>>>());
   /** 아래 창 지표의 순서(바뀌면 아래 창을 다시 만들어요) */
   const paneSigRef = useRef('');
+  /** 일목균형표 구름 칠하기(선행스팬 1 시리즈에 붙여요) */
+  const cloudRef = useRef<IchimokuCloud | null>(null);
   // 가격 축을 손으로 움직였는지(자동 맞춤 단추를 보여 줘요)
   const [manualScale, setManualScale] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -444,14 +447,20 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       const def = INDICATORS.find((d) => d.id === id)!;
       if (MA_PERIOD[id]) return [chart.addSeries(LineSeries, { ...quiet, color: id === 'ma20' ? accentColor : def.color })];
       if (id === 'bb') return [0, 1, 2].map((k) => chart.addSeries(LineSeries, { ...quiet, color: def.color, lineStyle: k === 1 ? LineStyle.Dashed : LineStyle.Solid }));
-      if (id === 'ichimoku')
-        return [
+      if (id === 'ichimoku') {
+        const ss = [
           chart.addSeries(LineSeries, { ...quiet, color: '#29B6F6' }),
           chart.addSeries(LineSeries, { ...quiet, color: '#AB47BC' }),
           chart.addSeries(LineSeries, { ...quiet, color: '#66BB6A' }),
           chart.addSeries(LineSeries, { ...quiet, color: '#EF9A9A' }),
           chart.addSeries(LineSeries, { ...quiet, color: '#757575', lineStyle: LineStyle.Dotted }),
         ];
+        // 구름: 선행스팬 1과 2 사이를 칠해요(시리즈를 지우면 함께 떨어져요)
+        const cloud = new IchimokuCloud({ up: '#66BB6A33', down: '#EF9A9A33' });
+        ss[2].attachPrimitive(cloud);
+        cloudRef.current = cloud;
+        return ss;
+      }
       const pane = 1 + (paneIds as IndicatorId[]).indexOf(id);
       if (id === 'rsi') {
         const r = chart.addSeries(LineSeries, { lineWidth: 1, color: def.color, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false, priceFormat: { type: 'price', precision: 1, minMove: 0.1 } }, pane);
@@ -489,6 +498,11 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         ss[1].setData(line(bars, ich.kijun));
         ss[2].setData(line(bars, ich.lead1, times));
         ss[3].setData(line(bars, ich.lead2, times));
+        // 구름 색: 스팬 1이 위면 상승 색, 아래면 하락 색(등락 색 설정을 따라요)
+        cloudRef.current?.setColors({ up: `${up}38`, down: `${down}38` });
+        cloudRef.current?.setData(
+          ich.lead1.flatMap((a, i) => (a !== undefined && ich.lead2[i] !== undefined && times[i] !== undefined ? [{ t: times[i], a, b: ich.lead2[i]! }] : [])),
+        );
         ss[4].setData(line(bars, ich.lagging));
       } else if (id === 'rsi') ss[0].setData(line(bars, rsi(closes)));
       else if (id === 'macd') {
