@@ -345,10 +345,6 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     }
   };
   const olderLoading = !!olderNow?.loading;
-  /** 더 받을 과거 봉이 없거나 묶음 수 끝에 닿았는지(MAX는 이때 한 번만 전체에 맞춰요) */
-  const olderDone = !canOlder || (!!olderNow && (olderNow.done || olderNow.chunks >= OLDER_MAX_CHUNKS));
-  /** MAX로 전체에 맞춘 종목·봉 단위·버튼 누름(같은 것에는 한 번만) */
-  const maxFitRef = useRef('');
   // MAX: 보이는 자리와 상관없이 받을 수 있는 데까지 이어 받아요(묶음 수 끝까지)
   useEffect(() => {
     if (range === 'MAX' && canOlder && ready) void loadOlderRef.current();
@@ -403,21 +399,14 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       const fit = () => chart.timeScale().setVisibleLogicalRange({ from: bars.length - n - 0.5, to: bars.length - 1 + RIGHT_PAD + 0.5 });
       if (ts.width() > 0) fit();
       else pendingFit.current = fit;
-      // 더 받을 과거 봉이 없으면(시간봉·이미 다 받음) 이 맞춤이 MAX의 전체 맞춤이에요
-      if (range === 'MAX' && olderDone) maxFitRef.current = `${ready.id}|${key}`;
     } else if (idChanged) {
       // 종목만 바뀌었으면 지금 배율 그대로 가장 최근 봉으로
       ts.scrollToPosition(RIGHT_PAD, false);
     } else if (added && before) {
       // 과거 봉을 앞에 붙여도 보던 자리에 그대로 있게 옮겨요(차트가 번호로 범위를 지키면 그만큼 밀어요).
-      // MAX도 받는 동안은 그대로 두고, 다 받은 뒤 한 번만 전체에 맞춰요. 묶음마다 전체에 맞추면 받는 동안 차트가 계속 과거 쪽으로 밀렸어요
+      // MAX도 받는 동안과 다 받은 뒤 모두 보던 자리를 지켜요(사용자 결정). 묶음마다 전체에 맞추면 차트가 계속 과거 쪽으로 밀렸어요
       const now = ts.getVisibleLogicalRange();
       if (now && Math.abs(now.from - before.from) < 0.5) ts.setVisibleLogicalRange({ from: before.from + added, to: before.to + added });
-    }
-    const maxKey = `${ready.id}|${key}`;
-    if (range === 'MAX' && olderDone && maxFitRef.current !== maxKey && (added || (view && view.key === key && !idChanged))) {
-      ts.setVisibleLogicalRange({ from: -0.5, to: bars.length - 1 + RIGHT_PAD + 0.5 });
-      maxFitRef.current = maxKey;
     }
     if (!view || view.key !== key || idChanged) {
       // 가격 축은 보이는 봉에 다시 맞춰요(손으로 당겨 꺼진 자동 맞춤을 다시 켜요)
@@ -425,7 +414,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       setManualScale(false);
     }
     viewRef.current = { id: ready.id, key };
-  }, [ready, viewBars, range, interval, intraday, inst, fitTick, olderDone]);
+  }, [ready, viewBars, range, interval, intraday, inst, fitTick]);
 
   // ── 보조지표(GP만) ──
   const indicators = useMemo(() => (intraday ? [] : activeIndicators(panel.gpIndicators)), [intraday, panel.gpIndicators]);
