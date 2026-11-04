@@ -90,3 +90,40 @@ describe('SEC 연락처와 막힘 안내', async () => {
     expect(secBlockMessage(403, '<html><title>SEC.gov | Request Rate Threshold Exceeded</title></html>')).toContain('Request Rate Threshold Exceeded');
   });
 });
+
+describe('SEC가 막은 뒤 쉬기', async () => {
+  const { FinancialsService } = await import('./financials');
+  const { vi, afterEach } = await import('vitest');
+  const quiet = { debug() {}, info() {}, warn() {}, error() {} };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('403을 받으면 확인 버튼은 10분, 재무제표 화면은 1시간 동안 SEC에 보내지 않아요', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-05T00:00:00Z'));
+    const fetchMock = vi.fn(async () => new Response('<html><title>SEC.gov | Your Request Originates from an Undeclared Automated Tool</title></html>', { status: 403 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const svc = new FinancialsService(undefined, quiet);
+    const first = await svc.testSec('Park me@example.com');
+    expect(first.ok).toBe(false);
+    expect(first.message).toContain('Undeclared Automated Tool');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 5분 뒤 다시 확인: 보내지 않고 쉬는 중이라고
+    vi.setSystemTime(new Date('2026-11-05T00:05:00Z'));
+    const again = await svc.testSec('Park me@example.com');
+    expect(again.message).toMatch(/약 5분 동안 SEC에 요청하지 않아요/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 11분 뒤 확인 버튼은 다시 보내요(또 막혀서 그때부터 다시 쉬어요)
+    vi.setSystemTime(new Date('2026-11-05T00:11:00Z'));
+    await svc.testSec('Park me@example.com');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // 재무제표 화면은 마지막으로 막힌 때부터 1시간
+    svc.setSecContact('Park me@example.com');
+    const inst = { id: 'EQ:US:AAPL', assetClass: 'EQUITY', market: 'US', code: 'AAPL', exchange: 'NAS' } as const;
+    vi.setSystemTime(new Date('2026-11-05T00:30:00Z'));
+    await expect(svc.get(inst as never, 'annual')).rejects.toThrow(/약 41분 동안/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});

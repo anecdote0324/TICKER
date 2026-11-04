@@ -208,6 +208,16 @@ export function secContactError(k: string): string | undefined {
   return undefined;
 }
 
+/** SEC가 막은 뒤 쉬는 시간: 재무제표 화면은 1시간, 설정의 확인 버튼은 10분(막힌 동안 더 보내면 막힘이 길어져요) */
+export const SEC_REST_MS = 60 * 60_000;
+export const SEC_TEST_REST_MS = 10 * 60_000;
+
+/** 쉬는 동안의 안내 */
+export function secRestMessage(restMs: number, lastBlock: string): string {
+  const min = Math.max(1, Math.ceil(restMs / 60_000));
+  return `SEC가 이 인터넷 연결의 요청을 막고 있어서 약 ${min}분 동안 SEC에 요청하지 않아요(막힌 동안 더 보내면 막힘이 길어져요). 마지막 응답: ${lastBlock.replace(/ SEC는 한도를.*$/, '')}`;
+}
+
 /** SEC가 막았을 때: 응답의 제목(예: Request Rate Threshold Exceeded, Undeclared Automated Tool)을 함께 보여 줘요 */
 export function secBlockMessage(status: number, body: string | undefined): string {
   const title = body?.match(/<title>([^<]*)<\/title>/i)?.[1]?.replace(/^SEC\.gov\s*\|\s*/, '').trim();
@@ -223,6 +233,9 @@ export class FinancialsService {
   private secCiks?: { at: number; map: Promise<Map<string, string>> };
   private secFacts = new Map<string, { at: number; gaap: Promise<UsGaap> }>();
   private lastSec = 0;
+  /** SEC가 막은 때(ms). 막힌 동안 더 보내면 막힘이 길어져서 한동안 쉬어요 */
+  private secBlockedAt = 0;
+  private secBlockMsg = '';
 
   constructor(
     private news: NewsService | undefined,
@@ -323,9 +336,12 @@ export class FinancialsService {
 
   // ── SEC ──
 
-  private async secFetch<T>(url: string): Promise<T> {
+  private async secFetch<T>(url: string, test = false): Promise<T> {
     const contact = this.secContact;
     if (!contact) throw new Error('SEC EDGAR 연락처를 넣으면 미국 재무제표가 보여요(설정 → 데이터 연결). SEC가 요청마다 연락처를 달라고 해요');
+    // 막힌 뒤에는 쉬어요: 재무제표 화면은 1시간, 설정의 확인 버튼은 10분
+    const rest = this.secBlockedAt + (test ? SEC_TEST_REST_MS : SEC_REST_MS) - Date.now();
+    if (rest > 0) throw new Error(secRestMessage(rest, this.secBlockMsg));
     // 초당 10건 이하(여유 있게 0.2초 간격)
     const wait = this.lastSec + 200 - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -334,7 +350,12 @@ export class FinancialsService {
       // SEC 공개 규칙(Accessing EDGAR Data)의 모양: User-Agent에 이름과 이메일, Accept-Encoding gzip·deflate
       return await fetchJson<T>(url, { timeoutMs: 30_000, headers: secHeaders(contact) });
     } catch (e) {
-      if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw new Error(secBlockMessage(e.status, e.body));
+      if (e instanceof HttpError && (e.status === 403 || e.status === 429)) {
+        this.secBlockedAt = Date.now();
+        this.secBlockMsg = secBlockMessage(e.status, e.body);
+        this.secCiks = undefined;
+        throw new Error(this.secBlockMsg);
+      }
       throw e;
     }
   }
@@ -355,7 +376,7 @@ export class FinancialsService {
     const prev = this.secContact;
     this.secContact = contact;
     try {
-      const r = await this.secFetch<{ entityName?: string }>('https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Assets.json');
+      const r = await this.secFetch<{ entityName?: string }>('https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Assets.json', true);
       return { ok: true, message: `SEC EDGAR에서 ${r.entityName ?? 'Apple'} 자료를 받았어요` };
     } catch (e) {
       return { ok: false, message: (e as Error).message };
