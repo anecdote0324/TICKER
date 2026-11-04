@@ -55,6 +55,14 @@ export interface PanelState {
   /** CF 공시 종류(OpenDART pblntf_ty, 빈 값은 전체)와 제목 거르기(v0.4) */
   cfType?: string;
   cfQuery?: string;
+  /** v0.4 뉴스 보기: TOP 기간(시간), NI 주제, NSE 검색어·기간·저장 검색 */
+  topHours?: number;
+  niTopic?: string;
+  nseQuery?: string;
+  nseDays?: number;
+  nseSaved?: string[];
+  /** ALRT 탭(v0.4): 가격·뉴스 */
+  alrtTab?: 'price' | 'news';
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

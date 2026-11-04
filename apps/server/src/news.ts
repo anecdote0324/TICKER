@@ -269,6 +269,46 @@ export class NewsArchive {
       .slice(0, opts.scan ?? opts.limit);
   }
 
+  /** 제목 검색: 띄어 쓴 낱말이 모두 든 줄(최신순). "-낱말"은 빼기. from(ms) 이후 */
+  searchTitles(query: string, from: number, limit: number): NewsItem[] {
+    const words = query.trim().split(/\s+/).filter(Boolean);
+    const plus = words.filter((w) => !w.startsWith('-'));
+    const minus = words.filter((w) => w.startsWith('-') && w.length > 1).map((w) => w.slice(1));
+    if (!plus.length) return [];
+    if (this.db) {
+      const esc = (w: string) => `%${w.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+      const where = ['published >= ?', ...plus.map(() => "(title LIKE ? ESCAPE '\\' OR corp_name LIKE ? ESCAPE '\\')"), ...minus.map(() => "title NOT LIKE ? ESCAPE '\\'")];
+      const args: Array<string | number> = [from, ...plus.flatMap((w) => [esc(w), esc(w)]), ...minus.map(esc)];
+      const rows = this.db.prepare(`SELECT * FROM news WHERE ${where.join(' AND ')} ORDER BY published DESC LIMIT ?`).all(...args, limit) as Array<Record<string, string | number | null>>;
+      return rows.map((r) => this.rowItem(r));
+    }
+    const lower = plus.map((w) => w.toLowerCase());
+    const lowMinus = minus.map((w) => w.toLowerCase());
+    return [...this.mem.values()]
+      .filter((x) => {
+        const t = `${x.title} ${x.corpName ?? ''}`.toLowerCase();
+        return x.published >= from && lower.every((w) => t.includes(w)) && !lowMinus.some((w) => t.includes(w));
+      })
+      .sort((a, b) => b.published - a.published)
+      .slice(0, limit);
+  }
+
+  private rowItem(r: Record<string, string | number | null>): NewsItem {
+    return {
+      id: String(r.id),
+      kind: r.kind as NewsItem['kind'],
+      source: String(r.source),
+      sourceId: String(r.source_id),
+      lang: r.lang as NewsItem['lang'],
+      title: String(r.title),
+      url: String(r.url),
+      published: Number(r.published),
+      dateOnly: r.date_only ? true : undefined,
+      corpName: r.corp_name ? String(r.corp_name) : undefined,
+      stockCode: r.stock_code ? String(r.stock_code) : undefined,
+    };
+  }
+
   count(): number {
     if (this.db) return Number((this.db.prepare('SELECT COUNT(*) AS n FROM news').get() as { n: number }).n);
     return this.mem.size;
@@ -502,6 +542,22 @@ export class NewsService {
    * N 패널의 목록. 종목이 있으면: 국내 주식은 그 회사 공시 + 이름이 들어간 헤드라인, 그 밖의 주식·코인은 이름이 들어간 헤드라인.
    * 지수·환율은 거르지 않아요
    */
+  /** v0.4 뉴스 보기가 쓰는 최근 줄(아카이브 최근 scan개) */
+  recentItems(scan = 5000): NewsItem[] {
+    return this.archive.recent({ limit: scan, scan });
+  }
+
+  /** 아카이브 검색(NSE·ALRT 뉴스): 제목에 모든 낱말이 든 줄. 최근 days일, since(ms)보다 새것만 */
+  search(query: string, opts: { days?: number; since?: number; limit?: number } = {}): { items: NewsItem[]; total: number } {
+    const from = Math.max(opts.since ?? 0, Date.now() - (opts.days ?? 3650) * 86400_000);
+    const all = this.archive.searchTitles(query, from, 2000);
+    return { items: all.slice(0, opts.limit ?? 200), total: all.length };
+  }
+
+  get lastNewsAt(): number {
+    return Math.max(this.lastRss, this.lastDart) || Date.now();
+  }
+
   async list(inst: Instrument | undefined, kind: 'all' | 'news' | 'disclosure', limit = 150): Promise<NewsResponse> {
     const kinds: Array<NewsItem['kind']> | undefined = kind === 'all' ? undefined : [kind];
     let items: NewsItem[];

@@ -29,7 +29,7 @@ export function openLink(url: string) {
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /** 오늘이면 시:분, 아니면 월/일(한국 시간) */
-function when(x: NewsItem, now: number): string {
+export function when(x: NewsItem, now: number): string {
   const k = new Date(x.published + 9 * 3600_000);
   const today = new Date(now + 9 * 3600_000);
   const sameDay = k.getUTCFullYear() === today.getUTCFullYear() && k.getUTCMonth() === today.getUTCMonth() && k.getUTCDate() === today.getUTCDate();
@@ -39,9 +39,11 @@ function when(x: NewsItem, now: number): string {
 
 export function News({ panel }: { panel: PanelState }) {
   const inst = useInstrument(panel.securityId);
+  // CN 종목 뉴스(v0.4): N과 같은 화면이지만 늘 그 종목만
+  const isCn = panel.fn === 'CN';
   const tab: Tab = (TABS.some((t) => t.code === panel.newsTab) ? panel.newsTab : 'all') as Tab;
   // 종목이 있어도 '전체 보기'를 누르면 거르지 않아요
-  const byInst = !!inst && !panel.newsAll;
+  const byInst = !!inst && (isCn || !panel.newsAll);
   const kind = tab === 'disclosure' ? 'disclosure' : tab === 'all' ? 'all' : 'news';
   const key = `${byInst ? inst!.id : ''}|${kind}`;
   const [state, setState] = useState<{ key: string; data?: NewsResponse; error?: string } | null>(null);
@@ -71,12 +73,12 @@ export function News({ panel }: { panel: PanelState }) {
   return (
     <>
       <TitleBar
-        fn="N"
-        name="뉴스·공시"
-        sub={byInst ? name : undefined}
+        fn={isCn ? 'CN' : 'N'}
+        name={isCn ? '종목 뉴스' : '뉴스·공시'}
+        sub={byInst ? name : isCn ? '종목이 필요해요(예: 005930 CN)' : undefined}
         fresh={data?.fresh}
         tools={
-          inst ? (
+          inst && !isCn ? (
             <>
               <button className={byInst ? 'on' : ''} onClick={() => patchPanel(panel.id, { newsAll: false })} title={`${name} 관련만`}>
                 {name.length > 8 ? `${name.slice(0, 8)}…` : name}

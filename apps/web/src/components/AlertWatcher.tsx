@@ -2,7 +2,8 @@
 // 조건이 맞으면 알림(앱 안 알림 + 설정에 따라 운영체제 알림·소리)을 띄우고 기록을 남겨요. 데모 시세로는 알리지 않아요.
 
 import { useEffect, useMemo, useRef } from 'react';
-import { ALERT_KIND_LABEL, evaluateAlert, type AlertRule } from '@bt/shared';
+import { ALERT_KIND_LABEL, evaluateAlert, type AlertRule, type NewsViewResponse } from '@bt/shared';
+import { api } from '../api';
 import { fmtPct, fmtPrice } from '../format';
 import { useQuotes } from '../stores/feed';
 import { getInstrument } from '../stores/instruments';
@@ -38,7 +39,58 @@ function beep() {
   }
 }
 
+/** 알림 띄우기(앱 안 알림 + 설정에 따라 운영체제 알림·소리) */
+function notify(texts: string[]) {
+  const cfg = settings.get().alerts ?? { system: true, sound: true };
+  for (const t of texts) {
+    showToast(`🔔 ${t}`, undefined, 10_000);
+    if (cfg.system && typeof Notification !== 'undefined') {
+      const show = () => new Notification('TICKER 알림', { body: t, silent: true });
+      if (Notification.permission === 'granted') show();
+      else if (Notification.permission !== 'denied') void Notification.requestPermission().then((p) => p === 'granted' && show());
+    }
+  }
+  if (cfg.sound && texts.length) beep();
+}
+
+const NEWS_POLL_MS = 2 * 60_000;
+
+/** ALRT 뉴스 조건(v0.4): 2분마다 아카이브를 찾아 마지막으로 알린 뒤의 새 줄이 있으면 알려요 */
+function useNewsAlerts() {
+  useEffect(() => {
+    let alive = true;
+    const check = async () => {
+      const rules = (appState.get().alerts?.newsRules ?? []).filter((r) => r.enabled);
+      for (const r of rules) {
+        try {
+          const res = await api.get<NewsViewResponse>(`/api/news/search?q=${encodeURIComponent(r.query)}&since=${r.lastSeen + 1}&days=2`);
+          if (!alive || res.items.length === 0) continue;
+          const newest = Math.max(...res.items.map((x) => x.published));
+          const at = Date.now();
+          const text = `뉴스 "${r.query}" ${res.items.length}건: ${res.items[0].title}`;
+          updateState('alerts', (s) => ({
+            rules: s?.rules ?? [],
+            newsRules: (s?.newsRules ?? []).map((x) => (x.id === r.id ? { ...x, lastSeen: newest, lastFiredAt: at } : x)),
+            log: [{ ruleId: r.id, instrumentId: '', at, text }, ...(s?.log ?? [])].slice(0, 100),
+          }));
+          notify([text]);
+        } catch {
+          // 다음 차례에 다시
+        }
+      }
+    };
+    const t = window.setInterval(() => void check(), NEWS_POLL_MS);
+    const first = window.setTimeout(() => void check(), 15_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+      window.clearTimeout(first);
+    };
+  }, []);
+}
+
 export function AlertWatcher() {
+  useNewsAlerts();
   const rules = useStore(appState, (s) => s.alerts?.rules ?? []);
   const ids = useMemo(() => [...new Set(rules.filter((r) => r.enabled).map((r) => r.instrumentId))], [rules]);
   const quotes = useQuotes(ids);
@@ -61,18 +113,10 @@ export function AlertWatcher() {
         const f = fired.find((x) => x.rule.id === r.id);
         return f ? { ...r, lastFiredAt: at, enabled: r.once ? false : r.enabled } : r;
       }),
+      newsRules: s?.newsRules,
       log: [...fired.map((f) => ({ ruleId: f.rule.id, instrumentId: f.rule.instrumentId, at, text: f.text })), ...(s?.log ?? [])].slice(0, 100),
     }));
-    const cfg = settings.get().alerts ?? { system: true, sound: true };
-    for (const f of fired) {
-      showToast(`🔔 ${f.text}`, undefined, 10_000);
-      if (cfg.system && typeof Notification !== 'undefined') {
-        const show = () => new Notification('TICKER 알림', { body: f.text, silent: true });
-        if (Notification.permission === 'granted') show();
-        else if (Notification.permission !== 'denied') void Notification.requestPermission().then((p) => p === 'granted' && show());
-      }
-    }
-    if (cfg.sound) beep();
+    notify(fired.map((f) => f.text));
   }, [quotes, rules]);
   // 지운 규칙의 기억은 버려요
   useEffect(() => {

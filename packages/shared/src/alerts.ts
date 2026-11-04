@@ -31,8 +31,21 @@ export interface AlertLogEntry {
   text: string;
 }
 
+/** ALRT 뉴스 탭(v0.4): 제목에 낱말이 모두 든 새 헤드라인·공시가 들어오면 알려요(NSE와 같은 검색, -낱말은 빼기) */
+export interface NewsAlertRule {
+  id: string;
+  query: string;
+  enabled: boolean;
+  createdAt: number;
+  /** 마지막으로 알린 줄의 시각(ms). 이보다 새것만 알려요 */
+  lastSeen: number;
+  lastFiredAt?: number;
+}
+
 export interface AlertsState {
   rules: AlertRule[];
+  /** 뉴스 조건(v0.4) */
+  newsRules?: NewsAlertRule[];
   /** 최근 알림(새것부터, 100개까지) */
   log: AlertLogEntry[];
 }

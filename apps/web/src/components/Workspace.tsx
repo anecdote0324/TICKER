@@ -29,6 +29,7 @@ import { Flow } from '../widgets/Flow';
 import { Kwrn } from '../widgets/Kwrn';
 import { Anr, CorpEvents, Dvd, Ee, Ipo } from '../widgets/Corp';
 import { Cf, Em, Ern, Hds, Mgmt, Own, Rels } from '../widgets/Dart';
+import { Firs, Ni, Nse, Top } from '../widgets/NewsViews';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
 import { Menu } from '../widgets/Menu';
@@ -157,6 +158,16 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Em panel={p} />;
     case 'CF':
       return <Cf panel={p} />;
+    case 'CN':
+      return <News panel={p} />;
+    case 'TOP':
+      return <Top panel={p} />;
+    case 'NI':
+      return <Ni panel={p} />;
+    case 'NSE':
+      return <Nse panel={p} />;
+    case 'FIRS':
+      return <Firs panel={p} />;
     case 'ECO':
       return <Eco panel={p} />;
     case 'PORT':

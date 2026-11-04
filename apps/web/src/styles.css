@@ -2530,3 +2530,36 @@ button {
   padding: 3px 6px;
   font-size: 12px;
 }
+
+/* ── v0.4 뉴스 보기(TOP·NI·NSE·FIRS) ── */
+.news-extra {
+  margin-left: 4px;
+  font-size: 10.5px;
+}
+.nse-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 0 6px;
+}
+.nse-saved {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 6px 4px;
+}
+.nse-chip {
+  display: inline-flex;
+  border: 1px solid #333;
+  font-size: 11px;
+}
+.nse-chip.on {
+  border-color: var(--amber);
+}
+.nse-chip button {
+  background: none;
+  border: none;
+  color: var(--value);
+  padding: 0 5px;
+  cursor: pointer;
+}

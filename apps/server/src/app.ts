@@ -8,6 +8,7 @@ import type { RatesService } from './rates';
 import type { FinancialsService } from './financials';
 import type { EcoService } from './eco';
 import type { DartCorpService } from './dart-corp';
+import { breakingItems, topNews, topicItems } from './news-views';
 
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -423,6 +424,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const inst = req.query.id ? hub.instruments.get(req.query.id) : undefined;
     const limit = Math.min(500, Math.max(10, Number(req.query.limit) || 150));
     return deps.news.list(inst, kind, limit);
+  });
+
+  // v0.4 뉴스 보기: TOP·NI·NSE·FIRS(뉴스 아카이브에서)
+  const newsFresh = () => {
+    const at = deps.news!.lastNewsAt;
+    return { source: 'RSS' as const, mode: 'poll' as const, asOf: at, receivedAt: at, intervalMs: 5 * 60_000, asOfFromReceipt: true };
+  };
+  app.get<{ Querystring: { hours?: string } }>('/api/news/top', async (req, reply) => {
+    if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });
+    const hours = Math.min(72, Math.max(3, Number(req.query.hours) || 24));
+    return { items: topNews(deps.news.recentItems(4000), Date.now(), hours), fresh: newsFresh(), archived: deps.news.archive.count() };
+  });
+  app.get<{ Querystring: { topic?: string } }>('/api/news/topic', async (req, reply) => {
+    if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });
+    const items = topicItems(deps.news.recentItems(5000), req.query.topic ?? '');
+    return { items: items.slice(0, 200), total: items.length, fresh: newsFresh(), archived: deps.news.archive.count() };
+  });
+  app.get<{ Querystring: { q?: string; days?: string; since?: string } }>('/api/news/search', async (req, reply) => {
+    if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });
+    const q = (req.query.q ?? '').slice(0, 100);
+    const r = deps.news.search(q, { days: Number(req.query.days) || undefined, since: Number(req.query.since) || undefined });
+    return { items: r.items, total: r.total, fresh: newsFresh(), archived: deps.news.archive.count() };
+  });
+  app.get('/api/news/breaking', async (_req, reply) => {
+    if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });
+    return { items: breakingItems(deps.news.recentItems(3000), Date.now()), fresh: newsFresh(), archived: deps.news.archive.count() };
   });
 
   app.post('/api/credentials/kis/test', async (_req, reply) => {
