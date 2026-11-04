@@ -8,7 +8,7 @@ export type SecurityNeed = 'none' | 'one' | 'optional';
 
 /** 기능 뒤에 붙이는 인자(05 §3.1, v0.2). MOST는 시장 하나, HMAP·IMAP은 지수 하나, COMP는 비교할 종목 여러 개 */
 export interface FunctionArgs {
-  kind: 'market' | 'index' | 'securities';
+  kind: 'market' | 'index' | 'securities' | 'curve';
   /** 자리 표시와 오류 문구에 쓰는 이름: '시장' */
   label: string;
   /** 고를 수 있는 값. 첫 번째가 기본값이에요(시장·지수 인자). aliases도 그 값으로 읽어요(KS → KOSPI) */
@@ -60,6 +60,13 @@ export interface FunctionDef {
 }
 
 const ALL_ASSETS: AssetClass[] = ['EQUITY', 'CRYPTO', 'CURNCY', 'INDEX'];
+
+/** GC 커브 인자(v0.3): 둘 다·미국채·국고채 */
+export const GC_CURVES: FunctionArgs['choices'] = [
+  { code: 'ALL', label: '전체', aliases: ['BOTH'] },
+  { code: 'US', label: '미국채', aliases: ['UST', '미국'] },
+  { code: 'KR', label: '국고채', aliases: ['KTB', '한국', 'KS'] },
+];
 
 /** v0.1에서 만든 기능. 다른 코드는 카탈로그에서 와요. */
 const BUILT: FunctionDef[] = [
@@ -259,13 +266,28 @@ const BUILT: FunctionDef[] = [
     examples: ['N', '005930 N', 'AAPL US N'],
     similar: ['DES'],
   },
+  {
+    code: 'GC',
+    nameKo: '금리 커브',
+    nameEn: 'Graph Curves',
+    summary: '미국채·국고채 금리 커브와 변동',
+    detail: '미국채(재무부)와 국고채(BOK ECOS, 인증키) 금리 커브를 겹쳐 보고, 1주·1개월·1년 전 커브와 비교해요. 테너별 변동(bp)과 10년-2년 같은 스프레드도 보여 줘요.',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['금리', '커브', '국채', '국고채', '미국채'],
+    version: 'v0.3',
+    implemented: true,
+    speed: '일별(미국채 재무부, 국고채 BOK ECOS)',
+    examples: ['GC', 'GC US', 'GC KR'],
+    aliases: ['YCRV', 'CRVF'],
+    args: { kind: 'curve', label: '커브', choices: GC_CURVES, max: 1 },
+  },
 ];
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
   FA: { security: 'one', assetClasses: ['EQUITY'], keywords: ['재무', '재무제표'], summary: '손익·재무상태·현금흐름' },
   ECO: { security: 'none', assetClasses: [], keywords: ['경제지표', '캘린더'], summary: '경제지표 발표 일정' },
-  GC: { security: 'none', assetClasses: [], keywords: ['금리', '커브'], summary: '국고채·미국채 금리 커브' },
   GRID: { security: 'none', assetClasses: [], keywords: ['격자'], summary: '소형 차트 격자' },
   MAP: { security: 'none', assetClasses: [], keywords: ['지도', '세계지도'], summary: '지역별 시장 현황 지도' },
   PORT: { security: 'none', assetClasses: [], keywords: ['포트폴리오', '보유'], summary: '보유 종목 손익' },

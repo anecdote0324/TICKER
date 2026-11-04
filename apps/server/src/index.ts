@@ -14,6 +14,8 @@ import { NewsService } from './news';
 import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
+import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
+import { RatesService } from './rates';
 import { fileSecretBox, Store, type SecretBox } from './store';
 import { recordingLogger, withTimeout, type RecordingLogger } from './util';
 
@@ -72,6 +74,25 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   void withTimeout(store.getSecret('dart'), 15_000, '보안 저장소가 15초 동안 응답하지 않았어요')
     .then((raw) => raw && news.setDartKey((JSON.parse(raw) as { key: string }).key))
     .catch((e: Error) => log.warn(`저장된 DART 인증키를 읽지 못했어요: ${e.message}`));
+
+  // v0.3: GC 금리 커브(미국채 XML, 국고채 ECOS)와 v0.3 키
+  const rates = new RatesService(opts.dataDir, log);
+  const extraKeys: ExtraKeys = {
+    ecos: {
+      label: 'BOK ECOS 인증키',
+      validate: (k) => (/^[0-9A-Za-z]{10,40}$/.test(k) ? undefined : 'ECOS 인증키는 영문·숫자 10~40자예요'),
+      test: (k) => rates.testEcos(k),
+      apply: (k) => rates.setEcosKey(k),
+      hint: tailHint,
+    },
+  };
+  for (const name of EXTRA_KEY_NAMES) {
+    const def = extraKeys[name];
+    if (!def) continue;
+    void withTimeout(store.getSecret(name), 15_000, '보안 저장소가 15초 동안 응답하지 않았어요')
+      .then((raw) => raw && def.apply((JSON.parse(raw) as { key: string }).key))
+      .catch((e: Error) => log.warn(`저장된 ${def.label}을(를) 읽지 못했어요: ${e.message}`));
+  }
 
   const tokenStore: KisTokenStore = {
     async load() {
@@ -138,6 +159,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     version: opts.version ?? '0.1.0-dev',
     makeKis,
     news,
+    rates,
+    extraKeys,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();

@@ -77,13 +77,24 @@ export interface CredentialStatus {
     lastTest?: { ok: boolean; message: string; at: number };
   };
   /** DART 전자공시 인증키(N 뉴스·공시, v0.2) */
-  dart?: {
-    configured: boolean;
-    /** 인증키 끝 4자리만 */
-    keyHint?: string;
-    lastTest?: { ok: boolean; message: string; at: number };
-  };
+  dart?: ApiKeyStatus;
+  /** 한국은행 ECOS 인증키(GC 국고채 커브, ECO, PORT 환율 이력, v0.3) */
+  ecos?: ApiKeyStatus;
+  /** FRED API 키(ECO 발표일, 크레딧 스프레드, v0.3) */
+  fred?: ApiKeyStatus;
+  /** SEC EDGAR 요청에 넣을 연락처(FA 미국 재무제표, v0.3). SEC가 요청마다 연락처를 달라고 해요 */
+  sec?: ApiKeyStatus;
 }
+
+export interface ApiKeyStatus {
+  configured: boolean;
+  /** 끝 4자리만(연락처는 앞부분만) */
+  keyHint?: string;
+  lastTest?: { ok: boolean; message: string; at: number };
+}
+
+/** 설정 → 데이터 연결에서 넣는 v0.3 키 */
+export type ExtraKeyName = 'ecos' | 'fred' | 'sec';
 
 /** 강조 색 후보: 등락·선택·자산군 칩 색과 겹치지 않는 색만(02) */
 /** 강조 색 후보: 블룸버그 앰버(기본), 예전 주황, 흰색, 청록 */

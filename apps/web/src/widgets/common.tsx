@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Freshness, Instrument, Quote } from '@bt/shared';
 import { FreshBadge } from '../components/FreshBadge';
 import { Sparkline } from '../components/Sparkline';
+import { api } from '../api';
 import { arrow, dirClass, fmtPct, fmtPrice } from '../format';
 
 export function TitleBar(props: { fn: string; name: ReactNode; sub?: ReactNode; fresh?: Freshness; inst?: Instrument; attribution?: string; tools?: ReactNode }) {
@@ -73,4 +74,24 @@ export function QuoteRow(props: {
       {props.actions && <span className="row-act">{props.actions}</span>}
     </div>
   );
+}
+
+/** 경로를 주기마다 다시 받아요(HMAP·GC 등). 다시 받다 실패하면 앞 값을 그대로 둬요 */
+export function usePoll<T>(path: string, ms: number): { key: string; data?: T; error?: string } | undefined {
+  const [state, setState] = useState<{ key: string; data?: T; error?: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api
+        .get<T>(path)
+        .then((data) => alive && setState({ key: path, data }))
+        .catch((e: Error) => alive && setState((s) => (s?.key === path && s.data ? s : { key: path, error: e.message })));
+    void load();
+    const t = window.setInterval(load, ms);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, [path, ms]);
+  return state?.key === path ? state : undefined;
 }

@@ -4,6 +4,7 @@ export * from './time';
 export * from './market-data';
 export * from './functions';
 export * from './static-instruments';
+export * from './rates';
 export * from './settings';
 export * from './shortcuts';
 export * from './slots';

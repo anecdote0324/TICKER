@@ -3,7 +3,7 @@
 
 import { formatBadgeDate, formatBadgeTime } from './time';
 
-export type SourceId = 'KIS' | 'BINANCE' | 'ECB' | 'DEMO' | 'RSS' | 'DART';
+export type SourceId = 'KIS' | 'BINANCE' | 'ECB' | 'DEMO' | 'RSS' | 'DART' | 'TREASURY' | 'ECOS' | 'FRED' | 'SEC' | 'BEA';
 
 export const SOURCE_LABEL: Record<SourceId, string> = {
   KIS: '한국투자증권',
@@ -12,6 +12,12 @@ export const SOURCE_LABEL: Record<SourceId, string> = {
   DEMO: '데모 데이터',
   RSS: '뉴스 RSS',
   DART: 'DART 전자공시',
+  TREASURY: '미국 재무부',
+  // 블룸버그 ECOS(경제 캘린더) 기능과 헷갈리지 않게 'BOK ECOS'로 적어요(04)
+  ECOS: 'BOK ECOS (한국은행)',
+  FRED: 'FRED (세인트루이스 연준)',
+  SEC: 'SEC EDGAR',
+  BEA: '미국 경제분석국(BEA)',
 };
 
 /**

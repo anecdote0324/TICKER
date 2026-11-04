@@ -2,6 +2,9 @@
 // - 이 PC 안(127.0.0.1)에서만 열어요.
 // - 실행할 때마다 새로 만드는 토큰을 요청마다 확인해요.
 // - Host·Origin 헤더를 엄격하게 검사하고, 다른 사이트의 접근(CORS)을 허용하지 않아요.
+import type { ExtraKeyName } from '@bt/shared';
+import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
+import type { RatesService } from './rates';
 
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -29,6 +32,10 @@ export interface AppDeps {
   makeKis: (cred: KisCredentials) => KisAdapter;
   log: RecordingLogger;
   news?: NewsService;
+  /** GC 금리 커브(v0.3) */
+  rates?: RatesService;
+  /** v0.3 키(ECOS·FRED·SEC 연락처) */
+  extraKeys?: ExtraKeys;
 }
 
 /** 키를 암호화하거나 푸는 데 이보다 오래 걸리면 보안 저장소가 응답하지 않는 걸로 봐요 */
@@ -215,11 +222,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const dartRaw = await readSecret('dart');
     const d = dartRaw ? (JSON.parse(dartRaw) as { key: string; lastTest?: { ok: boolean; message: string; at: number } }) : undefined;
     const dart: CredentialStatus['dart'] = d ? { configured: true, keyHint: `…${d.key.slice(-4)}`, lastTest: d.lastTest } : { configured: false };
-    if (!raw) return { kis: { configured: false, env: 'real' }, dart, secretKind: store.secretKind };
+    // v0.3 키: 끝 4자리(연락처는 앞부분)만
+    const extra: Partial<CredentialStatus> = {};
+    for (const name of EXTRA_KEY_NAMES) {
+      const r = await readSecret(name);
+      const v = r ? (JSON.parse(r) as { key: string; lastTest?: { ok: boolean; message: string; at: number } }) : undefined;
+      extra[name] = v ? { configured: true, keyHint: deps.extraKeys?.[name]?.hint(v.key) ?? tailHint(v.key), lastTest: v.lastTest } : { configured: false };
+    }
+    if (!raw) return { kis: { configured: false, env: 'real' }, dart, ...extra, secretKind: store.secretKind };
     const c = JSON.parse(raw) as KisCredentials & { lastTest?: CredentialStatus['kis']['lastTest'] };
     return {
       kis: { configured: true, appKeyHint: `…${c.appKey.slice(-4)}`, env: c.env, lastTest: c.lastTest },
       dart,
+      ...extra,
       secretKind: store.secretKind,
     };
   };
@@ -281,6 +296,44 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     deps.news?.setDartKey(undefined);
     log.info('DART 인증키를 지웠어요');
     return { ok: true };
+  });
+
+  // ── v0.3 키(ECOS·FRED·SEC 연락처) ── 기록에는 힌트만 남겨요
+  app.put<{ Params: { name: string }; Body: { key?: string } }>('/api/credentials/:name', async (req, reply) => {
+    const name = req.params.name as ExtraKeyName;
+    const def = EXTRA_KEY_NAMES.includes(name) ? deps.extraKeys?.[name] : undefined;
+    if (!def) return reply.code(404).send({ error: '없는 키예요' });
+    const key = (req.body?.key ?? '').trim();
+    const bad = def.validate(key);
+    if (bad) return reply.code(400).send({ error: bad });
+    const test = await def.test(key);
+    log.info(`${def.label} 확인 ${test.ok ? '성공' : '실패'}(${def.hint(key)}): ${test.message}`);
+    try {
+      await saveSecret(name, JSON.stringify({ key, lastTest: { ...test, at: Date.now() } }));
+    } catch (e) {
+      return reply.code(500).send({ error: `저장하지 못했어요: ${(e as Error).message}` });
+    }
+    if (test.ok) def.apply(key);
+    return { test, status: await credentialStatus() };
+  });
+  app.delete<{ Params: { name: string } }>('/api/credentials/:name', async (req, reply) => {
+    const name = req.params.name as ExtraKeyName;
+    const def = EXTRA_KEY_NAMES.includes(name) ? deps.extraKeys?.[name] : undefined;
+    if (!def) return reply.code(404).send({ error: '없는 키예요' });
+    await saveSecret(name, undefined);
+    def.apply(undefined);
+    log.info(`${def.label}을(를) 지웠어요`);
+    return { ok: true };
+  });
+
+  // ── GC 금리 커브(v0.3) ──
+  app.get('/api/curves', async (_req, reply) => {
+    if (!deps.rates) return reply.code(409).send({ error: '금리 커브를 쓸 수 없어요' });
+    try {
+      return await deps.rates.curves();
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
   });
 
   // ── N 뉴스·공시 ──

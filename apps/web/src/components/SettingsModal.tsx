@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis } from '@bt/command';
 import {
   ACCENT_CHOICES,
+  type ExtraKeyName,
   ASSET_LABEL,
   FUNCTIONS,
   ASSIST_LABEL,
@@ -704,6 +705,9 @@ function Data() {
       </p>
 
       <DartKey cred={cred} onChange={setCred} reload={() => void load()} />
+      {EXTRA_KEYS.map((k) => (
+        <ExtraKey key={k.name} def={k} cred={cred} onChange={setCred} reload={() => void load()} />
+      ))}
 
       <h3>뉴스 RSS</h3>
       <p className="note">
@@ -774,6 +778,94 @@ function DartKey({ cred, onChange, reload }: { cred: (CredentialStatus & { secre
             }}
           >
             인증키 지우기
+          </button>
+        )}
+      </div>
+      {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.message}</p>}
+    </>
+  );
+}
+
+/** v0.3 키(06 데이터 연결): 저장·확인·지우기가 모두 같은 모양이에요 */
+interface ExtraKeyUi {
+  name: ExtraKeyName;
+  title: string;
+  note: string;
+  placeholder: string;
+  /** 저장 버튼을 켤 최소 글자 수 */
+  minLength: number;
+  /** 연락처처럼 가릴 필요 없는 값 */
+  plain?: boolean;
+  emptyLabel: string;
+}
+
+const EXTRA_KEYS: ExtraKeyUi[] = [
+  {
+    name: 'ecos',
+    title: 'BOK ECOS (한국은행)',
+    note: 'GC(금리 커브)의 국고채 커브에 써요(뒤에 ECO·PORT 환율 이력도). 인증키는 한국은행 경제통계시스템 Open API(ecos.bok.or.kr/api)에서 회원 가입 뒤 무료로 받아요. 블룸버그의 ECOS(경제 캘린더) 기능과는 다른 것이에요.',
+    placeholder: '인증키',
+    minLength: 10,
+    emptyLabel: '인증키 없음 · GC에는 미국채만 보여요',
+  },
+];
+
+function ExtraKey({ def, cred, onChange, reload }: { def: ExtraKeyUi; cred: (CredentialStatus & { secretKind: string }) | null; onChange: (c: CredentialStatus & { secretKind: string }) => void; reload: () => void }) {
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; message: string } | null>(null);
+  const d = cred?.[def.name];
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api.put<{ test: { ok: boolean; message: string }; status: CredentialStatus & { secretKind: string } }>(`/api/credentials/${def.name}`, { key });
+      setMsg(r.test);
+      onChange(r.status);
+      if (r.test.ok) setKey('');
+    } catch (e) {
+      setMsg({ ok: false, message: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const id = `key-${def.name}`;
+  return (
+    <>
+      <h3>{def.title}</h3>
+      <p className="note">{def.note}</p>
+      <div className="field">
+        <label>상태</label>
+        <span>
+          {d?.configured ? (
+            <>
+              저장됨 · {d.keyHint}
+              {d.lastTest && <span className={d.lastTest.ok ? 'okmsg' : 'err'}> {d.lastTest.message}</span>}
+            </>
+          ) : (
+            <span className="label">{def.emptyLabel}</span>
+          )}
+        </span>
+      </div>
+      <div className="field">
+        <label htmlFor={id}>{def.plain ? '연락처' : '인증키'}</label>
+        <input id={id} type={def.plain ? 'text' : 'password'} autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={d?.configured ? '바꿀 때만 입력' : def.placeholder} />
+      </div>
+      <div className="field">
+        <label />
+        <button className="btn primary" disabled={busy || key.trim().length < def.minLength} onClick={() => void save()}>
+          {busy ? '확인 중…' : '저장하고 확인'}
+        </button>
+        {d?.configured && (
+          <button
+            className="btn"
+            onClick={async () => {
+              await api.del(`/api/credentials/${def.name}`);
+              setMsg(null);
+              reload();
+            }}
+          >
+            지우기
           </button>
         )}
       </div>

@@ -1,36 +1,17 @@
 // HMAP 업종 히트맵(03 v0.2): 업종마다 오늘·1주·1개월·3개월·올해 등락을 색 칸으로, 추세는 최근 60일 선.
 // 업종을 누르면 그 업종의 큰 종목들(오늘 등락). 종목을 누르면 연동 그룹이 그 종목으로 바뀌어요.
 
-import { useEffect, useState } from 'react';
 import { SECTOR_INDEXES, type SectorHistoryResponse, type SectorMapResponse } from '@bt/shared';
 import { api } from '../api';
 import { fmtBig, fmtNum } from '../format';
 import { getInstrument } from '../stores/instruments';
 import { patchPanel, setPanelSecurity, type PanelState } from '../stores/panels';
-import { TitleBar } from './common';
+import { TitleBar, usePoll } from './common';
 import { PERIODS, SECTOR_INDEX_INST, heat, periodReturn, sectorIndexOf } from './sector';
 
 const MAP_MS = 30_000;
 const HISTORY_MS = 60_000;
 
-function usePoll<T>(path: string, ms: number): { key: string; data?: T; error?: string } | undefined {
-  const [state, setState] = useState<{ key: string; data?: T; error?: string } | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      api
-        .get<T>(path)
-        .then((data) => alive && setState({ key: path, data }))
-        .catch((e: Error) => alive && setState((s) => (s?.key === path && s.data ? s : { key: path, error: e.message })));
-    void load();
-    const t = window.setInterval(load, ms);
-    return () => {
-      alive = false;
-      window.clearInterval(t);
-    };
-  }, [path, ms]);
-  return state?.key === path ? state : undefined;
-}
 
 function Spark({ values }: { values: number[] }) {
   if (values.length < 2) return <span className="hmap-spark" />;

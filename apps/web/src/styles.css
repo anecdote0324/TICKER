@@ -2020,3 +2020,78 @@ button {
 .wsmenu-file {
   border-top: 1px solid #222;
 }
+
+/* GC 금리 커브(v0.3) */
+.gc {
+  overflow: auto;
+  padding: 4px 8px;
+}
+.gc-chart {
+  width: 100%;
+  height: 260px;
+  display: block;
+}
+.gc-tick {
+  font: 10px var(--mono);
+  fill: var(--label);
+}
+.gc-hover {
+  font: 11px var(--mono);
+  fill: var(--value-hi);
+}
+.gc-note {
+  padding: 2px 0;
+  font-size: 11px;
+}
+.gc-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font: 11px var(--mono);
+  color: var(--label);
+  padding: 2px 0 6px;
+}
+.gc-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  vertical-align: middle;
+  margin: 0 3px 0 8px;
+}
+.gc-legend i.dash {
+  background: none;
+  border-top: 1px dashed;
+}
+.gc-tables {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.gc-table {
+  border-collapse: collapse;
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.gc-table th {
+  color: var(--label);
+  font-weight: 500;
+  text-align: right;
+  padding: 2px 8px;
+  border-bottom: 1px solid #222;
+}
+.gc-table th:first-child,
+.gc-table td:first-child {
+  text-align: left;
+}
+.gc-table td {
+  padding: 1px 8px;
+  text-align: right;
+  color: var(--value);
+}
+.gc-table td.up {
+  color: var(--up);
+}
+.gc-table td.down {
+  color: var(--down);
+}

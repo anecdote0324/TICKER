@@ -19,6 +19,7 @@ import { Des } from '../widgets/Des';
 import { Fxc } from '../widgets/Fxc';
 import { Hmap } from '../widgets/Hmap';
 import { Imap } from '../widgets/Imap';
+import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
 import { Menu } from '../widgets/Menu';
 import { Search } from '../widgets/Search';
@@ -110,6 +111,8 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Imap panel={p} />;
     case 'LAST':
       return <Last panel={p} />;
+    case 'GC':
+      return <Gc panel={p} />;
     case 'MENU':
       return <Menu panel={p} />;
     case 'SEARCH':
