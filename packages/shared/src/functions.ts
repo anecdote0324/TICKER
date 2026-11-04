@@ -2,7 +2,7 @@
 
 import { FUNCTION_CATALOG } from './function-catalog.generated';
 import type { AssetClass } from './instrument';
-import { SECTOR_INDEXES } from './sectors';
+import { MAP_INDEXES, SECTOR_INDEXES } from './sectors';
 
 export type SecurityNeed = 'none' | 'one' | 'optional';
 
@@ -226,16 +226,16 @@ const BUILT: FunctionDef[] = [
     nameKo: '업종 타일',
     nameEn: 'Intraday Market Map',
     summary: '업종별 종목 등락 타일',
-    detail: '업종별로 묶은 종목 타일이에요. 넓이는 시가총액, 색은 오늘 등락률. 타일을 누르면 연동 그룹이 그 종목으로 바뀌어요. 기능 뒤에 지수를 붙여요: IMAP KOSPI(시가총액 상위 200), IMAP KOSDAQ, IMAP KOSPI2.',
+    detail: '업종별로 묶은 종목 타일이에요. 넓이는 시가총액, 색은 오늘 등락률. 타일을 누르면 연동 그룹이 그 종목으로 바뀌어요. 기능 뒤에 지수를 붙여요: IMAP KOSPI(시가총액 상위 200), IMAP KOSDAQ, IMAP KOSPI2, IMAP SPX(S&P 500), IMAP NDX(나스닥100). 미국 지수의 구성 종목과 넓이(비중)는 그 지수를 따르는 ETF(SPY·QQQ)의 보유 종목 파일에서 가져와요.',
     security: 'none',
     assetClasses: [],
     keywords: ['업종', '업종타일', '맵'],
     version: 'v0.2',
     implemented: true,
-    speed: '종목 시세 1분마다(30종목씩 조회), 업종 지수 30초마다',
-    examples: ['IMAP', 'IMAP KOSDAQ', 'IMAP KOSPI2'],
+    speed: '종목 시세 1분마다(30종목씩 조회), 업종 지수 30초마다. 미국 지수는 시가총액 순위로 1분마다, 보유 종목 파일은 하루 한 번',
+    examples: ['IMAP', 'IMAP KOSDAQ', 'IMAP KOSPI2', 'IMAP SPX', 'IMAP NDX'],
     similar: ['HMAP'],
-    args: { kind: 'index', label: '지수', choices: SECTOR_INDEXES, max: 1 },
+    args: { kind: 'index', label: '지수', choices: MAP_INDEXES, max: 1 },
   },
   {
     code: 'LAST',

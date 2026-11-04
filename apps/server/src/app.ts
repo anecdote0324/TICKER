@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { BarInterval, ClientMessage, CredentialStatus, InstrumentsResponse, MostKind, SectorIndex, ServerMessage, Settings } from '@bt/shared';
+import { isUsMapIndex, type BarInterval, type ClientMessage, type CredentialStatus, type InstrumentsResponse, type MapIndex, type MostKind, type SectorIndex, type ServerMessage, type Settings } from '@bt/shared';
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
 import type { NewsService } from './news';
@@ -180,9 +180,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // HMAP·IMAP 업종(03 v0.2)
   const sectorIndex = (v?: string): SectorIndex => (v === 'KOSDAQ' || v === 'KOSPI2' ? v : 'KOSPI');
+  // IMAP은 미국 지수(SPX·NDX)도 받아요(v0.3). HMAP 기간별 등락은 국내 지수만
+  const mapIndex = (v?: string): MapIndex => (v && isUsMapIndex(v) ? v : sectorIndex(v));
   app.get<{ Querystring: { index?: string } }>('/api/sectors', async (req, reply) => {
     try {
-      return await hub.sectorMap(sectorIndex(req.query.index));
+      return await hub.sectorMap(mapIndex(req.query.index));
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });
     }

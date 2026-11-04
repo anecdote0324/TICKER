@@ -183,6 +183,7 @@
 - 모니터 2(Deep Dive) 기본 배치(만듦: 두 번째 화면 탭, GP·DES·GIP·FA·N 보라 연동. 저장된 배치에는 더하지 않음)
 - 새 데이터: BOK ECOS(만듦, GC), 미국 재무부 금리 XML(만듦, GC), FRED(만듦, ECO), KOSIS, BEA 공표일정(만듦, ECO), BLS 공표일정(자동 요청 403으로 제외), SEC EDGAR(만듦, FA). FRED 크레딧 스프레드 수집 시작(만듦: ICE BofA OAS 4개, 켤 때와 12시간마다 history.db에)
 - 설정 → 데이터 연결의 v0.3 키(저장·확인·지우기가 같은 모양): BOK ECOS(만듦), SEC 연락처(만듦, FA), FRED(만듦, ECO)
+- IMAP 미국 지수(만듦, 사용자 결정): `IMAP SPX`·`IMAP NDX`. 구성 종목과 넓이는 ETF 보유 종목 파일(SPDR SPY·Invesco QQQ, 12시간마다), 화면 오른쪽 아래에 어느 ETF인지 작게, 업종은 한국투자증권 해외 업종 분류(7일), 등락은 해외 시가총액순위(1분). 실제 계정으로 업종 개수·연속 조회 확인 필요([07](design/07-open-questions.md))
 
 ## v0.4 종목 심화 A: 공시·수급·실적
 

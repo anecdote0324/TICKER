@@ -12,18 +12,20 @@ let rateLeft = 0;
 /** 경로별로 따로 정한 답(시험마다 넣고 지워요) */
 const custom = new Map<string, (q: URLSearchParams) => unknown>();
 /** 받은 요청의 경로와 변수 */
-const requests: Array<{ path: string; q: URLSearchParams }> = [];
+const requests: Array<{ path: string; q: URLSearchParams; h: Record<string, string | string[] | undefined> }> = [];
 let server: Server;
 let rest = '';
 
 beforeAll(async () => {
   server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
-    requests.push({ path: url.pathname, q: url.searchParams });
+    requests.push({ path: url.pathname, q: url.searchParams, h: req.headers });
     const fixed = custom.get(url.pathname);
     if (fixed) {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(fixed(url.searchParams)));
+      // __headers를 주면 응답 머리글로 보내요(연속 조회 tr_cont)
+      const { __headers, ...body } = (fixed(url.searchParams) ?? {}) as { __headers?: Record<string, string> };
+      res.writeHead(200, { 'content-type': 'application/json', ...(__headers ?? {}) });
+      res.end(JSON.stringify(body));
       return;
     }
     const kind = req.url?.startsWith('/oauth2/tokenP') ? 'token' : 'price';
@@ -462,5 +464,63 @@ describe('과거 봉 더 받기(차트를 왼쪽 끝으로 끌 때)', () => {
     expect(s.bars).toHaveLength(4);
     const ends = requests.filter((r) => r.path === path).map((r) => r.q.get('FID_INPUT_DATE_2')!);
     expect([...ends].sort().reverse()).toEqual(ends);
+  });
+});
+
+describe('IMAP 미국 지수(한국투자증권)', () => {
+  it('시가총액순위는 tr_cont가 M이면 tr_cont=N으로 다음 쪽을 받고, 찾던 종목을 다 찾으면 멈춰요', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/overseas-stock/v1/ranking/market-cap';
+    let calls = 0;
+    const row = (symb: string, last: string, rate: string, sign: string) => ({ symb, name: symb, last, rate, sign, tamt: '1000' });
+    custom.set(path, (q) => {
+      calls++;
+      if (q.get('EXCD') === 'NYS') return { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: {}, output2: [row('BRK.B', '480.1', '0.50', '2')], __headers: { tr_cont: 'D' } };
+      return calls === 1
+        ? { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: {}, output2: [row('NVDA', '200.5', '1.20', '2')], __headers: { tr_cont: 'M' } }
+        : { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output1: {}, output2: [row('AAPL', '270.0', '0.80', '5')], __headers: { tr_cont: 'M' } };
+    });
+    const { kis } = adapter(memoryStore());
+    const q = await kis.usMarketCapQuotes(
+      new Map([
+        ['NVDA', 'NAS'],
+        ['AAPL', 'NAS'],
+        ['BRK/B', 'NYS'],
+      ]),
+    );
+    expect(q.get('NVDA')).toMatchObject({ last: 200.5, changePct: 1.2 });
+    // 부호 칸 5(하락)면 음수
+    expect(q.get('AAPL')?.changePct).toBe(-0.8);
+    // BRK.B → 앱 표기 BRK/B
+    expect(q.get('BRK/B')?.last).toBe(480.1);
+    const reqs = requests.filter((r) => r.path === path);
+    const nas = reqs.filter((r) => r.q.get('EXCD') === 'NAS');
+    // NAS는 두 쪽에서 멈춰요(tr_cont M이 와도 다 찾았으니까)
+    expect(nas).toHaveLength(2);
+    expect([nas[0].h.tr_cont, nas[1].h.tr_cont]).toEqual(['', 'N']);
+    expect(nas[0].q.get('VOL_RANG')).toBe('0');
+  });
+
+  it('업종 분류는 업종 코드마다 업종별시세를 받아 종목 → 업종 이름으로 묶고, 전체 줄은 빼요', async () => {
+    mode.token = 'ok';
+    custom.set('/uapi/overseas-price/v1/quotations/industry-price', (q) => ({
+      rt_cd: '0',
+      msg_cd: 'MCA00000',
+      msg1: '정상',
+      output1: { nrec: '3' },
+      output2: q.get('EXCD') === 'NAS' ? [{ icod: '000', name: '전체' }, { icod: '010', name: '반도체' }, { icod: '020', name: '소프트웨어' }] : [{ icod: '010', name: '반도체' }],
+    }));
+    custom.set('/uapi/overseas-price/v1/quotations/industry-theme', (q) => ({
+      rt_cd: '0',
+      msg_cd: 'MCA00000',
+      msg1: '정상',
+      output1: {},
+      output2: q.get('EXCD') === 'NYS' ? [{ symb: 'TSM' }] : q.get('ICOD') === '010' ? [{ symb: 'NVDA' }, { symb: 'AMD' }] : [{ symb: 'MSFT' }],
+    }));
+    const { kis } = adapter(memoryStore());
+    const m = await kis.usIndustries();
+    expect(Object.fromEntries(m)).toEqual({ NVDA: '반도체', AMD: '반도체', MSFT: '소프트웨어', TSM: '반도체' });
+    const theme = requests.filter((r) => r.path.endsWith('/industry-theme'));
+    expect(theme.map((r) => `${r.q.get('EXCD')}:${r.q.get('ICOD')}`)).toEqual(['NAS:010', 'NAS:020', 'NYS:010']);
   });
 });

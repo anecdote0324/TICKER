@@ -1,7 +1,7 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type MostKind, type MostResponse, type SectorHistoryResponse, type SectorIndex, type SectorMapResponse, type SectorMember, type SectorRow, type SecurityProfile, type ServerMessage, type SourceStatus, CRYPTO_EXCLUDED_BASES } from '@bt/shared';
+import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type MostKind, type MostResponse, type SectorHistoryResponse, type MapIndex, type SectorIndex, type SectorMapResponse, isUsMapIndex, US_MAP_ETF, type UsMapIndex, type SectorMember, type SectorRow, type SecurityProfile, type ServerMessage, type SourceStatus, CRYPTO_EXCLUDED_BASES } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
@@ -11,6 +11,7 @@ import { mergeBars, type History } from './history';
 import { krMaster } from './kr-master';
 import type { NewsService } from './news';
 import type { UsActivity } from './us-activity';
+import type { UsMapService } from './us-map';
 import type { Logger } from './util';
 
 export interface Client {
@@ -57,6 +58,8 @@ export class Hub implements AdapterHost {
   usActivity?: UsActivity;
   /** 뉴스·공시(DES의 DART 기업개황도 여기서) */
   news?: NewsService;
+  /** IMAP 미국 지수: ETF 보유 종목과 업종 분류(v0.3) */
+  usMap?: UsMapService;
   private quotes = new Map<string, Quote>();
   private clients = new Set<Client>();
   private refs = new Map<string, number>();
@@ -596,7 +599,8 @@ export class Hub implements AdapterHost {
   }
 
   /** HMAP·IMAP(03 v0.2): 공용 업종 분류(종목 마스터)로 업종과 종목을 묶고, 업종 지수와 종목 시세를 붙여요 */
-  async sectorMap(index: SectorIndex): Promise<SectorMapResponse> {
+  async sectorMap(index: MapIndex): Promise<SectorMapResponse> {
+    if (isUsMapIndex(index)) return this.usSectorMap(index);
     const isPref = (id: string) => this.instruments.get(id)?.flags?.includes('PREF') ?? false;
     const uni = krMaster.universe(index, isPref);
     const byMcap = [...uni].sort((a, b) => (b.info.marketCap ?? 0) - (a.info.marketCap ?? 0));
@@ -644,6 +648,55 @@ export class Hub implements AdapterHost {
     }
     for (const g of groups.values()) g.members.sort((a, b) => b.mcap - a.mcap);
     out.sectors = [...groups.values()].sort((a, b) => b.mcap - a.mcap);
+    return out;
+  }
+
+  /**
+   * IMAP 미국 지수(03 v0.3): 구성 종목·비중은 ETF 보유 종목 파일, 업종은 한국투자증권 해외 업종 분류, 오늘 등락은 시가총액순위.
+   * 업종 분류를 아직 받지 못했으면 한 묶음(업종 확인 중)으로 그려요
+   */
+  private async usSectorMap(index: UsMapIndex): Promise<SectorMapResponse> {
+    const src = US_MAP_ETF[index];
+    const out: SectorMapResponse = { index, sectors: [], holdings: { etf: src.etf, issuer: src.issuer, page: src.page } };
+    if (!this.usMap) return { ...out, liveError: '미국 지수 지도를 쓸 수 없어요' };
+    const h = await this.usMap.holdings(index);
+    out.holdings!.asOf = h.data?.asOf;
+    out.holdings!.error = h.error;
+    if (!h.data) return out;
+    const held = h.data.holdings;
+    const errors: string[] = [];
+    let industries: Map<string, string> | undefined;
+    let quotes = new Map<string, { last: number; changePct: number; turnover?: number }>();
+    if (!this.kis) errors.push('한국투자증권 키를 넣으면 업종과 등락 색이 보여요(지금은 ETF 보유 종목과 비중만)');
+    else {
+      const kis = this.kis;
+      industries = await this.usMap.industryMap(() => kis.usIndustries());
+      if (this.usMap.industryError) errors.push(this.usMap.industryError);
+      else if (!industries) errors.push('한국투자증권에서 미국 업종 분류를 받는 중이에요(처음 한 번, 1~2분)');
+      const want = new Map(held.map((x) => [x.ticker, this.instruments.get(`EQ:US:${x.ticker}`)?.exchange as 'NAS' | 'NYS' | 'AMS' | undefined]));
+      try {
+        quotes = await this.cached(this.sectorQuotes, index, SECTOR_QUOTES_MS, () => kis.usMarketCapQuotes(want));
+      } catch (e) {
+        errors.push(`한국투자증권 조회 실패: ${(e as Error).message}`);
+      }
+      out.fresh = kisPollFresh('US', SECTOR_QUOTES_MS);
+    }
+    if (errors.length) out.liveError = errors.join(' · ');
+    const groups = new Map<string, SectorRow>();
+    for (const x of held) {
+      // 키가 없으면 업종 없이 한 묶음, 분류를 받는 중이면 '업종 확인 중'
+      const sector = industries ? (industries.get(x.ticker) ?? '기타') : this.kis ? '업종 확인 중' : '업종 분류 없음';
+      let g = groups.get(sector);
+      if (!g) groups.set(sector, (g = { code: sector, name: sector, mcap: 0, weight: 0, count: 0, members: [] }));
+      const id = `EQ:US:${x.ticker}`;
+      const inst = this.instruments.get(id);
+      const q = quotes.get(x.ticker);
+      g.count++;
+      g.weight! += x.weight;
+      g.members.push({ id, code: x.ticker, name: inst?.nameKo || x.name, mcap: 0, weight: x.weight, last: q?.last, changePct: q?.changePct, turnover: q?.turnover });
+    }
+    for (const g of groups.values()) g.members.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+    out.sectors = [...groups.values()].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
     return out;
   }
 

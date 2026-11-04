@@ -1,6 +1,6 @@
 // HMAP·IMAP 공용: 패널의 지수, 등락 색, 기간 등락 계산.
 
-import { SECTOR_INDEXES, type SectorIndex } from '@bt/shared';
+import { MAP_INDEXES, SECTOR_INDEXES, type MapIndex, type SectorIndex } from '@bt/shared';
 import type { PanelState } from '../stores/panels';
 
 export function sectorIndexOf(panel: PanelState): SectorIndex {
@@ -8,8 +8,14 @@ export function sectorIndexOf(panel: PanelState): SectorIndex {
   return (SECTOR_INDEXES.find((x) => x.code === a)?.code ?? 'KOSPI') as SectorIndex;
 }
 
+/** IMAP: 국내 지수 셋과 미국 지수 둘(SPX·NDX) */
+export function mapIndexOf(panel: PanelState): MapIndex {
+  const a = panel.args?.[0];
+  return MAP_INDEXES.find((x) => x.code === a)?.code ?? 'KOSPI';
+}
+
 /** 배지가 장 상태를 알 수 있게 넘길 지수 종목 */
-export const SECTOR_INDEX_INST: Record<SectorIndex, string> = { KOSPI: 'IDX:KOSPI', KOSDAQ: 'IDX:KOSDAQ', KOSPI2: 'IDX:KOSPI2' };
+export const SECTOR_INDEX_INST: Record<MapIndex, string> = { KOSPI: 'IDX:KOSPI', KOSDAQ: 'IDX:KOSDAQ', KOSPI2: 'IDX:KOSPI2', SPX: 'IDX:SPX', NDX: 'IDX:NDX' };
 
 /**
  * 등락률 → 칸 배경. full(%)에서 가장 진하고, 0이면 어두운 회색. 등락 색은 설정(--up·--down)을 따라요

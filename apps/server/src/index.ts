@@ -16,6 +16,7 @@ import { Hub } from './hub';
 import { buildInstruments } from './instruments';
 import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import { RatesService } from './rates';
+import { UsMapService } from './us-map';
 import { FinancialsService, secContactError } from './financials';
 import { EcoService } from './eco';
 import { fileSecretBox, Store, type SecretBox } from './store';
@@ -69,6 +70,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const usActivity = new UsActivity(opts.dataDir);
   await usActivity.load();
   hub.usActivity = usActivity;
+  // IMAP 미국 지수(v0.3): ETF 보유 종목 파일과 해외 업종 분류
+  hub.usMap = new UsMapService(opts.dataDir, log);
   // N 뉴스·공시: RSS·DART를 받아 뉴스 아카이브(news.db)에 쌓아요(03 v0.2)
   const news = new NewsService(opts.dataDir, log, join(opts.dataDir, 'news.db'));
   news.start();

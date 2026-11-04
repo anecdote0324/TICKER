@@ -39,6 +39,8 @@ export interface FetchOptions {
   headers?: Record<string, string>;
   method?: string;
   body?: string;
+  /** 응답 머리글을 보고 싶을 때(한국투자증권 연속 조회 tr_cont) */
+  onHeaders?: (h: Headers) => void;
 }
 
 export async function fetchText(url: string, opts: FetchOptions = {}): Promise<string> {
@@ -46,6 +48,7 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
   const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 10_000);
   try {
     const res = await fetch(url, { method: opts.method ?? 'GET', headers: opts.headers, body: opts.body, signal: ctl.signal });
+    opts.onHeaders?.(res.headers);
     const text = await res.text();
     if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status} ${url.split('?')[0]}`, text.slice(0, 500));
     return text;

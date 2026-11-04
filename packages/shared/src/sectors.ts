@@ -12,12 +12,34 @@ export const SECTOR_INDEXES: Array<{ code: SectorIndex; label: string; aliases: 
   { code: 'KOSPI2', label: '코스피200', aliases: ['KOSPI200', 'K200'] },
 ];
 
+/** IMAP만 받는 미국 지수(03 v0.3). 구성 종목은 그 지수를 따르는 ETF의 보유 종목 파일로 정해요 */
+export type UsMapIndex = 'SPX' | 'NDX';
+export type MapIndex = SectorIndex | UsMapIndex;
+
+export const US_MAP_INDEXES: Array<{ code: UsMapIndex; label: string; aliases: string[] }> = [
+  { code: 'SPX', label: 'S&P 500', aliases: ['SP500', 'SNP500', 'SPY', 'US500'] },
+  { code: 'NDX', label: '나스닥100', aliases: ['NASDAQ100', 'NAS100', 'NQ100', 'QQQ'] },
+];
+
+/** IMAP 인자: 국내 지수 셋과 미국 지수 둘 */
+export const MAP_INDEXES: Array<{ code: MapIndex; label: string; aliases: string[] }> = [...SECTOR_INDEXES, ...US_MAP_INDEXES];
+
+export const isUsMapIndex = (x: string): x is UsMapIndex => x === 'SPX' || x === 'NDX';
+
+/** 미국 지수의 구성 종목을 가져오는 ETF(보유 종목 파일을 날마다 내놓는 곳) */
+export const US_MAP_ETF: Record<UsMapIndex, { etf: string; issuer: string; page: string }> = {
+  SPX: { etf: 'SPY', issuer: 'State Street SPDR', page: 'https://www.ssga.com/us/en/intermediary/etfs/state-street-spdr-sp-500-etf-trust-spy' },
+  NDX: { etf: 'QQQ', issuer: 'Invesco', page: 'https://www.invesco.com/qqq-etf/en/home.html' },
+};
+
 export interface SectorMember {
   id: string;
   code: string;
   name: string;
-  /** 시가총액(원). 시세가 있으면 현재가 × 상장주식수, 없으면 종목 마스터(전일) */
+  /** 시가총액(원). 시세가 있으면 현재가 × 상장주식수, 없으면 종목 마스터(전일). 미국 지수는 0이고 weight로 그려요 */
   mcap: number;
+  /** 미국 지수: ETF 안의 비중(%). 타일 넓이 */
+  weight?: number;
   last?: number;
   changePct?: number;
   turnover?: number;
@@ -31,8 +53,9 @@ export interface SectorRow {
   changePct?: number;
   last?: number;
   turnover?: number;
-  /** 업종 종목 시가총액 합(원) */
+  /** 업종 종목 시가총액 합(원). 미국 지수는 0이고 weight가 비중 합(%) */
   mcap: number;
+  weight?: number;
   /** 종목 수(지수 안 전체) */
   count: number;
   /** 타일에 그릴 종목(시가총액 큰 순). 코스피·코스닥은 시가총액 상위 200종목 안에서만 */
@@ -40,13 +63,15 @@ export interface SectorRow {
 }
 
 export interface SectorMapResponse {
-  index: SectorIndex;
+  index: MapIndex;
   sectors: SectorRow[];
   fresh?: Freshness;
   /** 등락을 받지 못한 이유(키 없음 등). 업종과 종목 배치는 종목 마스터로 그려요 */
   liveError?: string;
   /** 종목 마스터 날짜 */
   asOf?: string;
+  /** 미국 지수: 구성 종목을 가져온 ETF 보유 종목 파일(asOf는 파일의 기준일 YYYY-MM-DD) */
+  holdings?: { etf: string; issuer: string; asOf?: string; page: string; error?: string };
 }
 
 /** HMAP 기간별 등락: 업종 지수 일봉 종가(오래된 것부터) */

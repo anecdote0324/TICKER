@@ -78,6 +78,7 @@
 | 시황·뉴스 제목 | TOP (v0.4) | |
 | 주식현재가 시세(FHKST01010100)의 PER·PBR·EPS·BPS·52주 최고·최저·상장주수·업종·외국인 소진율, 해외주식 현재가상세(HHDFS76200200)의 같은 칸과 원화 환산가 | DES (v0.2) | 시가총액은 현재가 × 상장주수로 계산해요. 패널이 열려 있는 동안 60초마다 |
 | 국내업종 구분별전체시세(FHPUP02140000), 관심종목(멀티종목) 시세조회(FHKST11300006, 30종목씩), 업종 지수 일봉(FHKUP03500100) | HMAP·IMAP (v0.2) | 업종 지수 30초, 종목 시세 1분(코스피·코스닥 상위 200은 7번), 업종 지수 일봉은 하루 한 번(업종마다 3번, 뒤에서) |
+| 해외주식 업종별코드조회(HHDFS76370100)·업종별시세(HHDFS76370000), 해외주식 시가총액순위(HHDFS76350100) | IMAP 미국 지수 (v0.3) | 업종 분류는 7일에 한 번(나스닥·뉴욕의 업종마다 연속 조회, 뒤에서), 시가총액순위는 1분마다(나스닥·뉴욕, 찾던 종목을 다 찾으면 멈춰요) |
 | 국내 거래량순위(FHPST01710000)·등락률 순위(FHPST01700000), 해외 거래량·거래대금·상승률/하락률 순위(HHDFS76310010·HHDFS76320010·HHDFS76290000) | MOST (v0.2) | 30초마다. 미국은 나스닥과 뉴욕 순위를 받아 합쳐요 |
 | 종목 마스터 뒷부분의 업종 대·중·소분류 코드, 상장일, 상장주수, 매출액·영업이익·ROE, 시가총액과 업종 이름 파일(idxcode.mst) | DES, 공용 업종 분류(v0.2) | 키 없이 하루 한 번 받는 파일이에요 |
 
@@ -203,6 +204,19 @@
 | KRX Open API 옵션 일별 | KOSPI200 옵션 과거 시세(T-1). 내재변동성 이력을 다시 계산하는 데 써요(내재변동성 필드 포함 여부 확인 필요) | 무료 | v0.10 |
 | Binance 옵션 공개 API(eapi) | 코인 옵션 체인·행사가별 IV | 무료(쓸 수 있는지 확인 필요) | v0.10 |
 
+## ETF 보유 종목 파일 (IMAP 미국 지수, v0.3)
+
+S&P 500과 나스닥100의 구성 종목 목록은 지수 회사(S&P Dow Jones Indices·Nasdaq)가 유료로 팔아요. 대신 그 지수를 따르는 ETF가 날마다 공개하는 보유 종목 파일을 써요(사용자 결정). ETF는 지수를 그대로 담아서 종목과 비중이 거의 같아요. 화면에는 어느 ETF의 보유 종목인지와 기준일을 작게 적어요.
+
+| 지수 | ETF | 받는 곳 | 형식 | 앱에서 |
+|---|---|---|---|---|
+| S&P 500 | State Street SPDR SPY | `ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-spy.xlsx` (키 없음) | 엑셀(xlsx). 위 4줄에 펀드 이름·기준일(`As of 03-Nov-2026`), 5번째 줄이 머리줄(Name·Ticker·Identifier·SEDOL·Weight·Sector·Shares Held·Local Currency). Sector 칸은 `-`로 비어 있어요. 현금 줄(Ticker `-`)과 임시 코드(`2602335D`) 줄이 섞여 있어요 | 머리줄을 찾아 종목 코드·이름·비중(%)만 읽고, 주식 코드 모양이 아닌 줄은 빼요. `BRK.B` → `BRK/B`. 503종목(2026-11-03) |
+| 나스닥100 | Invesco QQQ | `dng-api.invesco.com/cache/v1/accounts/en_US/shareclasses/QQQ/holdings/fund?idType=ticker&interval=monthly&productType=ETF` (키 없음) | JSON. `effectiveDate`, `holdings[]`의 `ticker`·`issuerName`·`percentageOfTotalNetAssets`·`securityTypeCode`. 업종 칸은 없어요 | 주식(COM)과 예탁증서(ADR·DRNY)만, 현금(CURR)·선물(IFUT)·담보(CURRCOL·SYN)는 빼요. 101종목(2026-11-03) |
+
+- 12시간에 한 번 받아 데이터 폴더(`etf-holdings-SPY.json`·`etf-holdings-QQQ.json`)에 둬요. 받지 못하면 마지막으로 받은 파일을 쓰고 화면에 "(이전 파일)"이라고 적어요. 받은 파일은 커밋하지 않아요.
+- 두 파일 모두 업종이 없어서, 업종은 한국투자증권 해외 업종 분류(업종별코드조회 → 업종별시세)로 묶어요. 같은 이름의 업종은 나스닥·뉴욕을 합쳐요. 분류에 없는 종목은 "기타", 분류를 받는 동안은 "업종 확인 중" 한 묶음이에요.
+- iShares IVV(S&P 500, 업종 칸 있음)의 CSV 주소는 개발 환경에서 CSV 대신 상품 페이지(HTML)를 돌려줘서 쓰지 않았어요. Invesco의 예전 다운로드 주소(`invesco.com/us/financial-products/etfs/holdings/main/holdings/0?...`)는 안내 페이지로 넘어가요.
+
 ## 쓰지 않을 소스
 
 | 소스 | 이유 |
@@ -215,6 +229,7 @@
 | 금융위 소매채권수익률 | 2022-03 이후 갱신이 멈췄어요 |
 | Cboe 풋콜비율 CSV | 2019-10에서 갱신이 멈췄어요. 현행 풋콜비율 웹 페이지는 자동 추출이 금지돼 있어요 |
 | FRED 스왑 금리 | 2016~2022년에 중단·삭제됐어요. 무료 스왑 커브가 없어요 |
+| TradingView 히트맵 | 화면을 퍼 오는 것은 약관상 안 되고, 구성 종목 데이터를 따로 주지 않아요. IMAP 미국 지수는 ETF 보유 종목 파일로 대신해요 |
 
 ## 설정에 필요한 키
 
@@ -246,6 +261,7 @@
 | 순위 조회(`domestic_stock/volume_rank`·`fluctuation`, `overseas_stock/trade_vol`·`trade_pbmn`·`updown_rate`) | 국내 거래량순위는 `FID_BLNG_CLS_CODE` 0 평균거래량·3 거래금액순, `FID_INPUT_ISCD` 0000 전체·그 밖은 업종코드, 응답 `output` 배열. 등락률 순위는 소문자 변수(`fid_rank_sort_cls_code` 등), 응답 `output`. 해외 순위는 거래소(`EXCD`)마다, 응답 `output2` 배열, `GUBN` 1 상승률·0 하락률, `VOL_RANG` 거래량 조건(3 = 1만 주 이상) | 국내는 `0001`(코스피)·`1001`(코스닥) 업종코드로 시장을 골라요. 등락률은 정렬 `0` 상승·`1` 하락. 부호 칸(`prdy_vrss_sign`·`sign`: 4·5 하락)을 따라 등락의 부호를 맞춰요. 시장 분류 코드는 `J`(KRX)로 받아서 NXT(넥스트레이드) 거래는 들어가지 않아요(공식 예제: 거래량순위는 `J`·`NX`·`UN` 통합, 등락률 순위는 `J`·`NX`). 실제 계정에서 국내 등락률 순위가 네이버 증권과 거의 같은 순서로 오는 것을 확인했어요(v0.2.0-beta.1). 이웃한 두 종목이 0.1%p 안팎 차이로 자리를 바꾸는 정도예요 |
 | 업종 지수·멀티종목 시세(`domestic_stock/inquire_index_category_price`, `intstock_multprice`) | 구분별전체시세: 코스피 `0001`·`K`, 코스닥 `1001`·`Q`, 코스피200 `2001`·`K2`, `FID_COND_SCR_DIV_CODE` 20214, 응답 `output2`에 `bstp_cls_code`·`bstp_nmix_prdy_ctrt`. 멀티종목: `FID_COND_MRKT_DIV_CODE_n`·`FID_INPUT_ISCD_n`(n = 1~30), 응답 `output`에 `inter_shrn_iscd`·`inter2_prpr`·`prdy_ctrt` | 종목 마스터의 코스피200 섹터 글자(1 건설, 2 중공업, 3 철강소재, 4 에너지화학, 5 정보기술, 6 금융, 7 생활소비재, 8 경기소비재, 9 산업재, A 헬스케어, B 커뮤니케이션서비스)를 코스피200 섹터 지수(2009~2018, 2039)로 이어요(2026-11-03 마스터에서 대표 종목으로 맞춤, 201종목) |
 | 해외주식 현재가상세(`overseas_stock/price_detail`, HHDFS76200200) | `perx`·`pbrx`·`epsx`·`bpsx`, `h52p`·`l52p`(날짜 `h52d`·`l52d`), `shar` 상장주수, `tomv` 시가총액, `e_icod` 업종, `t_xprc` 원화 환산가 | DES. `e_icod`에 어떤 글이 오는지는 확인 필요 |
+| 연속 조회(tr_cont) | 시가총액순위·업종별시세 예제는 응답 머리글 `tr_cont`가 `M`·`F`이면 다음 쪽이 있어서, 요청 머리글 `tr_cont=N`으로 같은 변수(`KEYB`는 그대로)를 다시 보내요(최대 10번). 요청 사이에 잠깐 쉬어요(`smart_sleep`) | 같게. 처음 조회는 `tr_cont`를 빈 값으로, 다음 쪽은 `N`. 쉬는 시간은 초당 호출 수 관리가 맡아요 |
 
 ## 참고 자료
 

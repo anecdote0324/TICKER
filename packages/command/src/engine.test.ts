@@ -469,9 +469,18 @@ describe('기능 인자(05 §3.1, v0.2): HMAP·IMAP 지수', () => {
     expect(run('IMAP 코스피200').plan).toMatchObject({ exec: { args: ['KOSPI2'] } });
     expect(run('HMAP KOSPI200').plan).toMatchObject({ exec: { args: ['KOSPI2'] } });
   });
-  it('빈 칸이면 지수 줄 세 개, 모르는 지수는 실행 안 됨', () => {
-    expect(run('IMAP ').rows.map((r) => r.code)).toEqual(['KOSPI', 'KOSDAQ', 'KOSPI2']);
+  it('빈 칸이면 지수 줄(IMAP은 미국 지수 둘까지 다섯 개), 모르는 지수는 실행 안 됨', () => {
+    expect(run('IMAP ').rows.map((r) => r.code)).toEqual(['KOSPI', 'KOSDAQ', 'KOSPI2', 'SPX', 'NDX']);
+    expect(run('HMAP ').rows.map((r) => r.code)).toEqual(['KOSPI', 'KOSDAQ', 'KOSPI2']);
+    // HMAP 기간별 등락은 국내 업종 지수만
     expect(run('HMAP SPX').plan.kind).toBe('error');
+  });
+  it('IMAP 미국 지수(v0.3): SPX·NDX와 별칭(SP500·QQQ·나스닥100)', () => {
+    expect(run('IMAP SPX').plan).toMatchObject({ exec: { fn: 'IMAP', args: ['SPX'], canonical: 'IMAP SPX' } });
+    expect(run('IMAP SP500').plan).toMatchObject({ exec: { args: ['SPX'] } });
+    expect(run('IMAP NDX').plan).toMatchObject({ exec: { args: ['NDX'] } });
+    expect(run('IMAP QQQ').plan).toMatchObject({ exec: { args: ['NDX'] } });
+    expect(run('IMAP 나스닥100').plan).toMatchObject({ exec: { args: ['NDX'] } });
   });
 });
 

@@ -110,6 +110,13 @@ const MOST_ROWS = 30;
 export const MOST_REFRESH_MS = 30_000;
 
 /** 응답의 output이 배열이 아니어도(한 건) 배열로 */
+/** 부호 칸(1 상한, 2 상승, 3 보합, 4 하한, 5 하락)을 따른 값. 값이 부호 없이 오는 경우가 있어요 */
+function signedBy(v: unknown, sign: unknown): number | undefined {
+  const n = Number(v);
+  if (v === undefined || v === '' || !Number.isFinite(n)) return undefined;
+  return sign === '4' || sign === '5' ? -Math.abs(n) : sign === '1' || sign === '2' ? Math.abs(n) : n;
+}
+
 function asRows(v: unknown): KisRow[] {
   return Array.isArray(v) ? (v as KisRow[]) : v && typeof v === 'object' ? [v as KisRow] : [];
 }
@@ -410,10 +417,10 @@ export class KisAdapter implements Adapter {
 
   // ── REST ──
 
-  private async get(path: string, trId: string, params: Record<string, string>, pri: Priority): Promise<KisResponse> {
+  private async get(path: string, trId: string, params: Record<string, string>, pri: Priority, cont?: { trCont: string; out?: { next: string } }): Promise<KisResponse> {
     return this.budget.schedule(pri, async () => {
       for (let attempt = 0; ; attempt++) {
-        const r = await this.fetchOnce(path, trId, params).catch((e: Error) => e);
+        const r = await this.fetchOnce(path, trId, params, cont).catch((e: Error) => e);
         if (!(r instanceof Error)) return r;
         // 초당 거래건수 초과(EGW00201): 모든 조회를 잠깐 멈추고 이 자리에서 다시 해요.
         // 대기줄에 다시 서면 자리를 잡은 채 자기 차례를 기다려서, 자리가 다 차면 대기줄 전체가 멈춰요
@@ -430,7 +437,25 @@ export class KisAdapter implements Adapter {
     });
   }
 
-  private async fetchOnce(path: string, trId: string, params: Record<string, string>): Promise<KisResponse> {
+  /**
+   * 연속 조회(공식 예제의 tr_cont): 첫 조회는 빈 값, 응답 머리글 tr_cont가 M·F이면 다음 쪽이 있어서 tr_cont=N으로 같은 변수를 다시 보내요.
+   * maxPages까지 받고, each가 false를 돌려주면 멈춰요
+   */
+  private async getPages(path: string, trId: string, params: Record<string, string>, pri: Priority, maxPages: number, each: (r: KisResponse) => boolean | void): Promise<number> {
+    let trCont = '';
+    let page = 0;
+    while (page < maxPages) {
+      const out = { next: '' };
+      const r = await this.get(path, trId, params, pri, { trCont, out });
+      page++;
+      if (each(r) === false) break;
+      if (out.next !== 'M' && out.next !== 'F') break;
+      trCont = 'N';
+    }
+    return page;
+  }
+
+  private async fetchOnce(path: string, trId: string, params: Record<string, string>, cont?: { trCont: string; out?: { next: string } }): Promise<KisResponse> {
     {
       const token = await this.getToken();
       const qs = new URLSearchParams(params).toString();
@@ -443,8 +468,10 @@ export class KisAdapter implements Adapter {
             appsecret: this.cred.appSecret,
             tr_id: trId,
             custtype: 'P',
+            ...(cont ? { tr_cont: cont.trCont } : {}),
           },
           timeoutMs: 10_000,
+          onHeaders: cont?.out ? (h) => (cont.out!.next = (h.get('tr_cont') ?? '').trim()) : undefined,
         });
         if (r.rt_cd !== '0') throw new Error(`${trId} ${r.msg_cd} ${r.msg1}`.trim());
         return r;
@@ -1198,6 +1225,57 @@ export class KisAdapter implements Adapter {
       .slice(0, MOST_ROWS)
       .map((x, i) => ({ ...x, rank: i + 1 }));
     return { rows, fresh };
+  }
+
+  /**
+   * 미국 업종 분류(IMAP 미국 지수, 03 v0.3). 업종별코드조회(HHDFS76370100)로 거래소의 업종을 받고, 업종마다 업종별시세(HHDFS76370000)로
+   * 그 업종의 종목을 받아요(연속 조회). 변수는 공식 예제 overseas_stock/industry_price·industry_theme와 같아요. 같은 이름의 업종은 거래소가 달라도 한 업종이에요
+   */
+  async usIndustries(excds: Array<'NAS' | 'NYS' | 'AMS'> = ['NAS', 'NYS']): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (const excd of excds) {
+      const list = await this.get('/uapi/overseas-price/v1/quotations/industry-price', 'HHDFS76370100', { EXCD: excd, AUTH: '' }, 2);
+      const inds = asRows(list.output2)
+        .map((o) => ({ code: String(o.icod ?? '').trim(), name: String(o.name ?? '').trim() }))
+        // 전체(모든 종목) 줄은 빼요
+        .filter((x) => x.code && x.name && !/전체|^all$/i.test(x.name) && !/^0+$/.test(x.code));
+      if (list.output2?.length) this.sampleRows('HHDFS76370100', excd, `${inds.length}업종`, asRows(list.output2), (x) => [x.icod, x.name]);
+      for (const ind of inds) {
+        await this.getPages('/uapi/overseas-price/v1/quotations/industry-theme', 'HHDFS76370000', { EXCD: excd, ICOD: ind.code, VOL_RANG: '0', AUTH: '', KEYB: '' }, 2, 10, (r) => {
+          for (const o of asRows(r.output2)) {
+            const sym = String(o.symb ?? '').trim().replace(/\./g, '/');
+            if (sym && !out.has(sym)) out.set(sym, ind.name);
+          }
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 미국 종목 오늘 시세(IMAP 미국 지수): 거래소별 시가총액순위(HHDFS76350100)를 연속 조회로 받아요(공식 예제 overseas_stock/market_cap).
+   * want에 든 종목을 다 찾았거나 쪽이 끝나면 멈춰요(거래소마다 최대 maxPages쪽)
+   */
+  async usMarketCapQuotes(want: Map<string, 'NAS' | 'NYS' | 'AMS' | undefined>, maxPages = 10): Promise<Map<string, { last: number; changePct: number; turnover?: number }>> {
+    const out = new Map<string, { last: number; changePct: number; turnover?: number }>();
+    const excds = new Set<'NAS' | 'NYS' | 'AMS'>(['NAS', 'NYS']);
+    for (const x of want.values()) if (x) excds.add(x);
+    for (const excd of excds) {
+      // 거래소를 모르는 종목은 어느 거래소에서든 찾으면 돼요
+      const left = () => [...want].some(([t, x]) => (x === excd || x === undefined) && !out.has(t));
+      if (!left()) continue;
+      await this.getPages('/uapi/overseas-stock/v1/ranking/market-cap', 'HHDFS76350100', { EXCD: excd, VOL_RANG: '0', KEYB: '', AUTH: '' }, 1, maxPages, (r) => {
+        for (const o of asRows(r.output2)) {
+          const sym = String(o.symb ?? '').trim().replace(/\./g, '/');
+          const last = Number(o.last);
+          const rate = signedBy(o.rate, o.sign);
+          if (!sym || !Number.isFinite(last) || rate === undefined || out.has(sym)) continue;
+          out.set(sym, { last, changePct: rate, turnover: Number(o.tamt) || undefined });
+        }
+        return left();
+      });
+    }
+    return out;
   }
 
   /**

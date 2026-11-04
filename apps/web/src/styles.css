@@ -1827,6 +1827,18 @@ button {
   color: var(--label);
   font-size: 11px;
 }
+/* 미국 지수: 구성 종목을 가져온 ETF(작게) */
+.imap-src {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  z-index: 3;
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--label);
+  font-size: 10px;
+  pointer-events: auto;
+}
 
 /* ── HMAP 업종 히트맵 ── */
 .hmap-cell {

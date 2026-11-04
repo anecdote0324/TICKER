@@ -1,22 +1,25 @@
 // IMAP 업종 타일(03 v0.2): 업종별로 묶은 종목 타일. 넓이는 시가총액, 색은 오늘 등락률(finviz식 시장 지도).
 // 지수는 인자(IMAP KOSDAQ)나 위 버튼으로. 타일을 누르면 연동 그룹이 그 종목으로 바뀌어요.
+// 미국 지수(IMAP SPX·NDX, v0.3)는 ETF 보유 종목 파일의 구성 종목과 비중으로 그리고, 어느 ETF인지 오른쪽 아래에 작게 적어요.
 
 import { useEffect, useRef, useState } from 'react';
-import { SECTOR_INDEXES, type SectorMapResponse } from '@bt/shared';
+import { MAP_INDEXES, type SectorMapResponse, type SectorMember } from '@bt/shared';
 import { api } from '../api';
 import { fmtBig } from '../format';
 import { getInstrument } from '../stores/instruments';
 import { patchPanel, setPanelSecurity, type PanelState } from '../stores/panels';
 import { TitleBar } from './common';
-import { SECTOR_INDEX_INST, heat, sectorIndexOf } from './sector';
+import { SECTOR_INDEX_INST, heat, mapIndexOf } from './sector';
 import { squarify, type Rect } from './treemap';
 
 const REFRESH_MS = 60_000;
 /** 업종 이름 띠 높이 */
 const HEAD = 14;
+/** 타일 넓이: 미국 지수는 ETF 비중, 국내는 시가총액 */
+const sizeOf = (m: SectorMember) => m.weight ?? m.mcap;
 
 export function Imap({ panel }: { panel: PanelState }) {
-  const index = sectorIndexOf(panel);
+  const index = mapIndexOf(panel);
   const [state, setState] = useState<{ index: string; data?: SectorMapResponse; error?: string } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -51,9 +54,10 @@ export function Imap({ panel }: { panel: PanelState }) {
   }, []);
 
   const sectors = (data?.sectors ?? []).filter((s) => s.members.length > 0);
-  const sizes = sectors.map((s) => s.members.reduce((t, m) => t + m.mcap, 0));
+  const sizes = sectors.map((s) => s.members.reduce((t, m) => t + sizeOf(m), 0));
   const sRects = squarify(sizes, { x: 0, y: 0, w: size.w, h: size.h });
-  const label = SECTOR_INDEXES.find((x) => x.code === index)?.label ?? index;
+  const label = MAP_INDEXES.find((x) => x.code === index)?.label ?? index;
+  const src = data?.holdings;
 
   return (
     <>
@@ -65,7 +69,7 @@ export function Imap({ panel }: { panel: PanelState }) {
         inst={getInstrument(SECTOR_INDEX_INST[index])}
         tools={
           <>
-            {SECTOR_INDEXES.map((x) => (
+            {MAP_INDEXES.map((x) => (
               <button key={x.code} className={x.code === index ? 'on' : ''} onClick={() => patchPanel(panel.id, { args: [x.code] })} title={`IMAP ${x.code}`}>
                 {x.label}
               </button>
@@ -80,16 +84,16 @@ export function Imap({ panel }: { panel: PanelState }) {
           const showHead = r.h > HEAD * 2 && r.w > 40;
           const inner: Rect = showHead ? { x: r.x, y: r.y + HEAD, w: r.w, h: r.h - HEAD } : r;
           const mRects = squarify(
-            s.members.map((m) => m.mcap),
+            s.members.map(sizeOf),
             inner,
           );
           const withChg = s.members.filter((m) => m.changePct !== undefined);
-          const w = withChg.reduce((t, m) => t + m.mcap, 0);
-          const sectorChg = s.changePct ?? (w > 0 ? withChg.reduce((t, m) => t + m.mcap * m.changePct!, 0) / w : undefined);
+          const w = withChg.reduce((t, m) => t + sizeOf(m), 0);
+          const sectorChg = s.changePct ?? (w > 0 ? withChg.reduce((t, m) => t + sizeOf(m) * m.changePct!, 0) / w : undefined);
           return (
             <div key={s.code}>
               {showHead && (
-                <div className="imap-head" style={{ left: r.x, top: r.y, width: r.w }} title={`${s.name} · 시가총액 ${fmtBig(s.mcap, 'KRW')} · ${s.count}종목`}>
+                <div className="imap-head" style={{ left: r.x, top: r.y, width: r.w }} title={`${s.name} · ${s.weight !== undefined ? `${src?.etf ?? 'ETF'} 비중 ${s.weight.toFixed(2)}%` : `시가총액 ${fmtBig(s.mcap, 'KRW')}`} · ${s.count}종목`}>
                   <span>{s.name}</span>
                   {sectorChg !== undefined && <span className={sectorChg > 0 ? 'up' : sectorChg < 0 ? 'down' : 'flat'}>{`${sectorChg > 0 ? '+' : ''}${sectorChg.toFixed(2)}%`}</span>}
                 </div>
@@ -104,7 +108,7 @@ export function Imap({ panel }: { panel: PanelState }) {
                     className="imap-tile"
                     style={{ left: mr.x, top: mr.y, width: mr.w, height: mr.h, background: heat(m.changePct) }}
                     onClick={() => setPanelSecurity(panel.id, m.id)}
-                    title={`${m.name} ${m.code}\n${m.last !== undefined ? m.last.toLocaleString('en-US') : '—'} ${m.changePct !== undefined ? `${m.changePct > 0 ? '+' : ''}${m.changePct.toFixed(2)}%` : ''}\n시가총액 ${fmtBig(m.mcap, 'KRW')}`}
+                    title={`${m.name} ${m.code}\n${m.last !== undefined ? m.last.toLocaleString('en-US') : '—'} ${m.changePct !== undefined ? `${m.changePct > 0 ? '+' : ''}${m.changePct.toFixed(2)}%` : ''}\n${m.weight !== undefined ? `${src?.etf ?? 'ETF'} 비중 ${m.weight.toFixed(2)}%` : `시가총액 ${fmtBig(m.mcap, 'KRW')}`}`}
                   >
                     {mr.w > 30 && mr.h > 14 && <span className="imap-name">{m.name}</span>}
                     {big && m.changePct !== undefined && <span className="imap-chg">{`${m.changePct > 0 ? '+' : ''}${m.changePct.toFixed(2)}%`}</span>}
@@ -120,8 +124,15 @@ export function Imap({ panel }: { panel: PanelState }) {
             <span className="err">{cur.error}</span>
           </div>
         )}
-        {data && sectors.length === 0 && <div className="empty-body">종목 마스터를 아직 받지 못해서 업종을 묶을 수 없어요</div>}
+        {data && sectors.length === 0 && (
+          <div className="empty-body">{src ? <span className="err">{src.error ?? `${src.etf} 보유 종목 파일을 아직 받지 못했어요`}</span> : '종목 마스터를 아직 받지 못해서 업종을 묶을 수 없어요'}</div>
+        )}
         {data?.liveError && <div className="imap-note">{data.liveError}</div>}
+        {src && sectors.length > 0 && (
+          <div className="imap-src" title={`${label} 구성 종목과 타일 넓이(비중)는 ${src.issuer} ${src.etf}의 보유 종목 파일에서 가져왔어요. 지수 자체와 조금 다를 수 있어요.\n${src.page}${src.error ? `\n${src.error}(마지막으로 받은 파일을 보여 줘요)` : ''}`}>
+            {`구성 종목: ${src.etf} 보유 종목${src.asOf ? ` ${src.asOf.slice(5).replace('-', '/')}` : ''}${src.error ? ' (이전 파일)' : ''}`}
+          </div>
+        )}
       </div>
     </>
   );

@@ -124,3 +124,53 @@ describe('MOST 상위 종목', () => {
     await expect(hub.most('KS', 'volume')).rejects.toThrow(/한국투자증권 키/);
   });
 });
+
+describe('IMAP 미국 지수(v0.3)', () => {
+  const holdings = {
+    data: {
+      etf: 'SPY',
+      asOf: '2026-11-03',
+      savedAt: 0,
+      holdings: [
+        { ticker: 'NVDA', name: 'NVIDIA CORP', weight: 7.6 },
+        { ticker: 'MSFT', name: 'MICROSOFT CORP', weight: 5.9 },
+        { ticker: 'JPM', name: 'JPMORGAN CHASE', weight: 1.4 },
+        { ticker: 'XYZ', name: 'UNKNOWN', weight: 0.1 },
+      ],
+    },
+  };
+
+  it('키가 없으면 ETF 보유 종목과 비중만 한 묶음으로, 어느 ETF인지 함께', async () => {
+    const hub = new Hub(consoleLogger('test', true));
+    hub.usMap = { holdings: async () => holdings } as never;
+    const r = await hub.sectorMap('SPX');
+    expect(r.holdings).toMatchObject({ etf: 'SPY', asOf: '2026-11-03', issuer: 'State Street SPDR' });
+    expect(r.sectors.map((s) => s.name)).toEqual(['업종 분류 없음']);
+    expect(r.sectors[0].members.map((m) => [m.id, m.weight])).toEqual([
+      ['EQ:US:NVDA', 7.6],
+      ['EQ:US:MSFT', 5.9],
+      ['EQ:US:JPM', 1.4],
+      ['EQ:US:XYZ', 0.1],
+    ]);
+    expect(r.liveError).toMatch(/한국투자증권 키/);
+  });
+
+  it('업종 분류와 시가총액순위 시세를 붙이고, 분류에 없는 종목은 기타. 업종은 비중 큰 순', async () => {
+    const hub = new Hub(consoleLogger('test', true));
+    hub.usMap = {
+      holdings: async () => holdings,
+      industryMap: async () => new Map([['NVDA', '반도체'], ['MSFT', '소프트웨어'], ['JPM', '은행']]),
+      industryError: undefined,
+    } as never;
+    (hub as unknown as { kis: unknown }).kis = { usMarketCapQuotes: async () => new Map([['NVDA', { last: 200, changePct: 1.5 }]]) };
+    const r = await hub.sectorMap('SPX');
+    expect(r.sectors.map((s) => [s.name, s.weight])).toEqual([
+      ['반도체', 7.6],
+      ['소프트웨어', 5.9],
+      ['은행', 1.4],
+      ['기타', 0.1],
+    ]);
+    expect(r.sectors[0].members[0]).toMatchObject({ last: 200, changePct: 1.5 });
+    expect(r.liveError).toBeUndefined();
+  });
+});
