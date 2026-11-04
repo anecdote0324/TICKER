@@ -21,6 +21,7 @@ import { Hmap } from '../widgets/Hmap';
 import { Imap } from '../widgets/Imap';
 import { Grid } from '../widgets/Grid';
 import { WorldMap } from '../widgets/WorldMap';
+import { Alrt } from '../widgets/Alrt';
 import { Port } from '../widgets/Port';
 import { Eco } from '../widgets/Eco';
 import { Fa } from '../widgets/Fa';
@@ -124,6 +125,8 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Eco panel={p} />;
     case 'PORT':
       return <Port panel={p} />;
+    case 'ALRT':
+      return <Alrt panel={p} />;
     case 'GRID':
       return <Grid panel={p} />;
     case 'MAP':
@@ -339,6 +342,28 @@ export function buildDefaultLayout(api: DockviewApi) {
   activePanelId.set('p2');
 }
 
+/**
+ * Deep Dive 기본 배치(v0.3, 02 모니터 2): 한 종목을 깊게 보는 화면. 모두 보라 연동 그룹이라 Market Pulse(파랑)와 따로 움직여요.
+ * 왼쪽 GP(위)·GIP(아래), 오른쪽 DES·FA·N
+ */
+export function buildDeepDiveLayout(api: DockviewApi) {
+  const add = (s: PanelState, position?: Parameters<DockviewApi['addPanel']>[0]['position']) => {
+    upsertPanel(s);
+    return api.addPanel({ id: s.id, component: 'panel', tabComponent: 'num', params: { panelId: s.id }, title: String(s.num), position });
+  };
+  const mk = (num: number, fn: string): PanelState => ({ id: `p${num}`, num, fn, securityId: 'EQ:KS:005930', link: 'purple', back: [], fwd: [] });
+  const gp = add(mk(8, 'GP'));
+  const des = add(mk(9, 'DES'), { referencePanel: gp, direction: 'right' });
+  add(mk(10, 'GIP'), { referencePanel: gp, direction: 'below' });
+  const fa = add(mk(11, 'FA'), { referencePanel: des, direction: 'below' });
+  add(mk(12, 'N'), { referencePanel: fa, direction: 'below' });
+  const W = api.width || 1920;
+  const H = api.height || 1000;
+  gp.group.api.setSize({ width: Math.round(W * 0.58), height: Math.round(H * 0.62) });
+  des.group.api.setSize({ height: Math.round(H * 0.34) });
+  // 활성 패널은 건드리지 않아요(숨은 Deep Dive가 Market Pulse의 활성 패널을 가져가 커맨드 라인이 그쪽으로 갔어요)
+}
+
 export interface ScreenLayout {
   dock: ReturnType<DockviewApi['toJSON']> | null;
 }
@@ -361,6 +386,7 @@ export function Workspace({ screenId, initial, onChange, visible }: { screenId: 
       }
     }
     if (!restored && screenId === 'main') buildDefaultLayout(api);
+    if (!restored && screenId === 'deep') buildDeepDiveLayout(api);
     api.onDidLayoutChange(() => onChange({ dock: api.toJSON() }));
     // 처음 만든 배치도 바로 저장해요(배치 변경 이벤트가 없어도)
     onChange({ dock: api.toJSON() });

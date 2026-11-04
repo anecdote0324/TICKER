@@ -44,7 +44,7 @@ export async function fileSecretBox(dataDir: string): Promise<SecretBox> {
 }
 
 /** 화면이 읽고 쓸 수 있는 상태 이름 */
-export const STATE_NAMES = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio'] as const;
+export const STATE_NAMES = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts'] as const;
 export type StateName = (typeof STATE_NAMES)[number];
 
 export class Store {
@@ -106,7 +106,7 @@ export class Store {
   }
 
   async setSettings(patch: Partial<Settings>): Promise<Settings> {
-    this.settings = mergeSettings({ ...this.settings, ...patch, general: { ...this.settings.general, ...patch.general }, display: { ...this.settings.display, ...patch.display }, commandLine: { ...this.settings.commandLine, ...patch.commandLine }, data: { ...this.settings.data, ...patch.data }, keys: patch.keys ?? this.settings.keys });
+    this.settings = mergeSettings({ ...this.settings, ...patch, general: { ...this.settings.general, ...patch.general }, display: { ...this.settings.display, ...patch.display }, commandLine: { ...this.settings.commandLine, ...patch.commandLine }, data: { ...this.settings.data, ...patch.data }, keys: patch.keys ?? this.settings.keys, alerts: { ...DEFAULT_SETTINGS.alerts!, ...this.settings.alerts, ...patch.alerts } });
     await this.writeJson('settings.json', { ...this.settings, schema: SETTINGS_SCHEMA });
     return this.settings;
   }
@@ -148,5 +148,6 @@ function mergeSettings(s: Partial<Settings>): Settings {
     commandLine: { ...d.commandLine, ...s.commandLine, defaultFunctions: { ...d.commandLine.defaultFunctions, ...s.commandLine?.defaultFunctions } },
     data: { ...d.data, ...s.data },
     keys: { ...d.keys, ...s.keys },
+    alerts: { ...d.alerts!, ...s.alerts },
   };
 }

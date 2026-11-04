@@ -54,6 +54,7 @@ export async function updateSettings(patch: Patch) {
     data: { ...cur.data, ...patch.data },
     // 단축키는 통째로 바꿔요(기본값으로 되돌린 키는 빠져야 해서)
     keys: (patch.keys as Settings['keys'] | undefined) ?? cur.keys,
+    alerts: { ...DEFAULT_SETTINGS.alerts!, ...cur.alerts, ...patch.alerts },
   };
   settings.set(next);
   applyTheme(next);

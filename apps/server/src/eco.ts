@@ -71,9 +71,26 @@ export function transformSeries(obs: Array<{ date: string; value: string }>, s: 
 /** 한국 100대 통계지표에서 보여 줄 이름(들어가면) */
 const KOREA_KEYS = ['기준금리', '경제성장률', '소비자물가', '생산자물가', '실업률', '고용률', '경상수지', '수출', '수입', '산업생산', '국고채', '원/달러'];
 
+/**
+ * ICE BofA 크레딧 스프레드(OAS, %p). FRED는 최근 3년만 줘서 v0.3부터 매일 받아 history.db에 쌓아요(04).
+ * 뒤 버전(크레딧 화면)이 이 이력을 써요
+ */
+export const CREDIT_SPREADS: Array<{ id: string; name: string }> = [
+  { id: 'BAMLH0A0HYM2', name: '미국 하이일드 OAS' },
+  { id: 'BAMLC0A0CM', name: '미국 투자등급 회사채 OAS' },
+  { id: 'BAMLC0A4CBBB', name: '미국 BBB 회사채 OAS' },
+  { id: 'BAMLEMCBPIOAS', name: '신흥국 회사채 OAS' },
+];
+
+/** 쌓아 둘 곳(History.save와 같은 모양) */
+export interface SpreadStore {
+  save(id: string, interval: '1d', bars: Array<{ t: number; o: number; h: number; l: number; c: number; v: number }>): void;
+}
+
 export class EcoService {
   private fredKey?: string;
   private cache: { at: number; res: Promise<EcoResponse> } | null = null;
+  private spreadTimer?: NodeJS.Timeout;
 
   constructor(
     private log: Logger,
@@ -84,6 +101,43 @@ export class EcoService {
   setFredKey(key: string | undefined) {
     this.fredKey = key;
     this.cache = null;
+    if (key && this.store) void this.archiveSpreads();
+  }
+
+  private store?: SpreadStore;
+
+  /** 크레딧 스프레드 쌓기 시작: 켤 때 한 번, 그 뒤 12시간마다(키가 있을 때만) */
+  startSpreadArchive(store: SpreadStore | undefined) {
+    this.store = store;
+    if (!store) return;
+    void this.archiveSpreads();
+    this.spreadTimer = setInterval(() => void this.archiveSpreads(), 12 * 3600_000);
+    this.spreadTimer.unref?.();
+  }
+
+  async archiveSpreads(): Promise<number> {
+    const key = this.fredKey;
+    if (!key || !this.store) return 0;
+    let saved = 0;
+    for (const s of CREDIT_SPREADS) {
+      try {
+        const start = new Date(Date.now() - 3 * 366 * 86400_000).toISOString().slice(0, 10);
+        const r = await fetchJson<{ observations?: Array<{ date: string; value: string }> }>(
+          `${FRED}/series/observations?series_id=${s.id}&api_key=${encodeURIComponent(key)}&file_type=json&observation_start=${start}`,
+          { timeoutMs: 30_000 },
+        );
+        const bars = (r.observations ?? [])
+          .map((o) => ({ t: Math.floor(Date.parse(`${o.date}T00:00:00Z`) / 1000), v: Number(o.value) }))
+          .filter((o) => Number.isFinite(o.v) && Number.isFinite(o.t))
+          .map((o) => ({ t: o.t, o: o.v, h: o.v, l: o.v, c: o.v, v: 0 }));
+        if (bars.length) this.store.save(`FRED:${s.id}`, '1d', bars);
+        saved += bars.length;
+      } catch (e) {
+        this.log.warn(`크레딧 스프레드 ${s.id}를 받지 못했어요: ${(e as Error).message}`);
+      }
+    }
+    if (saved) this.log.info(`크레딧 스프레드 ${saved}개 값을 저장했어요(history.db)`);
+    return saved;
   }
 
   async testFred(key: string): Promise<{ ok: boolean; message: string }> {

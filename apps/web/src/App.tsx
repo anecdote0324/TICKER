@@ -10,6 +10,7 @@ import { TopBar, type Screen } from './components/TopBar';
 import { ScreenWindow, ScreenWindowBar } from './components/ScreenWindow';
 import { addPanel, dockApis, Workspace, type ScreenLayout } from './components/Workspace';
 import { WorkspaceMenu } from './components/WorkspaceMenu';
+import { AlertWatcher } from './components/AlertWatcher';
 import { buildWorkspaceFile, mergeWatchlists, mergeWorkspaces, parseWorkspaceFile, workspaceFileName } from './workspaceFile';
 import { attachGlobalKeys } from './keys';
 import { panels, type PanelState } from './stores/panels';
@@ -37,7 +38,16 @@ function loadSaved(): SavedWorkspace | null {
 /** 떼어낸 화면의 창 id(같은 창에 화면 탭이 여러 개일 수 있어요, v0.2). 예전 저장분은 화면 id가 창 id */
 const winOf = (s: Screen): string | undefined => (s.detached ? (s.win ?? s.id) : undefined);
 
-const DEFAULT_WORKSPACE: SavedWorkspace = { screens: [{ id: 'main', name: 'Market Pulse' }], active: 'main', layouts: {}, panels: {} };
+// v0.3: 두 번째 화면 탭 Deep Dive(한 종목 깊게 보기). 저장된 배치에는 더하지 않아요(기본 배치로 새로 시작하면 생겨요)
+const DEFAULT_WORKSPACE: SavedWorkspace = {
+  screens: [
+    { id: 'main', name: 'Market Pulse' },
+    { id: 'deep', name: 'Deep Dive' },
+  ],
+  active: 'main',
+  layouts: {},
+  panels: {},
+};
 
 export function App() {
   const saved = useRef<SavedWorkspace | null>(null);
@@ -341,6 +351,7 @@ export function App() {
       })}
       <TickerTape />
       <StatusBar />
+      <AlertWatcher />
       {!overlayHost && u.palette && <Palette />}
       {u.settings && <SettingsModal />}
       {!overlayHost && <HelpOverlay />}

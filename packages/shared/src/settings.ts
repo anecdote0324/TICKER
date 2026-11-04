@@ -46,6 +46,13 @@ export interface Settings {
   };
   /** 사용자가 바꾼 단축키만(06 단축키). 없는 것은 기본값 */
   keys: ShortcutMap;
+  /** ALRT 알림(v0.3) */
+  alerts?: {
+    /** 운영체제 알림(Windows 알림 센터·Mac 알림)도 띄울지 */
+    system: boolean;
+    /** 짧은 소리 */
+    sound: boolean;
+  };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -63,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   data: { fxIntervalSec: 60 },
   keys: {},
+  alerts: { system: true, sound: true },
 };
 
 /** 비밀 정보 입력 상태. 값 자체는 화면으로 돌려보내지 않아요 */

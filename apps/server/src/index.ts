@@ -81,6 +81,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const rates = new RatesService(opts.dataDir, log);
   const financials = new FinancialsService(news, log);
   const eco = new EcoService(log, () => rates.ecosKeyValue);
+  // FRED 크레딧 스프레드는 최근 3년만 줘서 지금부터 쌓아요(03 v0.3)
+  eco.startSpreadArchive(hub.history);
   const extraKeys: ExtraKeys = {
     ecos: {
       label: 'BOK ECOS 인증키',

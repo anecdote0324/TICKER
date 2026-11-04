@@ -32,3 +32,20 @@ describe('관례 시각(뉴욕) → UTC', () => {
     expect(new Date(zonedToUtc('2026-11-04', '09:00', 'Asia/Seoul')).toISOString()).toBe('2026-11-04T00:00:00.000Z');
   });
 });
+
+describe('크레딧 스프레드 쌓기', () => {
+  it('FRED 값을 종목 id FRED:<시리즈>로 일봉 모양에 저장하고, 빈 값(.)은 빼요', async () => {
+    const { EcoService, CREDIT_SPREADS } = await import('./eco');
+    const { vi } = await import('vitest');
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ observations: [{ date: '2026-11-02', value: '3.10' }, { date: '2026-11-03', value: '.' }] }), { status: 200 }));
+    const saved: Array<{ id: string; n: number; c: number }> = [];
+    const eco = new EcoService({ info: () => undefined, warn: () => undefined, debug: () => undefined, error: () => undefined }, () => undefined);
+    eco.startSpreadArchive(undefined);
+    (eco as unknown as { store: unknown }).store = { save: (id: string, _i: string, bars: Array<{ c: number }>) => saved.push({ id, n: bars.length, c: bars[0].c }) };
+    eco.setFredKey('a'.repeat(32));
+    const n = await eco.archiveSpreads();
+    vi.unstubAllGlobals();
+    expect(n).toBe(CREDIT_SPREADS.length);
+    expect(saved.some((s) => s.id === 'FRED:BAMLH0A0HYM2' && s.n === 1 && s.c === 3.1)).toBe(true);
+  });
+});

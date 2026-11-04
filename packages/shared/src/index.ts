@@ -17,3 +17,4 @@ export type { CatalogEntry } from './function-catalog.generated';
 export * from './financials';
 export * from './eco';
 export * from './portfolio';
+export * from './alerts';

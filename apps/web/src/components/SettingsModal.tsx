@@ -87,7 +87,7 @@ export function SettingsModal() {
             {section === 'command' && <Command />}
             {section === 'keys' && <Keys />}
             {section === 'data' && <Data />}
-            {section === 'alerts' && <p className="note">알림은 v0.3(ALRT)과 함께 추가돼요. 앱이 켜져 있을 때만 동작해요.</p>}
+            {section === 'alerts' && <AlertSettings />}
             {section === 'about' && <About />}
           </div>
         </div>
@@ -106,6 +106,25 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
         끔
       </button>
     </div>
+  );
+}
+
+/** ALRT 알림(v0.3): 운영체제 알림·소리 */
+function AlertSettings() {
+  const a = useStore(settings, (s) => s.alerts ?? { system: true, sound: true });
+  return (
+    <>
+      <p className="note">ALRT(알림)에서 만든 가격·등락률 조건이 맞으면 앱 안 알림을 띄워요. 앱이 켜져 있을 때만 동작하고, 데모 시세로는 알리지 않아요.</p>
+      <div className="field">
+        <label>운영체제 알림</label>
+        <Toggle on={a.system} onChange={(v) => void updateSettings({ alerts: { system: v } })} label="운영체제 알림" />
+        <span className="label">Windows 알림 센터·Mac 알림에도 띄워요</span>
+      </div>
+      <div className="field">
+        <label>소리</label>
+        <Toggle on={a.sound} onChange={(v) => void updateSettings({ alerts: { sound: v } })} label="알림 소리" />
+      </div>
+    </>
   );
 }
 

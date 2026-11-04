@@ -328,6 +328,20 @@ const BUILT: FunctionDef[] = [
     aliases: ['BBU'],
   },
   {
+    code: 'ALRT',
+    nameKo: '알림',
+    nameEn: 'Alerts',
+    summary: '가격·등락률 조건 알림',
+    detail: '종목의 가격 이상·이하, 등락률 이상·이하 조건을 만들어 두면 맞을 때 알려 줘요(앱 안 알림, 운영체제 알림, 소리). 종목을 함께 치면 그 종목으로 시작해요. 앱이 켜져 있을 때만 동작해요.',
+    security: 'optional',
+    assetClasses: ALL_ASSETS,
+    keywords: ['알림', '가격알림'],
+    version: 'v0.3',
+    implemented: true,
+    speed: '시세와 같은 속도',
+    examples: ['ALRT', '005930 ALRT'],
+  },
+  {
     code: 'GRID',
     nameKo: '소형 차트 격자',
     nameEn: 'Chart Grid',
@@ -362,7 +376,6 @@ const BUILT: FunctionDef[] = [
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
-  ALRT: { security: 'optional', assetClasses: ALL_ASSETS, keywords: ['알림'], summary: '가격·뉴스 조건 알림' },
 };
 
 /** 블룸버그 코드가 아닌 자체 코드(08 §1.4) */
