@@ -1,4 +1,5 @@
 // 워크스페이스 메뉴: 지금 배치(모든 화면 탭과 패널)를 이름을 붙여 저장하고, 저장한 배치를 불러오거나 지워요(02 화면 탭과 워크스페이스).
+// v0.2: 파일로 내보내기·파일에서 가져오기(다른 컴퓨터로 옮기기)
 
 import { useEffect, useRef, useState } from 'react';
 import type { NamedWorkspace } from '../stores/state';
@@ -19,10 +20,13 @@ export function WorkspaceMenu(props: {
   onLoad: (w: NamedWorkspace) => void;
   onDelete: (name: string) => void;
   onReset: () => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const boxRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   // BLP⏎(v0.2)이 메뉴를 열어요
   const tick = useStore(ui, (s) => s.workspaceMenuTick ?? 0);
   const firstTick = useRef(tick);
@@ -120,6 +124,35 @@ export function WorkspaceMenu(props: {
             <button className="btn primary" disabled={!trimmed} onClick={save}>
               {exists ? '덮어쓰기' : '지금 배치 저장'}
             </button>
+          </div>
+          <div className="wsmenu-file">
+            <button
+              className="wsmenu-reset"
+              title="지금 배치, 저장한 워크스페이스 전부, 관심종목을 파일 하나로 저장해요(키·설정은 넣지 않아요)"
+              onClick={() => {
+                props.onExport();
+                setOpen(false);
+              }}
+            >
+              파일로 내보내기
+            </button>
+            <button className="wsmenu-reset" title="내보낸 파일의 배치를 저장한 워크스페이스에 더하고 바로 열어요(지우지 않아요)" onClick={() => fileRef.current?.click()}>
+              파일에서 가져오기
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) {
+                  props.onImport(f);
+                  setOpen(false);
+                }
+              }}
+            />
           </div>
           <button
             className="wsmenu-reset"

@@ -2016,3 +2016,7 @@ button {
   font-size: 11px;
   pointer-events: none;
 }
+/* 워크스페이스 파일 내보내기·가져오기(v0.2) */
+.wsmenu-file {
+  border-top: 1px solid #222;
+}

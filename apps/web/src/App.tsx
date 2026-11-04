@@ -10,6 +10,7 @@ import { TopBar, type Screen } from './components/TopBar';
 import { ScreenWindow, ScreenWindowBar } from './components/ScreenWindow';
 import { addPanel, dockApis, Workspace, type ScreenLayout } from './components/Workspace';
 import { WorkspaceMenu } from './components/WorkspaceMenu';
+import { buildWorkspaceFile, mergeWatchlists, mergeWorkspaces, parseWorkspaceFile, workspaceFileName } from './workspaceFile';
 import { attachGlobalKeys } from './keys';
 import { panels, type PanelState } from './stores/panels';
 import { settings } from './stores/settings';
@@ -110,6 +111,39 @@ export function App() {
       });
     }
   };
+  // ── 파일로 내보내기·가져오기(v0.2): 다른 컴퓨터로 배치 옮기기 ──
+  const exportWorkspaces = () => {
+    const st = appState.get();
+    const file = buildWorkspaceFile(snapshot(), st.workspaces, st.watchlists);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = workspaceFileName();
+    document.body.appendChild(a);
+    a.click();
+    // 바로 지우면 파일 이름이 'download'가 되는 경우가 있어서 조금 뒤에 지워요
+    window.setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 10_000);
+    showToast(`지금 배치와 워크스페이스 ${st.workspaces.length}개, 관심종목을 파일로 내보냈어요`);
+  };
+  const importWorkspaces = async (f: File) => {
+    const parsed = parseWorkspaceFile(await f.text());
+    if (!parsed.ok) {
+      showToast(`가져오지 못했어요: ${parsed.error}`);
+      return;
+    }
+    const st = appState.get();
+    const merged = mergeWorkspaces(st.workspaces, parsed.file);
+    const wl = mergeWatchlists(st.watchlists, parsed.file.watchlists);
+    updateState('workspaces', () => merged.list);
+    if (wl.addedIds > 0) updateState('watchlists', () => wl.list);
+    const before = snapshot();
+    applyWorkspace({ ...(merged.opened.data as SavedWorkspace), name: merged.opened.name });
+    showToast(`워크스페이스 ${merged.added.length}개를 가져와 '${merged.opened.name}'을(를) 열었어요${wl.addedIds ? ` · 관심종목 ${wl.addedIds}개 더함` : ''}`, undoTo(before), 8000);
+  };
+
   const resetWorkspace = () => {
     const before = snapshot();
     applyWorkspace(DEFAULT_WORKSPACE);
@@ -241,7 +275,7 @@ export function App() {
           const api = dockApis.get(mainActive);
           if (api) addPanel(api);
         }}
-        workspaceMenu={<WorkspaceMenu current={wsName} list={named} onSave={saveNamed} onLoad={loadNamed} onDelete={deleteNamed} onReset={resetWorkspace} />}
+        workspaceMenu={<WorkspaceMenu current={wsName} list={named} onSave={saveNamed} onLoad={loadNamed} onDelete={deleteNamed} onReset={resetWorkspace} onExport={exportWorkspaces} onImport={(f) => void importWorkspaces(f)} />}
       />
       {screens
         .filter((s) => !s.detached)
