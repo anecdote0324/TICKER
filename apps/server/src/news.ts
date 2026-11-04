@@ -357,6 +357,24 @@ export class NewsService {
     return !!this.dartKey;
   }
 
+  /** FA 재무제표(v0.3)가 같은 인증키와 고유번호 파일을 써요 */
+  get dartKeyValue(): string | undefined {
+    return this.dartKey;
+  }
+
+  /** 종목코드 → DART 고유번호(인증키가 없으면 undefined) */
+  async corpCodeOf(stockCode: string): Promise<string | undefined> {
+    const key = this.dartKey;
+    if (!key) return undefined;
+    this.corpCodes ??= this.loadCorpCodes(key);
+    try {
+      return (await this.corpCodes).get(stockCode);
+    } catch (e) {
+      this.corpCodes = undefined;
+      throw e;
+    }
+  }
+
   /** 인증키 확인: 오늘 공시 1건을 받아 봐요 */
   async testDart(key: string): Promise<{ ok: boolean; message: string }> {
     try {

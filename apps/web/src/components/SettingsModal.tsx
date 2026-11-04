@@ -808,6 +808,15 @@ const EXTRA_KEYS: ExtraKeyUi[] = [
     minLength: 10,
     emptyLabel: '인증키 없음 · GC에는 미국채만 보여요',
   },
+  {
+    name: 'sec',
+    title: 'SEC EDGAR 연락처',
+    note: 'FA(재무제표)의 미국 재무제표에 써요. SEC는 키가 없는 대신 요청마다 연락처(이름과 이메일)를 달라고 해요. 여기 넣은 연락처는 SEC에 보내는 요청에만 쓰고 다른 곳으로 보내지 않아요. 저장할 때 애플 자료를 한 번 받아 확인해요.',
+    placeholder: '이름 이메일 (예: 홍길동 me@example.com)',
+    minLength: 6,
+    plain: true,
+    emptyLabel: '연락처 없음 · FA에는 국내 재무제표만 보여요',
+  },
 ];
 
 function ExtraKey({ def, cred, onChange, reload }: { def: ExtraKeyUi; cred: (CredentialStatus & { secretKind: string }) | null; onChange: (c: CredentialStatus & { secretKind: string }) => void; reload: () => void }) {

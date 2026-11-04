@@ -2214,3 +2214,51 @@ button {
   font-size: 10px;
   opacity: 0.75;
 }
+
+/* FA 재무제표(v0.3) */
+.fa {
+  overflow: auto;
+  padding: 4px 8px;
+}
+.fa-note {
+  font-size: 11px;
+  padding: 2px 0 4px;
+}
+.fa-table {
+  border-collapse: collapse;
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+}
+.fa-table th {
+  color: var(--label);
+  font-weight: 500;
+  text-align: right;
+  padding: 2px 8px;
+  border-bottom: 1px solid #222;
+  white-space: nowrap;
+}
+.fa-table td {
+  padding: 1px 8px;
+  text-align: right;
+  color: var(--value);
+  white-space: nowrap;
+}
+.fa-table td:first-child {
+  text-align: left;
+  color: var(--amber);
+  font-family: var(--sans);
+}
+.fa-table td.up {
+  color: var(--up);
+}
+.fa-table td.down {
+  color: var(--down);
+}
+.fa-table tr.fa-grp td {
+  background: var(--band);
+  color: #fff;
+  font-family: var(--sans);
+  font-weight: 600;
+  padding: 2px 8px;
+}

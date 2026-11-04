@@ -46,6 +46,8 @@ export interface PanelState {
   /** GRID 칸(종목 id)과 기간(v0.3) */
   gridIds?: string[];
   gridRange?: string;
+  /** FA 기간(v0.3): 연간·분기 */
+  faPeriod?: 'annual' | 'quarter';
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

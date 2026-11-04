@@ -5,6 +5,7 @@
 import type { ExtraKeyName } from '@bt/shared';
 import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import type { RatesService } from './rates';
+import type { FinancialsService } from './financials';
 
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -34,6 +35,8 @@ export interface AppDeps {
   news?: NewsService;
   /** GC 금리 커브(v0.3) */
   rates?: RatesService;
+  /** FA 재무제표(v0.3) */
+  financials?: FinancialsService;
   /** v0.3 키(ECOS·FRED·SEC 연락처) */
   extraKeys?: ExtraKeys;
 }
@@ -324,6 +327,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     def.apply(undefined);
     log.info(`${def.label}을(를) 지웠어요`);
     return { ok: true };
+  });
+
+  // ── FA 재무제표(v0.3) ──
+  app.get<{ Querystring: { id?: string; period?: string } }>('/api/financials', async (req, reply) => {
+    if (!deps.financials) return reply.code(409).send({ error: '재무제표를 쓸 수 없어요' });
+    const inst = req.query.id ? hub.instruments.get(req.query.id) : undefined;
+    if (!inst) return reply.code(404).send({ error: '종목을 찾을 수 없어요' });
+    if (inst.assetClass !== 'EQUITY') return reply.code(400).send({ error: '재무제표는 주식만 볼 수 있어요' });
+    try {
+      return await deps.financials.get(inst, req.query.period === 'quarter' ? 'quarter' : 'annual');
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
   });
 
   // ── GC 금리 커브(v0.3) ──

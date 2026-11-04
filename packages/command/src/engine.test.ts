@@ -569,7 +569,7 @@ describe('F1 기능 목록(v0.2): 종목 다음에 쓰는 기능과 종목 없�
     expect(codesAfter('flist:hdr:none')).toEqual(expect.arrayContaining(['MON', 'WEI', 'FXC', 'CRYP', 'MOST', 'HMAP', 'IMAP', 'LAST']));
     expect(codesAfter('flist:hdr:sec')).not.toContain('IMAP');
     // 아직 만들지 않은 기능은 빼요
-    expect(rows.some((r) => r.code === 'FA')).toBe(false);
+    expect(rows.some((r) => r.code === 'BQ')).toBe(false); // v0.4
     expect(rows.find((r) => r.code === 'N')?.info).toContain('종목 없이도 돼요');
     expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
   });

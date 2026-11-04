@@ -80,6 +80,8 @@ export function QuoteRow(props: {
 export function usePoll<T>(path: string, ms: number): { key: string; data?: T; error?: string } | undefined {
   const [state, setState] = useState<{ key: string; data?: T; error?: string } | null>(null);
   useEffect(() => {
+    // 빈 경로면 받지 않아요(종목이 없을 때 등)
+    if (!path) return;
     let alive = true;
     const load = () =>
       api

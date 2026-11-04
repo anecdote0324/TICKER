@@ -283,6 +283,21 @@ const BUILT: FunctionDef[] = [
     args: { kind: 'curve', label: '커브', choices: GC_CURVES, max: 1 },
   },
   {
+    code: 'FA',
+    nameKo: '재무제표',
+    nameEn: 'Financial Analysis',
+    summary: '손익·재무상태·현금흐름·비율',
+    detail: '연간(6년)·분기(8분기) 손익계산서, 재무상태표, 현금흐름표와 영업이익률·ROE·부채비율·잉여현금흐름 같은 비율. 국내는 DART(인증키), 미국은 SEC EDGAR(설정의 연락처).',
+    security: 'one',
+    assetClasses: ['EQUITY'],
+    keywords: ['재무', '재무제표', '실적표'],
+    version: 'v0.3',
+    implemented: true,
+    speed: '분기마다 바뀌는 공시 값(12시간마다 다시 받아요)',
+    examples: ['005930 FA', 'AAPL US FA'],
+    similar: ['DES'],
+  },
+  {
     code: 'GRID',
     nameKo: '소형 차트 격자',
     nameEn: 'Chart Grid',
@@ -317,7 +332,6 @@ const BUILT: FunctionDef[] = [
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
-  FA: { security: 'one', assetClasses: ['EQUITY'], keywords: ['재무', '재무제표'], summary: '손익·재무상태·현금흐름' },
   ECO: { security: 'none', assetClasses: [], keywords: ['경제지표', '캘린더'], summary: '경제지표 발표 일정' },
   PORT: { security: 'none', assetClasses: [], keywords: ['포트폴리오', '보유'], summary: '보유 종목 손익' },
   ALRT: { security: 'optional', assetClasses: ALL_ASSETS, keywords: ['알림'], summary: '가격·뉴스 조건 알림' },

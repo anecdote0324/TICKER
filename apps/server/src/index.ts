@@ -16,6 +16,7 @@ import { Hub } from './hub';
 import { buildInstruments } from './instruments';
 import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import { RatesService } from './rates';
+import { FinancialsService } from './financials';
 import { fileSecretBox, Store, type SecretBox } from './store';
 import { recordingLogger, withTimeout, type RecordingLogger } from './util';
 
@@ -77,6 +78,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
 
   // v0.3: GC 금리 커브(미국채 XML, 국고채 ECOS)와 v0.3 키
   const rates = new RatesService(opts.dataDir, log);
+  const financials = new FinancialsService(news, log);
   const extraKeys: ExtraKeys = {
     ecos: {
       label: 'BOK ECOS 인증키',
@@ -84,6 +86,15 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       test: (k) => rates.testEcos(k),
       apply: (k) => rates.setEcosKey(k),
       hint: tailHint,
+    },
+    sec: {
+      label: 'SEC EDGAR 연락처',
+      // SEC는 이름과 이메일 같은 연락처를 요청마다 달라고 해요(fair access)
+      validate: (k) => (/\S+@\S+\.\S+/.test(k) && k.length <= 120 ? undefined : '이름과 이메일을 함께 적어 주세요(예: 홍길동 me@example.com)'),
+      test: (k) => financials.testSec(k),
+      apply: (k) => financials.setSecContact(k),
+      // 연락처는 앞부분만 보여 줘요
+      hint: (k) => `${k.slice(0, 3)}…`,
     },
   };
   for (const name of EXTRA_KEY_NAMES) {
@@ -160,6 +171,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     makeKis,
     news,
     rates,
+    financials,
     extraKeys,
   });
   await app.listen({ host: '127.0.0.1', port });
