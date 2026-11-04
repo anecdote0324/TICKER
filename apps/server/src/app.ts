@@ -7,6 +7,7 @@ import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import type { RatesService } from './rates';
 import type { FinancialsService } from './financials';
 import type { EcoService } from './eco';
+import type { DartCorpService } from './dart-corp';
 
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -40,6 +41,8 @@ export interface AppDeps {
   financials?: FinancialsService;
   /** ECO 경제 캘린더(v0.3) */
   eco?: EcoService;
+  /** v0.4 DART 종목 정보(MGMT·RELS·HDS·OWN·ERN·CF) */
+  dartCorp?: DartCorpService;
   /** v0.3 키(ECOS·FRED·SEC 연락처) */
   extraKeys?: ExtraKeys;
 }
@@ -199,6 +202,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ),
   );
   app.get('/api/ipo', (_req, reply) => corp(reply, () => hub.corp.ipo()));
+  // v0.4 DART 종목 정보
+  const dart = () => {
+    if (!deps.dartCorp) throw new Error('DART 기능을 쓸 수 없어요');
+    return deps.dartCorp;
+  };
+  app.get<{ Querystring: { id?: string } }>('/api/mgmt', (req, reply) => corp(reply, () => dart().mgmt(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string } }>('/api/rels', (req, reply) => corp(reply, () => dart().rels(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string } }>('/api/holders', (req, reply) => corp(reply, () => dart().holders(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string } }>('/api/earnings', (req, reply) => corp(reply, () => dart().earnings(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string; type?: string } }>('/api/disclosures', (req, reply) =>
+    corp(reply, () => dart().disclosures(req.query.id || undefined, /^[A-J]?$/.test(req.query.type ?? '') ? (req.query.type ?? '') : '')),
+  );
   app.get<{ Querystring: { id?: string } }>('/api/warnings', async (req) => hub.warnings(req.query.id || undefined));
 
   app.get<{ Querystring: { market?: string; kind?: string } }>('/api/most', async (req, reply) => {

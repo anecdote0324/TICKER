@@ -50,6 +50,11 @@ export interface PanelState {
   faPeriod?: 'annual' | 'quarter';
   /** v0.4 수급 탭(KCRD 신용·대차) */
   flowKind?: 'investor' | 'program' | 'credit' | 'loan' | 'short';
+  /** HDS 탭(v0.4): 최대주주·5% 보유·임원·주요주주 */
+  hdsTab?: 'largest' | 'major' | 'insiders';
+  /** CF 공시 종류(OpenDART pblntf_ty, 빈 값은 전체)와 제목 거르기(v0.4) */
+  cfType?: string;
+  cfQuery?: string;
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

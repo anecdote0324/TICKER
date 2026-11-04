@@ -2518,3 +2518,15 @@ button {
 .flow-table td.today {
   background: rgba(255, 176, 0, 0.08);
 }
+
+/* ── v0.4 CF 공시 검색 ── */
+.cf-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0 6px;
+  background: #111;
+  color: var(--value);
+  border: 1px solid #333;
+  padding: 3px 6px;
+  font-size: 12px;
+}

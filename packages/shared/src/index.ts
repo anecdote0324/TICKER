@@ -20,3 +20,4 @@ export * from './portfolio';
 export * from './alerts';
 export * from './flows';
 export * from './corp';
+export * from './dartcorp';

@@ -38,6 +38,7 @@
 - EE: 종목추정실적의 output2·output3 줄 순서가 문서(매출액·증감률·영업이익·증감률·순이익·증감률 / EBITDA·EPS·증감률·PER·EV/EBITDA·ROE·부채비율·이자보상배율)와 같은지, 금액 단위(억 원?), output4 결산년월 모양
 - ANR: 종목투자의견 응답에 증권사 이름 칸(`mbcr_name`)이 오는지(예제 칸 목록에는 없어요)
 - 예탁원 정보: 날짜 칸 모양(YYYYMMDD인지), 청약기간 모양, 시장 전체로 물을 때 한 쪽에 몇 줄이 오는지, 의무예치의 `depo_date`가 예치일인지 해제일인지
+- DART(MGMT·RELS·HDS·ERN): 임원 보수 칸(`se`·`nmpr`·`mendng_totamt`·`jan_avrg_mendng_am`)의 실제 이름, `elestock`의 증감 칸(`sp_stock_lmp_irds_cnt`)이 부호를 주는지, 타법인 출자의 합계 줄 이름, 잠정실적 공시가 `pblntf_ty=I`로 걸러지는지(공정공시 분류)
 - KWRN: VI 현황의 `vi_kind_code`(1 정적·2 동적·3 둘 다로 읽어요)와 해제 시각이 비어 오는지, 장 마감 뒤·휴일에 무엇이 오는지
 
 ## v0.2를 만들면서 실제로 확인할 것

@@ -21,7 +21,7 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]['code'];
 
-function openLink(url: string) {
+export function openLink(url: string) {
   if (window.btBridge?.openExternal) window.btBridge.openExternal(url);
   else window.open(url, '_blank', 'noopener');
 }

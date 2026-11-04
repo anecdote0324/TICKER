@@ -28,6 +28,7 @@ import { Fa } from '../widgets/Fa';
 import { Flow } from '../widgets/Flow';
 import { Kwrn } from '../widgets/Kwrn';
 import { Anr, CorpEvents, Dvd, Ee, Ipo } from '../widgets/Corp';
+import { Cf, Em, Ern, Hds, Mgmt, Own, Rels } from '../widgets/Dart';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
 import { Menu } from '../widgets/Menu';
@@ -142,6 +143,20 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <CorpEvents panel={p} />;
     case 'IPO':
       return <Ipo panel={p} />;
+    case 'MGMT':
+      return <Mgmt panel={p} />;
+    case 'RELS':
+      return <Rels panel={p} />;
+    case 'HDS':
+      return <Hds panel={p} />;
+    case 'OWN':
+      return <Own panel={p} />;
+    case 'ERN':
+      return <Ern panel={p} />;
+    case 'EM':
+      return <Em panel={p} />;
+    case 'CF':
+      return <Cf panel={p} />;
     case 'ECO':
       return <Eco panel={p} />;
     case 'PORT':

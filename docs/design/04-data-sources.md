@@ -169,6 +169,7 @@
 | KOSIS | 국내 통계(ECST, ECO 한국 지표) | 무료, 한도 확인 필요 | 키 | v0.6(v0.3에서 옮김) |
 | BLS·BEA 공표일정 | 미국 지표 발표 시각(FRED는 날짜만 줘요) | 무료 | — | v0.3 |
 
+- v0.4 DART 종목 정보(만듦): 정기보고서 주요정보 `exctvSttus`(임원)·`hmvAuditAllSttus`(임원 전체 보수)·`hmvAuditIndvdlBySttus`(5억 원 이상 개인별)·`otrCprInvstmntSttus`(타법인 출자)·`hyslrSttus`(최대주주)는 `corp_code`·`bsns_year`·`reprt_code`(1분기 11013, 반기 11012, 3분기 11014, 사업 11011)로, 올해 3분기부터 거꾸로 가장 최근 보고서를 찾아요. 지분공시 `majorstock`(5% 대량보유)·`elestock`(임원·주요주주 소유)은 `corp_code`만. ERN은 `list.json`의 거래소공시(`pblntf_ty=I`)에서 제목에 '(잠정)실적'이 든 것. CF는 `list.json`(종목은 1년, 전체는 7일, 100건씩 2~3쪽). 종목별 12시간, 공시 목록 5분 캐시
 - v0.3 ECO(만듦): BEA `apps.bea.gov/API/signup/release_dates.json`(키 없음)은 `{발표 이름: {release_dates: [ISO 시각]}}`이라 시각까지 써요(2026-11 확인). BLS `www.bls.gov/schedule/news_release/bls.ics`는 자동 요청을 403으로 막아서(2026-11) 쓰지 않아요(우회하지 않아요). FRED `releases/dates`(키, 날짜만)는 이름이 맞는 주요 발표만 골라 뉴욕 관례 시각(CPI·고용·PPI·소매판매·실업수당 청구·주택 착공 08:30, 산업생산 09:15, JOLTS·미시간대 10:00, FOMC 14:00)을 붙이고 화면에 `*`로 표시해요. BEA와 겹치는 발표(GDP·개인소득·무역수지)는 BEA 것만. 최근·이전 값은 FRED `series/observations`(최근 14개, CPIAUCSL·PCEPI·PPIFIS 전년 대비, RSAFS·INDPRO 전월 대비, PAYEMS 증감, A191RL1Q225SBEA·UNRATE 등 그대로). 한국은 ECOS `KeyStatisticList`(100대 통계지표, 최근 값만)에서 이름에 기준금리·경제성장률·소비자물가 등이 들어간 줄. 3시간 캐시
 | ECB 데이터 포털 | 유로 국채 커브, €STR, ECB 기준환율 | 무료 | 없음 | v0.6 |
 | 일본 재무성 영문 CSV | 일본 국채 금리(서기 날짜, 1974년부터) | 무료 | 없음 | v0.6 |

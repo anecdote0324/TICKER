@@ -18,6 +18,7 @@ import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import { RatesService } from './rates';
 import { UsMapService } from './us-map';
 import { FinancialsService, secContactError } from './financials';
+import { DartCorpService } from './dart-corp';
 import { EcoService } from './eco';
 import { fileSecretBox, Store, type SecretBox } from './store';
 import { recordingLogger, withTimeout, type RecordingLogger } from './util';
@@ -83,6 +84,13 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   // v0.3: GC 금리 커브(미국채 XML, 국고채 ECOS)와 v0.3 키
   const rates = new RatesService(opts.dataDir, log);
   const financials = new FinancialsService(news, log);
+  // v0.4 DART 종목 정보(MGMT·RELS·HDS·OWN·ERN·CF)
+  const dartCorp = new DartCorpService(
+    news,
+    () => hub.instruments,
+    async (id) => (await hub.bars(id, '1d')).bars,
+    (inst) => financials.get(inst, 'quarter'),
+  );
   const eco = new EcoService(log, () => rates.ecosKeyValue);
   // FRED 크레딧 스프레드는 최근 3년만 줘서 지금부터 쌓아요(03 v0.3)
   eco.startSpreadArchive(hub.history);
@@ -186,6 +194,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     news,
     rates,
     financials,
+    dartCorp,
     eco,
     extraKeys,
   });
