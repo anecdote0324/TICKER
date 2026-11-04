@@ -599,7 +599,7 @@ const BUILT: FunctionDef[] = [
     detail: '최근 6·24·72시간 헤드라인을 비슷한 제목끼리 한 줄로 묶고, 출처 가중치와 여러 곳이 같이 다룬 정도, 최근 정도로 점수를 매겨 위에서부터 보여 줘요.',
     security: 'none',
     assetClasses: [],
-    keywords: ['주요뉴스', '톱뉴스', '헤드라인'],
+    keywords: ['주요뉴스', '톱뉴스'],
     version: 'v0.4',
     implemented: true,
     speed: '5분마다',
