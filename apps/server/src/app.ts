@@ -179,6 +179,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return reply.code(502).send({ error: (e as Error).message });
     }
   });
+  // v0.4 실적·기업행위: EE·ANR·DVD(종목), CACS·EVTS(종목 또는 시장), IPO(시장)
+  const corp = async <T>(reply: { code: (n: number) => { send: (b: unknown) => unknown } }, run: () => Promise<T>) => {
+    try {
+      return await run();
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  };
+  app.get<{ Querystring: { id?: string } }>('/api/estimate', (req, reply) => corp(reply, () => hub.corp.estimate(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string } }>('/api/opinions', (req, reply) => corp(reply, () => hub.corp.opinions(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string } }>('/api/dividends', (req, reply) => corp(reply, () => hub.corp.dividends(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string; view?: string } }>('/api/corp-events', (req, reply) =>
+    corp(reply, () =>
+      hub.corp.events(
+        req.query.id || undefined,
+        req.query.view === 'actions' ? ['paidin', 'bonus', 'capdcrs', 'merger', 'revsplit', 'deposit'] : ['meeting', 'ipo', 'dividend', 'paidin', 'bonus', 'deposit'],
+      ),
+    ),
+  );
+  app.get('/api/ipo', (_req, reply) => corp(reply, () => hub.corp.ipo()));
   app.get<{ Querystring: { id?: string } }>('/api/warnings', async (req) => hub.warnings(req.query.id || undefined));
 
   app.get<{ Querystring: { market?: string; kind?: string } }>('/api/most', async (req, reply) => {

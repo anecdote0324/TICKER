@@ -12,6 +12,7 @@ import { krMaster } from './kr-master';
 import type { NewsService } from './news';
 import type { UsActivity } from './us-activity';
 import type { UsMapService } from './us-map';
+import { CorpService } from './corp';
 import type { Logger } from './util';
 
 export interface Client {
@@ -84,9 +85,18 @@ export class Hub implements AdapterHost {
   private backfilling = false;
   private backfillChecked = new Set<string>();
 
+  /** v0.4 실적·기업행위(EE·ANR·DVD·CACS·IPO·EVTS) */
+  readonly corp: CorpService;
+
   constructor(public log: Logger) {
     // 정해 둔 지수·환율은 마스터를 받기 전에도 알아요(켜자마자 WEI·환율 차트가 뜨게)
     for (const i of staticInstruments()) this.instruments.set(i.id, i);
+    this.corp = new CorpService(
+      () => this.kis,
+      () => this.instruments,
+      async (id) => (await this.snapshotQuote(id))?.last,
+      log,
+    );
   }
 
   private ready = false;

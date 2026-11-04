@@ -2492,3 +2492,29 @@ button {
 .flow-table tr.click:hover td {
   background: #151515;
 }
+
+/* ── v0.4 실적·기업행위(EE·ANR·DVD·CACS·EVTS·IPO) ── */
+.anr-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 2px 0 6px;
+  font: 12px var(--mono);
+  color: var(--value);
+}
+.anr-sum .up {
+  color: var(--up);
+}
+.anr-sum .down {
+  color: var(--down);
+}
+.flow-table td.up {
+  color: var(--up);
+}
+.flow-table tr.past td {
+  opacity: 0.55;
+}
+.flow-table tr.today td,
+.flow-table td.today {
+  background: rgba(255, 176, 0, 0.08);
+}

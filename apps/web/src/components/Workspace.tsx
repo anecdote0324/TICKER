@@ -27,6 +27,7 @@ import { Eco } from '../widgets/Eco';
 import { Fa } from '../widgets/Fa';
 import { Flow } from '../widgets/Flow';
 import { Kwrn } from '../widgets/Kwrn';
+import { Anr, CorpEvents, Dvd, Ee, Ipo } from '../widgets/Corp';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
 import { Menu } from '../widgets/Menu';
@@ -130,6 +131,17 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Flow panel={p} />;
     case 'KWRN':
       return <Kwrn panel={p} />;
+    case 'EE':
+      return <Ee panel={p} />;
+    case 'ANR':
+      return <Anr panel={p} />;
+    case 'DVD':
+      return <Dvd panel={p} />;
+    case 'CACS':
+    case 'EVTS':
+      return <CorpEvents panel={p} />;
+    case 'IPO':
+      return <Ipo panel={p} />;
     case 'ECO':
       return <Eco panel={p} />;
     case 'PORT':

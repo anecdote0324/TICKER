@@ -114,6 +114,23 @@ const MOST_ROWS = 30;
 export const MOST_REFRESH_MS = 30_000;
 
 /** 응답의 output이 배열이 아니어도(한 건) 배열로 */
+/** 예탁원 정보 종류 → 경로·거래 ID·종류별 변수(공식 예제 ksdinfo_*) */
+export type KsdKind = 'dividend' | 'paidin' | 'bonus' | 'capdcrs' | 'merger' | 'revsplit' | 'deposit' | 'meeting' | 'ipo';
+const KSD: Record<KsdKind, { path: string; tr: string; extra?: Record<string, string> }> = {
+  // GB1 0 배당 전체, HIGH_GB 공백
+  dividend: { path: 'dividend', tr: 'HHKDB669102C0', extra: { GB1: '0', HIGH_GB: '' } },
+  // GB1 2 기준일별
+  paidin: { path: 'paidin-capin', tr: 'HHKDB669100C0', extra: { GB1: '2' } },
+  bonus: { path: 'bonus-issue', tr: 'HHKDB669101C0' },
+  capdcrs: { path: 'cap-dcrs', tr: 'HHKDB669106C0' },
+  merger: { path: 'merger-split', tr: 'HHKDB669104C0' },
+  // MARKET_GB 0 전체
+  revsplit: { path: 'rev-split', tr: 'HHKDB669105C0', extra: { MARKET_GB: '0' } },
+  deposit: { path: 'mand-deposit', tr: 'HHKDB669110C0' },
+  meeting: { path: 'sharehld-meet', tr: 'HHKDB669111C0' },
+  ipo: { path: 'pub-offer', tr: 'HHKDB669108C0' },
+};
+
 /** 부호 칸(1 상한, 2 상승, 3 보합, 4 하한, 5 하락)을 따른 값. 값이 부호 없이 오는 경우가 있어요 */
 function signedBy(v: unknown, sign: unknown): number | undefined {
   const n = Number(v);
@@ -1292,6 +1309,52 @@ export class KisAdapter implements Adapter {
       for (const o of rows) out.push({ date: day(o.stck_bsop_date), close: close(o), changePct: pct(o), values: { qty: num(o.ssts_cntg_qty), qtyShare: num(o.ssts_vol_rlim), amt: num(o.ssts_tr_pbmn) !== undefined ? num(o.ssts_tr_pbmn)! * k : undefined, amtShare: num(o.ssts_tr_pbmn_rlim), avgPrice: num(o.avrg_prc) } });
     }
     return out.filter((r) => r.date).sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  /**
+   * EE: 국내주식 종목추정실적(HHKST668300C0, 공식 예제 estimate_perform: 변수는 SHT_CD 하나).
+   * output2 = 추정손익 6줄, output3 = 투자지표 8줄(각 DATA1~DATA5), output4 = 열 머리(결산년월 dt)
+   */
+  async estimate(code: string): Promise<{ periods: string[]; income: Array<Array<number | null>>; indicators: Array<Array<number | null>> }> {
+    const r = (await this.get('/uapi/domestic-stock/v1/quotations/estimate-perform', 'HHKST668300C0', { SHT_CD: code }, 2)) as KisResponse & { output3?: KisRow[]; output4?: KisRow[] };
+    const vals = (o: KisRow) => ['data1', 'data2', 'data3', 'data4', 'data5'].map((k) => {
+      const t = String(o[k] ?? '').replace(/,/g, '').trim();
+      const n = Number(t);
+      return t === '' || !Number.isFinite(n) ? null : n;
+    });
+    const periods = asRows(r.output4).map((o) => String(o.dt ?? '').trim());
+    if (r.output2?.length) this.sampleRows('HHKST668300C0', code, periods.join(','), asRows(r.output2), (x) => [x.data1, x.data2, x.data3, x.data4, x.data5]);
+    return { periods, income: asRows(r.output2).map(vals), indicators: asRows(r.output3).map(vals) };
+  }
+
+  /**
+   * ANR: 국내주식 종목투자의견(FHKST663300C0, 공식 예제 invest_opinion: 시장 J, 화면 16633, 날짜는 '00'+YYYYMMDD). 최근 1년
+   */
+  async opinions(code: string): Promise<KisRow[]> {
+    const now = Date.now();
+    const r = await this.get(
+      '/uapi/domestic-stock/v1/quotations/invest-opinion',
+      'FHKST663300C0',
+      { FID_COND_MRKT_DIV_CODE: 'J', FID_COND_SCR_DIV_CODE: '16633', FID_INPUT_ISCD: code, FID_INPUT_DATE_1: `00${ymdKst(now - 365 * 86400_000)}`, FID_INPUT_DATE_2: `00${ymdKst(now)}` },
+      2,
+    );
+    const rows = asRows(r.output);
+    if (rows.length) this.sampleRows('FHKST663300C0', code, '1년', rows, (x) => Object.entries(x).slice(0, 7).map(([k, v]) => `${k}=${v}`));
+    return rows;
+  }
+
+  /**
+   * 예탁원 정보(ksdinfo, 공식 예제 ksdinfo_*): 배당·유상증자·무상증자·감자·합병분할·액면변경·의무예치·주주총회·공모.
+   * 공통 변수 SHT_CD(빈 값이면 전체)·F_DT·T_DT·CTS. 연속 조회는 3쪽까지
+   */
+  async ksd(kind: KsdKind, q: { code?: string; from: string; to: string }): Promise<KisRow[]> {
+    const def = KSD[kind];
+    const params: Record<string, string> = { CTS: '', F_DT: q.from, T_DT: q.to, SHT_CD: q.code ?? '', ...def.extra };
+    const out: KisRow[] = [];
+    await this.getPages(`/uapi/domestic-stock/v1/ksdinfo/${def.path}`, def.tr, params, 2, 3, (r) => {
+      out.push(...asRows(r.output1 ?? r.output));
+    });
+    return out;
   }
 
   /**
