@@ -635,3 +635,11 @@ describe('N ⏎ ⏎: 한 글자 기능도 목록에서 고르면 열려요', () 
     expect(run(r.input, ctx({}, { chosen: [r.chosen!] })).plan).toMatchObject({ kind: 'execute', exec: { fn: 'N' } });
   });
 });
+
+describe('만들지 않은 기능 코드가 만든 기능의 앞부분일 때(v0.3)', () => {
+  it('MA는 MAP(세계지도)을 고르는 앞부분이에요(목록이 깨지지 않아요)', () => {
+    const a = run('MA');
+    expect(a.rows.some((r) => r.id === 'fn:MAP')).toBe(true);
+    expect(a.plan.kind).toBe('select');
+  });
+});

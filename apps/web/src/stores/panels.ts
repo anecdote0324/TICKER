@@ -43,6 +43,9 @@ export interface PanelState {
   gpIndicators?: string[];
   /** GC 비교 커브(v0.3): 1W·1M·1Y */
   gcCompare?: string;
+  /** GRID 칸(종목 id)과 기간(v0.3) */
+  gridIds?: string[];
+  gridRange?: string;
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

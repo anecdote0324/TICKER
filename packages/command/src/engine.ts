@@ -1193,7 +1193,8 @@ export class CommandEngine {
         const prev = segs[seg.index - 1];
         const after = prev?.slot === 'market' ? 'mkt' : prev?.slot === 'asset' ? 'asset' : 'sec';
         const sec = security ?? segs.find((s) => s.slot === 'security')?.inst;
-        if (seg.slot === 'function' && seg.index === 0) {
+        // 만들지 않은 기능 코드가 만든 기능의 앞부분(MA → MAP)이면 기능 칸이 고르기라 fn이 비어 있어요. 그때는 아래 앞부분 목록으로
+        if (seg.slot === 'function' && seg.index === 0 && seg.fn) {
           // 줄 첫머리 기능: 같은 글자의 종목은 늘 2번 줄(05 §6.3)
           const m = this.index.search(seg.text, { first: false, hanEng: false }).filter((x) => x.tier <= 1);
           rows.push(this.functionRow(seg.fn!, 0, ctx, ctx.panel.security, { panelChip: true }));
