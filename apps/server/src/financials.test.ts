@@ -73,3 +73,20 @@ describe('비율', () => {
     expect(r.revenueGrowth).toEqual([null, 50]);
   });
 });
+
+describe('SEC 연락처와 막힘 안내', async () => {
+  const { secContactError, secBlockMessage, secHeaders } = await import('./financials');
+  it('한글은 요청 머리글에 못 넣어서 미리 막아요', () => {
+    expect(secContactError('박시준 me@example.com')).toContain('영문');
+    expect(secContactError('Park me')).toContain('이메일');
+    expect(secContactError('Park Sijun me@example.com')).toBeUndefined();
+  });
+  it('머리글은 영문만, SEC 규칙의 Accept-Encoding', () => {
+    const h = secHeaders('Park me@example.com');
+    expect(h['accept-encoding']).toBe('gzip, deflate');
+    expect(/^[\x20-\x7E]+$/.test(h['user-agent'])).toBe(true);
+  });
+  it('막힌 이유(응답 제목)를 함께 보여 줘요', () => {
+    expect(secBlockMessage(403, '<html><title>SEC.gov | Request Rate Threshold Exceeded</title></html>')).toContain('Request Rate Threshold Exceeded');
+  });
+});

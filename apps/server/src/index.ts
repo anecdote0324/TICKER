@@ -16,7 +16,7 @@ import { Hub } from './hub';
 import { buildInstruments } from './instruments';
 import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import { RatesService } from './rates';
-import { FinancialsService } from './financials';
+import { FinancialsService, secContactError } from './financials';
 import { EcoService } from './eco';
 import { fileSecretBox, Store, type SecretBox } from './store';
 import { recordingLogger, withTimeout, type RecordingLogger } from './util';
@@ -101,7 +101,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     sec: {
       label: 'SEC EDGAR 연락처',
       // SEC는 이름과 이메일 같은 연락처를 요청마다 달라고 해요(fair access)
-      validate: (k) => (/\S+@\S+\.\S+/.test(k) && k.length <= 120 ? undefined : '이름과 이메일을 함께 적어 주세요(예: 홍길동 me@example.com)'),
+      validate: secContactError,
       test: (k) => financials.testSec(k),
       apply: (k) => financials.setSecContact(k),
       // 연락처는 앞부분만 보여 줘요

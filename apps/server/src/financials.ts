@@ -192,6 +192,26 @@ export function secSeries(gaap: UsGaap, id: FinLineId, kind: FinPeriodKind): Map
   return new Map();
 }
 
+/** SEC 요청 머리글. 요청 머리글에는 영문(ASCII)만 넣을 수 있어요 */
+export function secHeaders(contact: string): Record<string, string> {
+  return { 'user-agent': `TICKER ${contact}`, accept: 'application/json', 'accept-encoding': 'gzip, deflate' };
+}
+
+/** SEC 연락처 모양: 영문(ASCII)·이메일 포함·120자 이하. 틀리면 이유 */
+export function secContactError(k: string): string | undefined {
+  if (!/^[\x20-\x7E]+$/.test(k)) return '연락처는 영문·숫자로 적어 주세요(예: Hong Gildong me@example.com). 요청 머리글에는 한글을 넣을 수 없어요';
+  if (!/\S+@\S+\.\S+/.test(k)) return '이름과 이메일을 함께 적어 주세요(예: Hong Gildong me@example.com)';
+  if (k.length > 120) return '연락처는 120자까지예요';
+  return undefined;
+}
+
+/** SEC가 막았을 때: 응답의 제목(예: Request Rate Threshold Exceeded, Undeclared Automated Tool)을 함께 보여 줘요 */
+export function secBlockMessage(status: number, body: string | undefined): string {
+  const title = body?.match(/<title>([^<]*)<\/title>/i)?.[1]?.replace(/^SEC\.gov\s*\|\s*/, '').trim();
+  const why = title || body?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return `SEC가 요청을 막았어요(HTTP ${status}${why ? `: ${why}` : ''}). SEC는 한도를 넘거나 연락처가 없다고 보면 약 10분 동안 막아요. 10분쯤 뒤에 다시 확인해 보세요`;
+}
+
 // ── 서비스 ──
 
 export class FinancialsService {
@@ -308,9 +328,10 @@ export class FinancialsService {
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     this.lastSec = Date.now();
     try {
-      return await fetchJson<T>(url, { timeoutMs: 30_000, headers: { 'user-agent': `TICKER personal terminal ${contact}`, accept: 'application/json' } });
+      // SEC 공개 규칙(Accessing EDGAR Data)의 모양: User-Agent에 이름과 이메일, Accept-Encoding gzip·deflate
+      return await fetchJson<T>(url, { timeoutMs: 30_000, headers: secHeaders(contact) });
     } catch (e) {
-      if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw new Error('SEC가 요청을 막았어요(연락처가 없거나 요청이 너무 잦아요). 잠시 뒤 다시 열어 보세요');
+      if (e instanceof HttpError && (e.status === 403 || e.status === 429)) throw new Error(secBlockMessage(e.status, e.body));
       throw e;
     }
   }
