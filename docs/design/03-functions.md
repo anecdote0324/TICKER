@@ -21,7 +21,7 @@
 | **IMAP** | 업종 타일 | 업종별 등락 색 타일. 미국 지수(S&P 500·나스닥100)는 v0.3에서 더함 | 지수 하나(인자) | v0.2 |
 | **MOST** | 상위 종목 | 거래량·거래대금·등락률 상위 | 시장 하나(인자) | v0.2 |
 | **FA** | 재무제표 | 손익계산서, 재무상태표, 현금흐름표, 비율. 국내는 DART, 미국은 SEC EDGAR | 필요 · 주식만 | v0.3 |
-| **ECO** | 경제 캘린더 | 경제지표 발표 일시와 실제·이전 값. 예상 칸은 빈칸이거나 사용자 입력 | 불필요 | v0.3 |
+| **ECO** | 경제 캘린더 | 경제지표 발표 일시와 실제·이전 값. 한국 발표 일정과 예상 칸 직접 입력은 v0.6 | 불필요 | v0.3 |
 | **GC** | 금리 커브 | 한국 국고채(ECOS)와 미국 국채(미국 재무부) 커브, 겹쳐보기, 과거 비교 | 불필요 | v0.3 |
 | **GRID** | 소형 차트 격자 | 여러 지수·환율의 소형 차트를 격자로 | 여러 개(인자) | v0.3 |
 | **MAP** | 세계지도 | 지역별 시장 현황을 지도 위에 | 불필요 | v0.3 |
@@ -38,7 +38,7 @@
 |---|---|---|
 | v0.4 | 종목 심화 A: 공시·수급·실적 | MEMB(근사) CF CN TOP NI NSE FIRS(근사) EVTS CACS DVD ERN EM EE ANR HDS OWN SI KINV KPGM KCRD KWRN MOV IPO ETF(FFLO 탭) MGMT RELS WATC BQ(10호가 탭), ALRT 뉴스 탭 |
 | v0.5 | 종목 심화 B: 차트·도구 | G TECH TDEF 드로잉 도구, GP 표시 모드(GPO·GPC) HP QR AQR VAP NOTE FAVE GRAB |
-| v0.6 | 금리·매크로·지수선물 | 공용 영업일 달력을 먼저 만들고, BTMM USSW OIS WB WBX SOVM CMX FWCM HSA FICM IFMO CENB FOMC DOTS WIRP(근사) CSDR(근사) ECST ECOF ECMX ECOD, ECO 다국가 보기, GC 해외·회사채 커브, CIX FXIP FXCA FRD FIXI WCRS WEIF(KOSPI200 주간·야간 선물) |
+| v0.6 | 금리·매크로·지수선물 | 공용 영업일 달력을 먼저 만들고, BTMM USSW OIS WB WBX SOVM CMX FWCM HSA FICM IFMO CENB FOMC DOTS WIRP(근사) CSDR(근사) ECST ECOF ECMX ECOD, ECO 다국가 보기·한국 발표 일정·예상 칸 직접 입력(v0.3에서 옮김), KOSIS, GC 해외·회사채 커브, CIX FXIP FXCA FRD FIXI WCRS WEIF(KOSPI200 주간·야간 선물) |
 | v0.7 | 채권 | YAS DES(채권) SRCH FIPX FACT TDH NIM NIA(근사) FIW FIHZ FIHG FIRV WBF DDIS KCB CRPR(근사) RATC(근사) RATD WBIX(근사) BVAL(근사) |
 | v0.8 | 포트폴리오·리스크 | PORT 탭(성과·특성·리스크·시나리오·귀속(근사)·최적화·통화 기여·세후 손익) PRTU PMEN PREP BETA TRA MARS(근사) |
 | v0.9 | 스크리닝·밸류에이션·백테스트 | EQS RV RVC MRR(근사) EA GF WACC DDM AZS DRSK(근사) EQRP(근사) BDVD(근사) MA DSCO EQBT BTST BQL DAPI WEIS, HMAP 매트릭스 보기, FA 지수 집계 탭(근사) |
@@ -98,7 +98,8 @@ v0.3까지의 기본 순서예요(자동완성 목록에 나오는 순서).
 ### v0.3: 분석과 개인화
 
 - FA(만듦), ECO(만듦, BLS 일정 제외), GC(만듦), GRID(만듦), MAP(만듦, 지형 대신 칸 지도), PORT(만듦, 직접 입력·잔고 CSV, 원화 환산), ALRT(만듦, 가격·등락률)
-- 새 데이터 소스: 한국은행 ECOS, 미국 재무부 금리 XML, FRED, KOSIS, BLS·BEA 공표일정, SEC EDGAR
+- 새 데이터 소스: 한국은행 ECOS, 미국 재무부 금리 XML, FRED, BEA 공표일정, SEC EDGAR(BLS는 자동 요청 차단으로 제외)
+- v0.6으로 옮긴 것(사용자 결정): KOSIS, ECO 한국 지표 발표 일정, ECO 예상 칸 직접 입력
 - FRED 크레딧 스프레드 저장 시작 (최근 3년만 제공돼서, 만듦)
 - IMAP 미국 지수(만듦, 사용자 결정): `IMAP SPX`(S&P 500)·`IMAP NDX`(나스닥100). 구성 종목과 타일 넓이(비중)는 그 지수를 따르는 ETF의 보유 종목 파일(SPDR SPY·Invesco QQQ)로 정하고, 어느 ETF의 보유 종목인지 화면 오른쪽 아래에 작게 적어요. 업종은 한국투자증권 해외 업종 분류, 오늘 등락은 해외 시가총액순위. HMAP은 국내 지수만(미국 업종 지수의 일봉이 없어서)
 

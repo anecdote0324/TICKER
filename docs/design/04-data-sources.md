@@ -10,7 +10,7 @@
 | 환율 | 한국투자증권 키가 있으면 KIS 환율 조회(10초 간격), 없거나 받지 못하면 ECB 기준환율(Frankfurter, 키 없음, 하루 한 번). 차트 봉도 키가 있으면 KIS, 없으면 ECB | 주기 조회(일별로 돌아감) | v0.1 |
 | 공시 | DART OpenAPI | REST | v0.2 |
 | 뉴스 | RSS 헤드라인 | 주기적 조회 | v0.2 |
-| 금리 커브·매크로·미국 재무제표 | 한국은행 ECOS, 미국 재무부 금리 XML, FRED, KOSIS, BLS·BEA 공표일정, SEC EDGAR | REST·파일 | v0.3 |
+| 금리 커브·매크로·미국 재무제표 | 한국은행 ECOS, 미국 재무부 금리 XML, FRED, BLS·BEA 공표일정, SEC EDGAR (KOSIS는 v0.6) | REST·파일 | v0.3 |
 | 수급·공매도·종목 심화 | KIS 확장 조회, FINRA, 네이버 뉴스 검색, KRX Open API(ETF 일별) | REST | v0.4 |
 | 해외 금리·환율 고시 | ECB, 일본 재무성 CSV, 한국수출입은행, IMF·OECD·World Bank | REST·파일 | v0.6 |
 | 채권 | KIS 장내채권, 금융위원회 채권 데이터(공공데이터포털), KRX Open API | REST + WebSocket | v0.7 |
@@ -164,7 +164,7 @@
 | 한국은행 ECOS | 기준금리, 콜·CD·CP, 국고채 1~50년, 회사채 등급별 금리, 환율, 국내 거시지표. 화면에는 블룸버그 ECOS 기능과 헷갈리지 않게 "BOK ECOS"로 표시 | 무료, 한도 확인 필요 | 인증키 | v0.3 |
 | 미국 재무부 금리 XML | 미국 국채 1개월~30년 일별 금리, 실질금리 | 무료 | 없음 | v0.3 |
 | FRED | SOFR·EFFR, 크레딧 스프레드(ICE BofA, **최근 3년만** 제공), 물가, VIX(VIXCLS), 지표 발표일 | 무료, 분당 약 120건(확인 필요) | 키 | v0.3 |
-| KOSIS | 국내 통계 | 무료, 한도 확인 필요 | 키 | v0.3 |
+| KOSIS | 국내 통계(ECST, ECO 한국 지표) | 무료, 한도 확인 필요 | 키 | v0.6(v0.3에서 옮김) |
 | BLS·BEA 공표일정 | 미국 지표 발표 시각(FRED는 날짜만 줘요) | 무료 | — | v0.3 |
 
 - v0.3 ECO(만듦): BEA `apps.bea.gov/API/signup/release_dates.json`(키 없음)은 `{발표 이름: {release_dates: [ISO 시각]}}`이라 시각까지 써요(2026-11 확인). BLS `www.bls.gov/schedule/news_release/bls.ics`는 자동 요청을 403으로 막아서(2026-11) 쓰지 않아요(우회하지 않아요). FRED `releases/dates`(키, 날짜만)는 이름이 맞는 주요 발표만 골라 뉴욕 관례 시각(CPI·고용·PPI·소매판매·실업수당 청구·주택 착공 08:30, 산업생산 09:15, JOLTS·미시간대 10:00, FOMC 14:00)을 붙이고 화면에 `*`로 표시해요. BEA와 겹치는 발표(GDP·개인소득·무역수지)는 BEA 것만. 최근·이전 값은 FRED `series/observations`(최근 14개, CPIAUCSL·PCEPI·PPIFIS 전년 대비, RSAFS·INDPRO 전월 대비, PAYEMS 증감, A191RL1Q225SBEA·UNRATE 등 그대로). 한국은 ECOS `KeyStatisticList`(100대 통계지표, 최근 값만)에서 이름에 기준금리·경제성장률·소비자물가 등이 들어간 줄. 3시간 캐시

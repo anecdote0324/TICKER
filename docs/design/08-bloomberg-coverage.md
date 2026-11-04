@@ -295,7 +295,7 @@
 
 | 코드 | 이름 | 하는 일 | 데이터 소스 | 속도 | 판정·단계 |
 |---|---|---|---|---|---|
-| ECO (WECO 별칭) | 경제 캘린더 | 발표 일시, 실제, 이전. 시각이 없는 소스는 "시각 미상"으로 표시. 예상 칸은 빈칸이거나 사용자 입력 | FRED releases/dates(날짜만), BLS·BEA 공표일정(시각), ECOS, KOSIS, 한은·통계청 공표일정(형식 확인 필요) | 일 1회 | 포함 v0.3(기존). 다국가 보기는 v0.6, 원자재 일정은 v0.11 |
+| ECO (WECO 별칭) | 경제 캘린더 | 발표 일시, 실제, 이전. 시각이 없는 소스는 "시각 미상"으로 표시. 예상 칸은 빈칸이거나 사용자 입력 | FRED releases/dates(날짜만), BLS·BEA 공표일정(시각), ECOS, KOSIS, 한은·통계청 공표일정(형식 확인 필요) | 일 1회 | 포함 v0.3(기존). 다국가 보기·한국 발표 일정·예상 칸 직접 입력·KOSIS는 v0.6, 원자재 일정은 v0.11 |
 | ECOD | 지표 상세 | 발표 이력, 수정치 | FRED·ALFRED, ECOS(한국 수정치 확인 필요) | 일 1회 | 포함 v0.6 |
 | ECST | 경제 통계 | 국가별 통계 표·차트 | ECOS, KOSIS, FRED, World Bank·IMF | 일 1회 | 포함 v0.6 |
 | ECOF | 지표 찾기 | 지표 검색 | ECOS 통계표 목록, FRED 검색 | 정적 | 포함 v0.6 |
@@ -427,10 +427,10 @@
 |---|---|---|---|---|
 | v0.1 | 뼈대와 실시간 시세 | MON GP GIP WEI FXC CRYP. 인프라: KIS 요청 예산·우선순위 큐와 WS 슬롯 배분기(4.1) | 기존. WEI·FXC 소스 후보에 KIS 해외지수·환율(X·KX)을 더해요 | 기능은 그대로예요. 뒤 단계마다 KIS 호출이 늘어서 예산 관리부터 만들어요. Binance 접속 위험은 CRYP 전체에 걸려서 예비 주소를 둬요 |
 | v0.2 | 정보 확장 | N DES COMP HMAP IMAP MOST(LAST는 [05](05-command-line.md)대로). 인프라: 공용 업종 분류(4.2), 뉴스 아카이브 수집 시작 | 기존 | 기능은 그대로예요. HMAP·IMAP이 업종 분류를 처음 쓰고 MOV·RV·EQS가 같은 표를 써요. NSE는 아카이브를 쌓기 시작한 뒤의 뉴스만 찾아요 |
-| v0.3 | 분석과 개인화 | FA ECO GC GRID MAP PORT ALRT | GC: ECOS + UST XML. ECO: FRED releases/dates + BLS·BEA 공표일정(시각) + ECOS + KOSIS. 미국 FA: SEC EDGAR. PORT 원화 환산 환율 이력: ECOS. 수집 시작: FRED ICE BofA OAS | 기능은 그대로예요. 미정이던 v0.3 데이터 소스를 이것으로 정해요 |
+| v0.3 | 분석과 개인화 | FA ECO GC GRID MAP PORT ALRT | GC: ECOS + UST XML. ECO: FRED releases/dates + BLS·BEA 공표일정(시각) + ECOS(KOSIS는 v0.6으로 옮김). 미국 FA: SEC EDGAR. PORT 원화 환산 환율 이력: ECOS. 수집 시작: FRED ICE BofA OAS | 기능은 그대로예요. 미정이던 v0.3 데이터 소스를 이것으로 정해요 |
 | v0.4 | 종목 심화 A: 공시·수급·실적 | MEMB(근사) CF CN TOP NI NSE FIRS(근사) EVTS CACS DVD ERN EM EE ANR HDS OWN SI KINV KPGM KCRD KWRN MOV IPO ETF(FFLO 탭) MGMT RELS WATC BQ(10호가 탭), ALRT 뉴스 탭(NLRT·MYN·SALT) | 네이버 뉴스 검색, FINRA 공매도 잔고, KRX Open API(ETF 일별), KIS 추가 엔드포인트 | 이미 붙인 KIS·DART로 대부분 돼요. 한국 개인 투자자에게 가치가 가장 커요. MOV 기여도가 MEMB에 기대서 MEMB를 맨 앞에 둬요 |
 | v0.5 | 종목 심화 B: 차트·도구 | G TECH TDEF 드로잉 GP 표시 모드(GPO·GPC) HP QR AQR VAP NOTE FAVE GRAB | 없음(KIS 분봉·당일 체결) | v0.4가 너무 커서 둘로 나눴어요. 새 데이터가 거의 필요 없어요 |
-| v0.6 | 금리·매크로·지수선물 | 인프라: 공용 영업일·휴장일 달력(4.3)을 먼저. BTMM USSW OIS WB WBX SOVM CMX FWCM HSA FICM IFMO(BEI 탭) CENB FOMC DOTS WIRP(근사) CSDR(근사) ECST ECOF ECMX ECOD(ECWB 탭), ECO 다국가 보기, GC 해외·회사채 커브, CIX FXIP FXCA FRD FIXI WCRS WEIF, 채권 뉴스 필터(TOP BON·N BON·STNI) | ECB, 일본 재무성 영문 CSV, 수출입은행 환율, IMF·OECD·World Bank, Treasury FiscalData, KIS 국내선물옵션(지수선물), KIS 국내 휴장일 | 무료 공식 데이터라 키만 받으면 돼요. v0.3의 GC·ECO를 넓혀요. FWCM·OIS 복리·FRD가 영업일 달력을 써요. 야간 선물은 밤에 시장을 보는 한국 투자자에게 중요해요 |
+| v0.6 | 금리·매크로·지수선물 | 인프라: 공용 영업일·휴장일 달력(4.3)을 먼저. BTMM USSW OIS WB WBX SOVM CMX FWCM HSA FICM IFMO(BEI 탭) CENB FOMC DOTS WIRP(근사) CSDR(근사) ECST ECOF ECMX ECOD(ECWB 탭), ECO 다국가 보기·한국 발표 일정·예상 칸 직접 입력(v0.3에서 옮김), GC 해외·회사채 커브, CIX FXIP FXCA FRD FIXI WCRS WEIF, 채권 뉴스 필터(TOP BON·N BON·STNI) | ECB, 일본 재무성 영문 CSV, 수출입은행 환율, IMF·OECD·World Bank, Treasury FiscalData, KIS 국내선물옵션(지수선물), KIS 국내 휴장일, KOSIS | 무료 공식 데이터라 키만 받으면 돼요. v0.3의 GC·ECO를 넓혀요. FWCM·OIS 복리·FRD가 영업일 달력을 써요. 야간 선물은 밤에 시장을 보는 한국 투자자에게 중요해요 |
 | v0.7 | 채권 | YAS DES(채권) SRCH FIPX FACT TDH NIM NIA(근사) FIW FIHZ FIHG FIRV WBF DDIS KCB CRPR(근사) RATC(근사) RATD WBIX(근사) BVAL(근사) | 금융위 채권 3종, KIS 장내채권·국채선물, KRX Open API(채권·선물 일별) | 스프레드와 이론가를 계산하려면 v0.6 커브와 영업일 달력이 있어야 해요. GOVT·CORP·COMDTY 자산군을 이때 열어요(파서 자리는 v0.1에 예약) |
 | v0.8 | 포트폴리오·리스크 | PORT 탭(성과·특성·리스크·시나리오·귀속(근사)·최적화·통화 기여·세후 손익), PRTU PMEN PREP BETA TRA MARS(근사). PORT에 계좌·출처 구분(신한 CSV, 직접 입력) | 없음 | 새 데이터 없이 일봉으로 돼요. 내 돈과 바로 이어져요. 귀속 탭은 MEMB 근사에 기대요 |
 | v0.9 | 스크리닝·밸류에이션·백테스트 | EQS RV RVC MRR(근사) EA GF WACC DDM AZS DRSK(근사) EQRP(근사) BDVD(근사) MA DSCO EQBT BTST BQL DAPI WEIS, HMAP 매트릭스 보기, FA 지수 집계 탭(근사) | KRX Open API 전 종목 일별(T-1). 당일은 KIS. 예비 소스는 data.go.kr 금융위원회_주식시세정보. DART 공시일 기준 재무 이력 | 전 종목 DB와 시점 정합성 처리가 필요해서 무거워요. MOV 기여도·MRR·PORT 귀속·FA 지수 집계·EA 지수 단위는 MEMB 근사에 기대요 |
@@ -588,7 +588,7 @@ v0.1 파서를 설계할 때 뒤 단계의 자산군과 티커 문법 자리를 
 | DLIB | KELS | v0.10 |
 | BOIL, BGAS | EIA | v0.11 |
 | LME 비철 | World Bank 월간 가격 | v0.11 |
-| ECO 예상 칸 | 사용자 입력 | v0.3 |
+| ECO 예상 칸 | 사용자 입력 | v0.6(v0.3에서 옮김) |
 | ECFC | 공식 전망 반자동 입력 | 후순위 |
 | CMCX, BGCI | 자체 지수 | 후순위 |
 | SWPM, ICVS, CDSW | 계산기만 | 후순위 |
@@ -622,7 +622,7 @@ v0.1 파서를 설계할 때 뒤 단계의 자산군과 티커 문법 자리를 
 - Binance 접속이 막힐 때의 예비 경로는 `data-api.binance.vision`이에요([04](04-data-sources.md)). 국내 거래소(Upbit 등) 시세를 예비로 쓰는 안은 "Upbit 제외" 결정과 부딪혀서 넣지 않아요.
 
 **데이터와 코드**
-- v0.3 데이터 소스: GC = ECOS + UST XML, ECO = FRED releases/dates + BLS·BEA 공표일정 + ECOS + KOSIS(예상 칸은 빈칸이거나 사용자 입력), 미국 FA = SEC EDGAR, PORT 환산 환율 = ECOS(3절)
+- v0.3 데이터 소스: GC = ECOS + UST XML, ECO = FRED releases/dates + BLS·BEA 공표일정 + ECOS(KOSIS와 예상 칸 사용자 입력은 v0.6), 미국 FA = SEC EDGAR, PORT 환산 환율 = ECOS(3절)
 - 데이터 사전 수집(4.4)
 - 코드 규칙: K 접두 자체 코드, 별칭은 대표 기능의 탭으로 열고 ⏎ 라벨에 표시, `G` 추가(1.4)
 - 새 자산군과 티커 문법 자리 예약(4.5)
