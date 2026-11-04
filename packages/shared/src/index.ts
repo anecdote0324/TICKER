@@ -15,3 +15,4 @@ export * from './news';
 export * from './sectors';
 export type { CatalogEntry } from './function-catalog.generated';
 export * from './financials';
+export * from './eco';

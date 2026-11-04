@@ -809,6 +809,14 @@ const EXTRA_KEYS: ExtraKeyUi[] = [
     emptyLabel: '인증키 없음 · GC에는 미국채만 보여요',
   },
   {
+    name: 'fred',
+    title: 'FRED (세인트루이스 연준)',
+    note: 'ECO(경제 캘린더)의 미국 지표 발표일과 최근 값(CPI·고용·소매판매 등)에 써요. API 키는 fred.stlouisfed.org에서 계정을 만든 뒤 무료로 받아요(32자). FRED 자료를 쓰는 화면에는 출처를 표시해요.',
+    placeholder: '32자',
+    minLength: 32,
+    emptyLabel: '키 없음 · ECO에는 BEA 발표 일정만 보여요',
+  },
+  {
     name: 'sec',
     title: 'SEC EDGAR 연락처',
     note: 'FA(재무제표)의 미국 재무제표에 써요. SEC는 키가 없는 대신 요청마다 연락처(이름과 이메일)를 달라고 해요. 여기 넣은 연락처는 SEC에 보내는 요청에만 쓰고 다른 곳으로 보내지 않아요. 저장할 때 애플 자료를 한 번 받아 확인해요.',

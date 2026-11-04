@@ -2262,3 +2262,49 @@ button {
   font-weight: 600;
   padding: 2px 8px;
 }
+
+/* ECO 경제 캘린더(v0.3) */
+.eco {
+  overflow: auto;
+  padding: 4px 8px;
+}
+.eco-cols {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.eco-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.eco-table th {
+  color: var(--label);
+  font-weight: 500;
+  text-align: left;
+  padding: 2px 8px;
+  border-bottom: 1px solid #222;
+  white-space: nowrap;
+}
+.eco-table td {
+  padding: 2px 8px;
+  color: var(--value);
+  white-space: nowrap;
+  border-bottom: 1px solid #141414;
+}
+.eco-table td.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.eco-table tr.past td {
+  opacity: 0.55;
+}
+.eco-table tr.today td {
+  background: #14140a;
+}
+.eco-table tr.eco-now td {
+  color: var(--accent);
+  border-top: 1px solid var(--accent);
+  font: 11px var(--mono);
+  padding: 1px 8px;
+}

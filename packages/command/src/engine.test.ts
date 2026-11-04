@@ -232,10 +232,10 @@ describe('겹침과 예외(§7, §13)', () => {
     expect(run('PDF').plan).toMatchObject({ exec: { cmd: 'settings' } });
     expect(run('?').plan).toMatchObject({ exec: { cmd: 'syntax' } });
   });
-  it('아직 만들지 않은 기능(ECO)은 실행 안 됨', () => {
-    const a = run('ECO');
+  it('아직 만들지 않은 기능(BQ)은 실행 안 됨', () => {
+    const a = run('BQ');
     expect(a.plan.kind).toBe('error');
-    expect(a.label).toContain('v0.3에서 제공 예정');
+    expect(a.label).toContain('v0.4에서 제공 예정');
   });
   it('DES 는 v0.2부터 종목을 물어요(빈 패널)', () => {
     const a = run('DES');

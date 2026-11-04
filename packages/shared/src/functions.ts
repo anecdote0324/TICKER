@@ -298,6 +298,21 @@ const BUILT: FunctionDef[] = [
     similar: ['DES'],
   },
   {
+    code: 'ECO',
+    nameKo: '경제 캘린더',
+    nameEn: 'Economic Calendar',
+    summary: '미국 지표 발표 일정과 최근 값, 한국 주요 지표',
+    detail: '지난 2주와 앞으로 30일의 미국 지표 발표 일시(한국 시간)와 최근·이전 값, 한국 주요 지표의 최근 값이에요. BEA는 시각까지, FRED는 날짜만 줘서 관례 시각을 붙여요.',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['경제지표', '캘린더', '경제캘린더', '지표발표'],
+    version: 'v0.3',
+    implemented: true,
+    speed: '일정은 하루 몇 번, 값은 발표 때(3시간마다 다시 받아요)',
+    examples: ['ECO'],
+    aliases: ['WECO'],
+  },
+  {
     code: 'GRID',
     nameKo: '소형 차트 격자',
     nameEn: 'Chart Grid',
@@ -332,7 +347,6 @@ const BUILT: FunctionDef[] = [
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
-  ECO: { security: 'none', assetClasses: [], keywords: ['경제지표', '캘린더'], summary: '경제지표 발표 일정' },
   PORT: { security: 'none', assetClasses: [], keywords: ['포트폴리오', '보유'], summary: '보유 종목 손익' },
   ALRT: { security: 'optional', assetClasses: ALL_ASSETS, keywords: ['알림'], summary: '가격·뉴스 조건 알림' },
 };

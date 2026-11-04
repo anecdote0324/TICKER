@@ -6,6 +6,7 @@ import type { ExtraKeyName } from '@bt/shared';
 import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import type { RatesService } from './rates';
 import type { FinancialsService } from './financials';
+import type { EcoService } from './eco';
 
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -37,6 +38,8 @@ export interface AppDeps {
   rates?: RatesService;
   /** FA 재무제표(v0.3) */
   financials?: FinancialsService;
+  /** ECO 경제 캘린더(v0.3) */
+  eco?: EcoService;
   /** v0.3 키(ECOS·FRED·SEC 연락처) */
   extraKeys?: ExtraKeys;
 }
@@ -337,6 +340,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (inst.assetClass !== 'EQUITY') return reply.code(400).send({ error: '재무제표는 주식만 볼 수 있어요' });
     try {
       return await deps.financials.get(inst, req.query.period === 'quarter' ? 'quarter' : 'annual');
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  // ── ECO 경제 캘린더(v0.3) ──
+  app.get('/api/eco', async (_req, reply) => {
+    if (!deps.eco) return reply.code(409).send({ error: '경제 캘린더를 쓸 수 없어요' });
+    try {
+      return await deps.eco.get();
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });
     }

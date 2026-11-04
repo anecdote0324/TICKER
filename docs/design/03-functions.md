@@ -97,7 +97,7 @@ v0.3까지의 기본 순서예요(자동완성 목록에 나오는 순서).
 
 ### v0.3: 분석과 개인화
 
-- FA, ECO, GC(만듦), GRID(만듦), MAP(만듦, 지형 대신 칸 지도), PORT, ALRT
+- FA(만듦), ECO(만듦, BLS 일정 제외), GC(만듦), GRID(만듦), MAP(만듦, 지형 대신 칸 지도), PORT, ALRT
 - 새 데이터 소스: 한국은행 ECOS, 미국 재무부 금리 XML, FRED, KOSIS, BLS·BEA 공표일정, SEC EDGAR
 - FRED 크레딧 스프레드 저장 시작 (최근 3년만 제공돼서)
 

@@ -64,6 +64,11 @@ export class RatesService {
     this.cache = null;
   }
 
+  /** ECO(한국 지표)·PORT가 같은 인증키를 써요 */
+  get ecosKeyValue(): string | undefined {
+    return this.ecosKey;
+  }
+
   /** ECOS 인증키 확인: 국고채 3년을 최근 열흘만 받아 봐요 */
   async testEcos(key: string): Promise<{ ok: boolean; message: string }> {
     try {

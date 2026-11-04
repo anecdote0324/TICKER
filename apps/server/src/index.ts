@@ -17,6 +17,7 @@ import { buildInstruments } from './instruments';
 import { EXTRA_KEY_NAMES, tailHint, type ExtraKeys } from './extra-keys';
 import { RatesService } from './rates';
 import { FinancialsService } from './financials';
+import { EcoService } from './eco';
 import { fileSecretBox, Store, type SecretBox } from './store';
 import { recordingLogger, withTimeout, type RecordingLogger } from './util';
 
@@ -79,12 +80,20 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   // v0.3: GC 금리 커브(미국채 XML, 국고채 ECOS)와 v0.3 키
   const rates = new RatesService(opts.dataDir, log);
   const financials = new FinancialsService(news, log);
+  const eco = new EcoService(log, () => rates.ecosKeyValue);
   const extraKeys: ExtraKeys = {
     ecos: {
       label: 'BOK ECOS 인증키',
       validate: (k) => (/^[0-9A-Za-z]{10,40}$/.test(k) ? undefined : 'ECOS 인증키는 영문·숫자 10~40자예요'),
       test: (k) => rates.testEcos(k),
       apply: (k) => rates.setEcosKey(k),
+      hint: tailHint,
+    },
+    fred: {
+      label: 'FRED API 키',
+      validate: (k) => (/^[0-9a-z]{32}$/.test(k) ? undefined : 'FRED API 키는 영문 소문자·숫자 32자예요'),
+      test: (k) => eco.testFred(k),
+      apply: (k) => eco.setFredKey(k),
       hint: tailHint,
     },
     sec: {
@@ -172,6 +181,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     news,
     rates,
     financials,
+    eco,
     extraKeys,
   });
   await app.listen({ host: '127.0.0.1', port });
