@@ -11,6 +11,8 @@ export interface AdapterHost {
 
 export interface BarsOptions {
   after?: number;
+  /** 이 시각(초)보다 오래된 봉 한 묶음(차트를 왼쪽 끝으로 끌 때, 일·주·월봉만). 더 없으면 빈 배열 */
+  before?: number;
 }
 
 export interface Adapter {

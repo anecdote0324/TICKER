@@ -115,10 +115,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     reply.type('application/json').send(instrumentsJson.body);
   });
 
-  app.get<{ Querystring: { id?: string; interval?: string } }>('/api/bars', async (req, reply) => {
+  app.get<{ Querystring: { id?: string; interval?: string; before?: string } }>('/api/bars', async (req, reply) => {
     const { id, interval } = req.query;
     if (!id || !interval || !BAR_INTERVALS.has(interval as BarInterval)) return reply.code(400).send({ error: 'id와 interval이 필요해요' });
+    // before(초): 그보다 오래된 봉 한 묶음(차트를 왼쪽 끝으로 끌 때)
+    const before = req.query.before !== undefined ? Number(req.query.before) : undefined;
+    if (before !== undefined && !(Number.isInteger(before) && before > 0)) return reply.code(400).send({ error: 'before는 초 단위 시각이에요' });
     try {
+      if (before !== undefined) return await hub.olderBars(id, interval as BarInterval, before);
       return await hub.bars(id, interval as BarInterval);
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });

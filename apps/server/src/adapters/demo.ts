@@ -4,7 +4,7 @@
 
 import { regularSessionOf, type Bar, type BarInterval, type BarSeries, type Freshness, type Instrument, type Quote, type SourceStatus } from '@bt/shared';
 import { hash32, seededRandom } from '../util';
-import type { Adapter, AdapterHost } from './types';
+import type { Adapter, AdapterHost, BarsOptions } from './types';
 
 const INDEX_LEVEL: Record<string, number> = {
   KOSPI: 2600,
@@ -123,10 +123,12 @@ export class DemoAdapter implements Adapter {
     for (const inst of insts) this.subscribed.delete(inst.id);
   }
 
-  async bars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
+  async bars(inst: Instrument, interval: BarInterval, opts?: BarsOptions): Promise<BarSeries> {
     const s = this.state(inst);
     const rnd = seededRandom(hash32(`${inst.id}:${interval}`));
     const now = Date.now();
+    // 데모 시세는 처음 받은 만큼(일봉 400개)만 있어요
+    if (opts?.before) return { id: inst.id, interval, bars: [], fresh: { source: 'DEMO', mode: 'demo', asOf: now, receivedAt: now } };
     const bars: Bar[] = [];
     if (interval === '1m' || interval === '5m') {
       // 오늘 09:00(KST)부터 지금까지, 장이 끝났으면 15:30까지

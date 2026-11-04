@@ -431,3 +431,36 @@ describe('환율 봉(한국투자증권)', () => {
     expect([req.q.get('FID_COND_MRKT_DIV_CODE'), req.q.get('FID_PERIOD_DIV_CODE')]).toEqual(['X', 'D']);
   });
 });
+
+describe('과거 봉 더 받기(차트를 왼쪽 끝으로 끌 때)', () => {
+  const row = (d: string, c: number) => ({ stck_bsop_date: d, stck_oprc: String(c), stck_hgpr: String(c + 1), stck_lwpr: String(c - 1), stck_clpr: String(c), acml_vol: '10' });
+
+  it('국내 일봉: before 전날부터 거꾸로 받고, before 이후 봉은 빼요', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice';
+    custom.set(path, (q) => ({ rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output2: q.get('FID_INPUT_DATE_2') === '20200102' ? [row('20200102', 50), row('20200101', 49)] : [] }));
+    const { kis } = adapter(memoryStore());
+    const before = Date.UTC(2020, 0, 3) / 1000 - 9 * 3600; // 2020-01-03 00:00 KST
+    const s = await kis.bars({ id: 'EQ:KS:005930', assetClass: 'EQUITY', code: '005930', market: 'KS' } as never, '1d', { before });
+    expect(s.bars.map((b) => b.c)).toEqual([49, 50]);
+    expect(s.bars.every((b) => b.t < before)).toBe(true);
+    expect(requests.find((r) => r.path === path)!.q.get('FID_INPUT_DATE_2')).toBe('20200102');
+  });
+
+  it('지수 일봉: 한 번(150일)에서 멈추지 않고 기간을 거꾸로 넘기며 4번까지 받아요', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice';
+    let n = 0;
+    custom.set(path, (q) => {
+      n++;
+      const end = q.get('FID_INPUT_DATE_2')!;
+      return { rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output2: [{ stck_bsop_date: end, bstp_nmix_prpr: '2500', bstp_nmix_oprc: '2490', bstp_nmix_hgpr: '2510', bstp_nmix_lwpr: '2480', acml_vol: '1' }] };
+    });
+    const { kis } = adapter(memoryStore());
+    const s = await kis.bars({ id: 'IDX:KOSPI', assetClass: 'INDEX', code: 'KOSPI' } as never, '1d');
+    expect(n).toBe(4);
+    expect(s.bars).toHaveLength(4);
+    const ends = requests.filter((r) => r.path === path).map((r) => r.q.get('FID_INPUT_DATE_2')!);
+    expect([...ends].sort().reverse()).toEqual(ends);
+  });
+});

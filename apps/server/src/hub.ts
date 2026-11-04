@@ -293,6 +293,30 @@ export class Hub implements AdapterHost {
     return series;
   }
 
+  /**
+   * before(초)보다 오래된 일·주·월봉 한 묶음(차트를 왼쪽 끝으로 끌거나 MAX를 누를 때). 더 없으면 빈 봉.
+   * 시간·분봉은 처음 받을 때 저장분까지 모두 주므로 빈 봉이에요. 수정주가가 바뀔 수 있어서 저장하지 않고 그때그때 받아요
+   */
+  async olderBars(id: string, interval: BarInterval, before: number): Promise<BarSeries> {
+    let inst = this.instruments.get(id);
+    if (!inst && !this.ready) {
+      await this.whenReady();
+      inst = this.instruments.get(id);
+    }
+    if (!inst) throw new Error(`종목 ${id}를 찾을 수 없어요`);
+    const now = Date.now();
+    if (interval !== '1d' && interval !== '1w' && interval !== '1M') return { id, interval, bars: [], fresh: { source: this.route(inst).source, mode: 'poll', asOf: now, receivedAt: now } };
+    const key = `${id}|${interval}|<${before}`;
+    const hit = this.barCache.get(key);
+    if (hit && now - hit.at < 10 * 60_000) return hit.series;
+    const series = this.route(inst)
+      .bars(inst, interval, { before })
+      .then((s) => ({ ...s, bars: s.bars.filter((b) => b.t < before).sort((a, b) => a.t - b.t) }));
+    this.barCache.set(key, { at: now, series });
+    series.catch(() => this.barCache.delete(key));
+    return series;
+  }
+
   /** 소스에서 받은 봉을 저장해 둔 봉과 합쳐요. 소스가 막히면 저장해 둔 봉을 멈춤 배지로 보여 줘요 */
   private async fetchBars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
     const adapter = this.route(inst);

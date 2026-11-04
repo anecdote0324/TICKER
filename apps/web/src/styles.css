@@ -1278,9 +1278,13 @@ button {
   font: 11px var(--mono);
   color: var(--amber);
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 2px;
   gap: 10px;
   align-items: center;
   pointer-events: auto;
+  /* 가격 눈금을 덮지 않게 오른쪽을 비워요(지표가 많으면 줄을 바꿔요) */
+  right: 84px;
 }
 .chart-ohlc b {
   color: var(--value);
@@ -1950,4 +1954,65 @@ button {
 .search-flags {
   flex: none;
   font-size: 10px;
+}
+
+/* GP 보조지표 메뉴·자동 맞춤 단추·과거 봉 표시(v0.2) */
+.chart-legend {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chart-menu {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  z-index: 6;
+  background: #101010;
+  border: 1px solid #333;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 180px;
+}
+.chart-menu-grp {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.chart-menu label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--value-hi);
+}
+.chart-menu-close {
+  align-self: flex-end;
+  background: transparent;
+  border: 1px solid #333;
+  color: var(--label);
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.chart-auto {
+  position: absolute;
+  right: 70px;
+  bottom: 34px;
+  z-index: 5;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  color: var(--accent);
+  font-size: 11px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.chart-older {
+  position: absolute;
+  left: 8px;
+  bottom: 34px;
+  z-index: 5;
+  font-size: 11px;
+  pointer-events: none;
 }

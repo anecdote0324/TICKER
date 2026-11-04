@@ -1204,11 +1204,12 @@ export class KisAdapter implements Adapter {
    * 환율 일·주·월봉(통화별 1달러당 값, 오래된 것부터). 기간별시세에 시장 구분 X, 한 번에 100건.
    * 일봉은 150일씩 3번(약 14개월). 환율 차트가 지금 환율(10초)과 같은 출처의 봉을 쓰게 해요
    */
-  async fxBarsPerUsd(c: string, period: 'D' | 'W' | 'M'): Promise<Bar[]> {
+  async fxBarsPerUsd(c: string, period: 'D' | 'W' | 'M', before?: number): Promise<Bar[]> {
     const def = KIS_FX[c];
     if (!def) throw new Error(`${c} 환율 코드가 없어요`);
     const out: Bar[] = [];
-    let end = Date.now();
+    // before(초)를 주면 그 앞의 한 묶음(차트를 왼쪽으로 끌 때)
+    let end = before ? before * 1000 - 86400_000 : Date.now();
     const span = period === 'D' ? 150 : period === 'W' ? 700 : 3000;
     for (let page = 0; page < (period === 'D' ? 3 : 1); page++) {
       const r = await this.get(
@@ -1295,21 +1296,23 @@ export class KisAdapter implements Adapter {
       if (inst.assetClass !== 'EQUITY') throw new Error('지수는 아직 시간봉이 없어요');
       bars = inst.market === 'US' ? await this.usBars(inst, 60, 2, '', 0) : await this.krHours(inst, opts?.after);
     } else if (inst.assetClass === 'INDEX') {
-      bars = await this.indexDaily(inst, interval);
+      bars = await this.indexDaily(inst, interval, opts?.before);
     } else if (inst.market === 'US') {
-      bars = await this.usDaily(inst, interval);
+      bars = await this.usDaily(inst, interval, opts?.before);
     } else {
-      bars = await this.krDaily(inst, interval);
+      bars = await this.krDaily(inst, interval, opts?.before);
     }
+    if (opts?.before) bars = bars.filter((b) => b.t < opts.before!);
     bars.sort((a, b) => a.t - b.t);
     return { id: inst.id, interval, bars, fresh: { source: 'KIS', mode: 'poll', asOf: now, receivedAt: now, intervalMs: 60_000, asOfFromReceipt: true } };
   }
 
-  private async krDaily(inst: Instrument, interval: BarInterval): Promise<Bar[]> {
+  /** 국내 일·주·월봉. before(초)를 주면 그 앞의 한 묶음(차트를 왼쪽으로 끌 때) */
+  private async krDaily(inst: Instrument, interval: BarInterval, before?: number): Promise<Bar[]> {
     const period = interval === '1w' ? 'W' : interval === '1M' ? 'M' : 'D';
     const out: Bar[] = [];
-    let end = new Date();
-    // 한 번에 100개까지 와요. 일봉은 약 400개(4번)
+    let end = before ? new Date(before * 1000 - 86400_000) : new Date();
+    // 한 번에 100개까지 와요. 한 묶음은 약 400개(4번): 일봉 1.6년, 주봉 7.7년, 월봉 33년
     for (let page = 0; page < 4; page++) {
       const start = new Date(end.getTime() - (period === 'D' ? 150 : period === 'W' ? 700 : 3000) * 86400_000);
       const r = await this.get(
@@ -1381,10 +1384,10 @@ export class KisAdapter implements Adapter {
     return dedupe(out);
   }
 
-  private async usDaily(inst: Instrument, interval: BarInterval): Promise<Bar[]> {
+  private async usDaily(inst: Instrument, interval: BarInterval, before?: number): Promise<Bar[]> {
     const gubn = interval === '1w' ? '1' : interval === '1M' ? '2' : '0';
     const out: Bar[] = [];
-    let bymd = '';
+    let bymd = before ? ymdKst(before * 1000 - 86400_000) : '';
     for (let page = 0; page < 4; page++) {
       const r = await this.get('/uapi/overseas-price/v1/quotations/dailyprice', 'HHDFS76240000', { AUTH: '', EXCD: inst.exchange ?? 'NAS', SYMB: inst.code, GUBN: gubn, BYMD: bymd, MODP: '1' }, 0);
       const rows = (r.output2 ?? []).filter((x) => x.xymd);
@@ -1527,32 +1530,34 @@ export class KisAdapter implements Adapter {
     return dedupe(out);
   }
 
-  private async indexDaily(inst: Instrument, interval: BarInterval): Promise<Bar[]> {
+  /**
+   * 지수 일·주·월봉. 기간을 거꾸로 넘기며 4번(일봉 약 400개) 받아요. 처음에는 150일 한 번만 받아서
+   * 지수 차트의 1Y·MAX가 5개월에서 멈췄어요. before(초)를 주면 그 앞의 한 묶음
+   */
+  private async indexDaily(inst: Instrument, interval: BarInterval, before?: number): Promise<Bar[]> {
     const def = INDICES.find((d) => d.code === inst.code);
     if (!def?.kis) return [];
+    const kis = def.kis;
     const period = interval === '1w' ? 'W' : interval === '1M' ? 'M' : 'D';
-    const end = new Date();
-    const start = new Date(end.getTime() - 150 * 86400_000);
-    if (def.kis.kind === 'domestic') {
-      const r = await this.get(
-        '/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice',
-        'FHKUP03500100',
-        { FID_COND_MRKT_DIV_CODE: 'U', FID_INPUT_ISCD: def.kis.code, FID_INPUT_DATE_1: ymdKst(start.getTime()), FID_INPUT_DATE_2: ymdKst(end.getTime()), FID_PERIOD_DIV_CODE: period },
-        0,
-      );
-      return (r.output2 ?? [])
-        .filter((x) => x.stck_bsop_date)
-        .map((x) => ({ t: dateSec(x.stck_bsop_date), o: +x.bstp_nmix_oprc, h: +x.bstp_nmix_hgpr, l: +x.bstp_nmix_lwpr, c: +x.bstp_nmix_prpr, v: +x.acml_vol }));
+    const span = (period === 'D' ? 150 : period === 'W' ? 700 : 3000) * 86400_000;
+    const out: Bar[] = [];
+    let end = before ? before * 1000 - 86400_000 : Date.now();
+    for (let page = 0; page < 4; page++) {
+      const range = { FID_INPUT_DATE_1: ymdKst(end - span), FID_INPUT_DATE_2: ymdKst(end), FID_PERIOD_DIV_CODE: period };
+      const rows: Bar[] =
+        kis.kind === 'domestic'
+          ? ((await this.get('/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice', 'FHKUP03500100', { FID_COND_MRKT_DIV_CODE: 'U', FID_INPUT_ISCD: kis.code, ...range }, 0)).output2 ?? [])
+              .filter((x) => x.stck_bsop_date && Number(x.bstp_nmix_prpr) > 0)
+              .map((x) => ({ t: dateSec(x.stck_bsop_date), o: +x.bstp_nmix_oprc, h: +x.bstp_nmix_hgpr, l: +x.bstp_nmix_lwpr, c: +x.bstp_nmix_prpr, v: +x.acml_vol }))
+          : ((await this.get('/uapi/overseas-price/v1/quotations/inquire-daily-chartprice', 'FHKST03030100', { FID_COND_MRKT_DIV_CODE: 'N', FID_INPUT_ISCD: kis.code, ...range }, 0)).output2 ?? [])
+              .filter((x) => x.stck_bsop_date && Number(x.ovrs_nmix_prpr) > 0)
+              .map((x) => ({ t: dateSec(x.stck_bsop_date), o: +x.ovrs_nmix_oprc, h: +x.ovrs_nmix_hgpr, l: +x.ovrs_nmix_lwpr, c: +x.ovrs_nmix_prpr, v: +x.acml_vol }));
+      if (rows.length === 0) break;
+      out.push(...rows);
+      const oldest = Math.min(...rows.map((b) => b.t));
+      end = oldest * 1000 - 86400_000;
     }
-    const r = await this.get(
-      '/uapi/overseas-price/v1/quotations/inquire-daily-chartprice',
-      'FHKST03030100',
-      { FID_COND_MRKT_DIV_CODE: 'N', FID_INPUT_ISCD: def.kis.code, FID_INPUT_DATE_1: ymdKst(start.getTime()), FID_INPUT_DATE_2: ymdKst(end.getTime()), FID_PERIOD_DIV_CODE: period },
-      0,
-    );
-    return (r.output2 ?? [])
-      .filter((x) => x.stck_bsop_date)
-      .map((x) => ({ t: dateSec(x.stck_bsop_date), o: +x.ovrs_nmix_oprc, h: +x.ovrs_nmix_hgpr, l: +x.ovrs_nmix_lwpr, c: +x.ovrs_nmix_prpr, v: +x.acml_vol }));
+    return dedupe(out);
   }
 
   status(): SourceStatus {

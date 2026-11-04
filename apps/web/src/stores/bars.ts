@@ -15,6 +15,11 @@ export function getBars(id: string, interval: BarInterval, maxAgeMs = 60_000): P
   return p;
 }
 
+/** before(초)보다 오래된 일·주·월봉 한 묶음(차트를 왼쪽 끝으로 끌 때). 빈 봉이면 더 없어요 */
+export function getOlderBars(id: string, interval: BarInterval, before: number): Promise<BarSeries> {
+  return api.get<BarSeries>(`/api/bars?id=${encodeURIComponent(id)}&interval=${interval}&before=${before}`);
+}
+
 /** 스파크라인용 최근 30개 종가 */
 export async function getSpark(id: string): Promise<number[]> {
   const s = await getBars(id, '1d', 30 * 60_000);

@@ -3,7 +3,7 @@
 
 import type { Bar, BarInterval, BarSeries, Freshness, Instrument, SourceStatus } from '@bt/shared';
 import { fetchJson, HttpError } from '../util';
-import type { Adapter, AdapterHost } from './types';
+import type { Adapter, AdapterHost, BarsOptions } from './types';
 
 const REST_BASES = ['https://api.binance.com', 'https://data-api.binance.vision'];
 const WS_BASES = ['wss://stream.binance.com:9443', 'wss://data-stream.binance.vision'];
@@ -209,9 +209,10 @@ export class BinanceAdapter implements Adapter {
     return this.rest<Ticker24h[]>('/api/v3/ticker/24hr');
   }
 
-  async bars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
-    const limit = interval === '1m' || interval === '1h' ? 1000 : 500;
-    const bars = await this.klines(inst, interval, limit);
+  async bars(inst: Instrument, interval: BarInterval, opts?: BarsOptions): Promise<BarSeries> {
+    const limit = interval === '1m' || interval === '1h' || opts?.before ? 1000 : 500;
+    // before(초)를 주면 그 앞의 1000개(차트를 왼쪽으로 끌 때). 코인은 상장일까지 있어요
+    const bars = await this.klines(inst, interval, limit, opts?.before ? opts.before * 1000 - 1 : undefined);
     const now = Date.now();
     return { id: inst.id, interval, bars, fresh: { source: 'BINANCE', mode: 'realtime', asOf: now, receivedAt: now } };
   }

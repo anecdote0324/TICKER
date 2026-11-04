@@ -39,6 +39,8 @@ export interface PanelState {
   gpInterval?: '1h' | '2h' | '4h' | '1d' | '1w' | '1M';
   gpRange?: string;
   gpHourRange?: string;
+  /** GP 보조지표(v0.2, 없으면 20·60선). widgets/indicators.ts의 id */
+  gpIndicators?: string[];
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

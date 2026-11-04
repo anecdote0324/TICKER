@@ -4,7 +4,7 @@
 
 import { FX_PAIRS, isHourInterval, type Bar, type BarInterval, type BarSeries, type Freshness, type Instrument, type Quote, type SourceStatus } from '@bt/shared';
 import { fetchJson, ymdUtc } from '../util';
-import type { Adapter, AdapterHost } from './types';
+import type { Adapter, AdapterHost, BarsOptions } from './types';
 
 const BASE = 'https://api.frankfurter.dev/v1';
 const POLL_MS = 30 * 60_000;
@@ -17,7 +17,7 @@ const LIVE_STALE_MS = 60_000;
 export interface LiveFxSource {
   fxPerUsd(currencies: string[]): Promise<{ cur: Record<string, number>; prev: Record<string, number> }>;
   /** 통화별 1달러당 일·주·월봉(오래된 것부터) */
-  fxBarsPerUsd?(currency: string, period: 'D' | 'W' | 'M'): Promise<Bar[]>;
+  fxBarsPerUsd?(currency: string, period: 'D' | 'W' | 'M', before?: number): Promise<Bar[]>;
 }
 
 /**
@@ -234,7 +234,8 @@ export class EcbAdapter implements Adapter {
     for (const inst of insts) this.subscribed.delete(inst.id);
   }
 
-  async bars(inst: Instrument, interval: BarInterval): Promise<BarSeries> {
+  async bars(inst: Instrument, interval: BarInterval, opts?: BarsOptions): Promise<BarSeries> {
+    const before = opts?.before;
     const pair = FX_PAIRS.find((p) => p.code === inst.code);
     if (!pair) throw new Error(`환율 ${inst.code}를 찾을 수 없어요`);
     if (interval === '1m' || interval === '5m') throw new Error('환율 소스에 분봉이 없어요');
@@ -243,9 +244,9 @@ export class EcbAdapter implements Adapter {
     if (live?.fxBarsPerUsd) {
       try {
         const period = interval === '1w' ? 'W' : interval === '1M' ? 'M' : 'D';
-        const get = (c: string) => (c === 'USD' ? Promise.resolve(null) : live.fxBarsPerUsd!(c, period));
+        const get = (c: string) => (c === 'USD' ? Promise.resolve(null) : live.fxBarsPerUsd!(c, period, before));
         const [b, q] = await Promise.all([get(pair.base), get(pair.quote)]);
-        const bars = pairBars(b, q);
+        const bars = pairBars(b, q).filter((x) => !before || x.t < before);
         if (bars.length === 0) throw new Error('한국투자증권 환율 봉이 비어 있어요');
         const now = Date.now();
         return { id: inst.id, interval, bars, fresh: { source: 'KIS', mode: 'poll', asOf: now, receivedAt: now, intervalMs: 60_000, asOfFromReceipt: true } };
@@ -253,15 +254,18 @@ export class EcbAdapter implements Adapter {
         this.host.log.warn(`${inst.code} 환율 봉을 한국투자증권에서 받지 못해 ECB 기준환율로 그려요: ${(e as Error).message}`);
       }
     }
-    const end = new Date();
+    // ECB 기준환율은 1999년부터 있어요. before를 주면 그 앞의 2년(한국투자증권 봉이 끝난 더 먼 과거도 여기서)
+    const end = before ? new Date(before * 1000 - 86400_000) : new Date();
     const start = new Date(end.getTime() - 2 * 365 * 86400_000);
+    if (before && end.getTime() < Date.parse('1999-01-04T00:00:00Z')) return { id: inst.id, interval, bars: [], fresh: { source: 'ECB', mode: 'daily', asOf: Date.now(), receivedAt: Date.now() } };
     const s = await fetchJson<Series>(`${BASE}/${ymdUtc(start)}..${ymdUtc(end)}?base=${pair.base}&symbols=${pair.quote}`, { timeoutMs: 20_000 });
     const bars: Bar[] = Object.keys(s.rates)
       .sort()
       .map((d) => {
         const c = s.rates[d][pair.quote];
         return { t: Math.floor(Date.parse(`${d}T00:00:00Z`) / 1000), o: c, h: c, l: c, c, v: 0 };
-      });
+      })
+      .filter((x) => Number.isFinite(x.c) && (!before || x.t < before));
     const lastDate = Object.keys(s.rates).sort().pop() ?? ymdUtc(end);
     const now = Date.now();
     return {
