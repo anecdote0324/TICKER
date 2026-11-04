@@ -313,6 +313,21 @@ const BUILT: FunctionDef[] = [
     aliases: ['WECO'],
   },
   {
+    code: 'PORT',
+    nameKo: '포트폴리오',
+    nameEn: 'Portfolio',
+    summary: '보유 종목 원화 평가·손익',
+    detail: '보유 종목을 직접 입력하거나 잔고 CSV(신한 등)로 가져와 평가금액·손익·수익률·오늘 손익·비중을 원화로 봐요. 미국 종목은 지금 원/달러로 환산해요.',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['포트폴리오', '보유', '잔고', '내종목'],
+    version: 'v0.3',
+    implemented: true,
+    speed: '시세와 같은 속도(실시간·주기 조회)',
+    examples: ['PORT'],
+    aliases: ['BBU'],
+  },
+  {
     code: 'GRID',
     nameKo: '소형 차트 격자',
     nameEn: 'Chart Grid',
@@ -347,7 +362,6 @@ const BUILT: FunctionDef[] = [
 
 /** 앞으로 만들 기능 중 v0.2~v0.3의 자세한 문구(03 문서). 나머지는 카탈로그 문구를 써요. */
 const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
-  PORT: { security: 'none', assetClasses: [], keywords: ['포트폴리오', '보유'], summary: '보유 종목 손익' },
   ALRT: { security: 'optional', assetClasses: ALL_ASSETS, keywords: ['알림'], summary: '가격·뉴스 조건 알림' },
 };
 

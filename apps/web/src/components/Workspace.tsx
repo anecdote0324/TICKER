@@ -21,6 +21,7 @@ import { Hmap } from '../widgets/Hmap';
 import { Imap } from '../widgets/Imap';
 import { Grid } from '../widgets/Grid';
 import { WorldMap } from '../widgets/WorldMap';
+import { Port } from '../widgets/Port';
 import { Eco } from '../widgets/Eco';
 import { Fa } from '../widgets/Fa';
 import { Gc } from '../widgets/Gc';
@@ -121,6 +122,8 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Fa panel={p} />;
     case 'ECO':
       return <Eco panel={p} />;
+    case 'PORT':
+      return <Port panel={p} />;
     case 'GRID':
       return <Grid panel={p} />;
     case 'MAP':

@@ -2308,3 +2308,88 @@ button {
   font: 11px var(--mono);
   padding: 1px 8px;
 }
+
+/* PORT 포트폴리오(v0.3) */
+.port {
+  overflow: auto;
+  padding: 4px 8px;
+}
+.port-sum {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  padding: 4px 0 8px;
+  color: var(--label);
+}
+.port-sum b {
+  color: var(--value-hi);
+  font-size: 14px;
+}
+.port-sum .up b {
+  color: var(--up);
+}
+.port-sum .down b {
+  color: var(--down);
+}
+.port-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+.port-table th {
+  color: var(--label);
+  font-weight: 500;
+  text-align: right;
+  padding: 2px 6px;
+  border-bottom: 1px solid #222;
+  white-space: nowrap;
+}
+.port-table th:first-child,
+.port-table td:first-child {
+  text-align: left;
+}
+.port-table td {
+  padding: 3px 6px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid #141414;
+  color: var(--value);
+}
+.port-table tr {
+  cursor: pointer;
+}
+.port-table tr:hover td {
+  background: #121212;
+}
+.port-table td.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.port-table td.up {
+  color: var(--up);
+}
+.port-table td.down {
+  color: var(--down);
+}
+.port-name {
+  color: var(--amber);
+}
+.port-edit {
+  border-bottom: 1px dotted #555;
+  cursor: text;
+}
+.port-input {
+  width: 90px;
+  text-align: right;
+}
+.port-add {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0 0 8px;
+}
+.port-add .row {
+  width: 100%;
+}

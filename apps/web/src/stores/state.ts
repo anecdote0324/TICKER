@@ -1,7 +1,7 @@
 // 앱 상태: 명령 기록, 사용 점수, 기억된 선택, 겹침 기본값, 관심종목, 화면 배치.
 // 서버(메인 프로세스)만 파일에 써요. 여러 창이 동시에 써서 기록이 사라지는 일을 막아요(05 §14.2).
 
-import type { AssetClass } from '@bt/shared';
+import type { AssetClass, Holding } from '@bt/shared';
 import { api } from '../api';
 import { createStore } from './store';
 
@@ -35,6 +35,8 @@ export interface AppState {
   tips: { counts: Record<string, number>; directRuns: number; standardAsked: boolean; hidden: string[] };
   /** 사용자 별칭(ALIAS, v0.2): 별칭(aliasKey) → 종목 */
   aliases: Array<{ name: string; id: string; at: number }>;
+  /** PORT 보유 종목(v0.3) */
+  portfolio: Holding[];
 }
 
 export const DEFAULT_WATCHLISTS: WatchGroup[] = [
@@ -55,11 +57,12 @@ const DEFAULT: AppState = {
   workspaces: [],
   tips: { counts: {}, directRuns: 0, standardAsked: false, hidden: [] },
   aliases: [],
+  portfolio: [],
 };
 
 export const appState = createStore<AppState>(DEFAULT);
 
-const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases'];
+const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio'];
 
 export async function loadAppState() {
   const next: AppState = { ...DEFAULT };
