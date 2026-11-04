@@ -18,3 +18,4 @@ export * from './financials';
 export * from './eco';
 export * from './portfolio';
 export * from './alerts';
+export * from './flows';

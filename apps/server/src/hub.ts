@@ -1,7 +1,7 @@
 // 시세 중계: 화면 연결(여러 창)이 구독한 종목을 소스별 어댑터로 보내고, 받은 시세를 묶어서 돌려줘요.
 // 여러 창에 같은 종목이 떠 있어도 한 번만 구독하고, 어떤 창에도 안 보이면 해제해요(01).
 
-import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type MostKind, type MostResponse, type SectorHistoryResponse, type MapIndex, type SectorIndex, type SectorMapResponse, isUsMapIndex, US_MAP_ETF, type UsMapIndex, type SectorMember, type SectorRow, type SecurityProfile, type ServerMessage, type SourceStatus, CRYPTO_EXCLUDED_BASES } from '@bt/shared';
+import { aggregateBars, EXCHANGES, intervalMinutes, intradayAt, isHourInterval, lastRegularClose, overlapsRegular, sessionState, staticInstruments, supportsHourBars, type Bar, type BarInterval, type BarSeries, type Instrument, type Quote, type MostKind, type MostResponse, type SectorHistoryResponse, type FlowKind, type FlowResponse, type MapIndex, type SectorIndex, type WarningsResponse, type SectorMapResponse, isUsMapIndex, US_MAP_ETF, type UsMapIndex, type SectorMember, type SectorRow, type SecurityProfile, type ServerMessage, type SourceStatus, CRYPTO_EXCLUDED_BASES } from '@bt/shared';
 import type { BinanceAdapter } from './adapters/binance';
 import type { DemoAdapter } from './adapters/demo';
 import type { EcbAdapter } from './adapters/ecb';
@@ -26,6 +26,10 @@ const FLUSH_MS = 100;
 const SNAPSHOT_REUSE_MS = 10_000;
 /** IMAP 종목 시세(30개씩 조회)와 업종 지수를 이만큼 다시 써요 */
 const SECTOR_QUOTES_MS = 60_000;
+/** v0.4 수급 표(일별, 장중에는 오늘 줄이 바뀌어요) */
+const FLOW_MS = 5 * 60_000;
+/** KWRN VI 발동 목록 */
+const VI_MS = 30_000;
 const SECTOR_INDEX_MS = 30_000;
 /** 코스피·코스닥 타일은 시가총액 상위 이만큼만(조회 7번) */
 const SECTOR_TOP = 200;
@@ -511,6 +515,44 @@ export class Hub implements AdapterHost {
         out.liveError = `한국투자증권 조회 실패: ${(e as Error).message}`;
       }
     }
+    return out;
+  }
+
+  private flowCache = new Map<string, { at: number; p: Promise<FlowResponse> }>();
+
+  /** v0.4 수급(KINV·KPGM·KCRD·SI): 국내 주식의 일별 표. 같은 종목·종류는 5분 동안 한 번만 조회해요 */
+  flows(id: string, kind: FlowKind): Promise<FlowResponse> {
+    const inst = this.instruments.get(id);
+    if (!inst) return Promise.reject(new Error(`종목 ${id}을(를) 찾지 못했어요`));
+    if (inst.assetClass !== 'EQUITY' || (inst.market !== 'KS' && inst.market !== 'KQ')) return Promise.reject(new Error('수급 표는 국내 주식만 볼 수 있어요'));
+    const kis = this.kis;
+    if (!kis) return Promise.reject(new Error('한국투자증권 키를 넣으면 수급 표가 보여요(설정 → 데이터 연결)'));
+    return this.cached(this.flowCache, `${id}|${kind}`, FLOW_MS, async () => {
+      const rows = await kis.flows(inst.code, kind);
+      return { id, kind, rows, fresh: kisPollFresh(inst.market as 'KS' | 'KQ', FLOW_MS) };
+    });
+  }
+
+  private viCache = new Map<string, { at: number; p: Promise<WarningsResponse['viList']> }>();
+
+  /** KWRN: 종목 경보(DES와 같은 주식현재가 시세)와 오늘 VI 발동 목록. 목록은 30초 동안 같은 값을 써요 */
+  async warnings(id?: string): Promise<WarningsResponse> {
+    const kis = this.kis;
+    const fresh = kisPollFresh('KS', VI_MS);
+    if (!kis) return { viList: [], fresh, error: '한국투자증권 키를 넣으면 시장경보와 VI 발동 목록이 보여요(설정 → 데이터 연결)' };
+    const out: WarningsResponse = { id, viList: [], fresh };
+    const inst = id ? this.instruments.get(id) : undefined;
+    const [list, prof] = await Promise.allSettled([
+      this.cached(this.viCache, 'all', VI_MS, () => kis.viStatus()),
+      inst && (inst.market === 'KS' || inst.market === 'KQ') && inst.assetClass === 'EQUITY' ? kis.profile(inst) : Promise.resolve(undefined),
+    ]);
+    if (list.status === 'fulfilled') out.viList = list.value;
+    else out.error = `VI 현황 조회 실패: ${(list.reason as Error).message}`;
+    if (prof.status === 'fulfilled' && prof.value) {
+      out.warnings = prof.value.warnings ?? [];
+      const mine = inst ? out.viList.find((v) => v.code === inst.code && !v.releaseTime) : undefined;
+      if (mine) out.vi = `${mine.kind} VI 발동 중(${mine.time})`;
+    } else if (prof.status === 'rejected') out.error = [out.error, `종목 경보 조회 실패: ${(prof.reason as Error).message}`].filter(Boolean).join(' · ');
     return out;
   }
 

@@ -48,6 +48,8 @@ export interface PanelState {
   gridRange?: string;
   /** FA 기간(v0.3): 연간·분기 */
   faPeriod?: 'annual' | 'quarter';
+  /** v0.4 수급 탭(KCRD 신용·대차) */
+  flowKind?: 'investor' | 'program' | 'credit' | 'loan' | 'short';
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

@@ -17,8 +17,12 @@ import {
   type Bar,
   type BarInterval,
   type BarSeries,
+  amountScale,
+  type FlowKind,
+  type FlowRow,
   type Freshness,
   type Instrument,
+  type ViRow,
   type MostKind,
   type MostRow,
   type ProfileLive,
@@ -1225,6 +1229,98 @@ export class KisAdapter implements Adapter {
       .slice(0, MOST_ROWS)
       .map((x, i) => ({ ...x, rank: i + 1 }));
     return { rows, fresh };
+  }
+
+  /**
+   * v0.4 수급 일별 표(08 §2.3). 요청 변수와 칸은 공식 예제(examples_llm/domestic_stock)와 같아요:
+   * investor = 주식현재가 투자자(FHKST01010900, inquire_investor), program = 종목별 프로그램매매추이 일별(FHPPG04650201),
+   * credit = 신용잔고 일별추이(FHPST04760000, 화면 20476), loan = 종목별 일별 대차거래추이(HHPST074500C0, 조회구분 3 종목),
+   * short = 공매도 일별추이(FHPST04830000). 금액 칸은 수량 × 종가와 견줘 원 단위로 맞춰요(amountScale)
+   */
+  async flows(code: string, kind: FlowKind): Promise<FlowRow[]> {
+    const now = Date.now();
+    const today = ymdKst(now);
+    const ago = ymdKst(now - 120 * 86400_000);
+    const num = (v: unknown) => {
+      const n = Number(String(v ?? '').replace(/,/g, ''));
+      return v === undefined || v === '' || !Number.isFinite(n) ? undefined : n;
+    };
+    const day = (v: unknown) => {
+      const t = String(v ?? '');
+      return /^\d{8}$/.test(t) ? `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}` : '';
+    };
+    let rows: KisRow[];
+    if (kind === 'investor') {
+      rows = asRows((await this.get('/uapi/domestic-stock/v1/quotations/inquire-investor', 'FHKST01010900', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: code }, 1)).output);
+    } else if (kind === 'program') {
+      rows = asRows((await this.get('/uapi/domestic-stock/v1/quotations/program-trade-by-stock-daily', 'FHPPG04650201', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: code, FID_INPUT_DATE_1: '' }, 1)).output);
+    } else if (kind === 'credit') {
+      rows = asRows((await this.get('/uapi/domestic-stock/v1/quotations/daily-credit-balance', 'FHPST04760000', { FID_COND_MRKT_DIV_CODE: 'J', FID_COND_SCR_DIV_CODE: '20476', FID_INPUT_ISCD: code, FID_INPUT_DATE_1: today }, 1)).output);
+    } else if (kind === 'loan') {
+      rows = asRows((await this.get('/uapi/domestic-stock/v1/quotations/daily-loan-trans', 'HHPST074500C0', { MRKT_DIV_CLS_CODE: '3', MKSC_SHRN_ISCD: code, START_DATE: ago, END_DATE: today, CTS: '' }, 1)).output1);
+    } else {
+      rows = asRows((await this.get('/uapi/domestic-stock/v1/quotations/daily-short-sale', 'FHPST04830000', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: code, FID_INPUT_DATE_1: ago, FID_INPUT_DATE_2: today }, 1)).output2);
+    }
+    if (rows.length) this.sampleRows(`flows/${kind}`, code, today, rows, (x) => Object.entries(x).slice(0, 8).map(([k, v]) => `${k}=${v}`));
+    const close = (o: KisRow) => num(o.stck_clpr ?? o.stck_prpr);
+    const pct = (o: KisRow) => signedBy(o.prdy_ctrt, o.prdy_vrss_sign);
+    const scaleBy = (amt: string, qty: string) => amountScale(rows.map((o) => ({ amt: num(o[amt]), qty: num(o[qty]), price: close(o) })));
+    const out: FlowRow[] = [];
+    if (kind === 'investor') {
+      const k = scaleBy('frgn_ntby_tr_pbmn', 'frgn_ntby_qty');
+      for (const o of rows) {
+        const amt = (f: string) => (num(o[f]) === undefined ? undefined : num(o[f])! * k);
+        out.push({ date: day(o.stck_bsop_date), close: close(o), changePct: pct(o), values: { frgnAmt: amt('frgn_ntby_tr_pbmn'), orgnAmt: amt('orgn_ntby_tr_pbmn'), prsnAmt: amt('prsn_ntby_tr_pbmn'), frgnQty: num(o.frgn_ntby_qty), orgnQty: num(o.orgn_ntby_qty), prsnQty: num(o.prsn_ntby_qty) } });
+      }
+    } else if (kind === 'program') {
+      const k = scaleBy('whol_smtn_ntby_tr_pbmn', 'whol_smtn_ntby_qty');
+      const kt = amountScale(rows.map((o) => ({ amt: num(o.acml_tr_pbmn), qty: num(o.acml_vol), price: close(o) })));
+      for (const o of rows) {
+        const amt = (f: string) => (num(o[f]) === undefined ? undefined : num(o[f])! * k);
+        const net = amt('whol_smtn_ntby_tr_pbmn');
+        const turnover = num(o.acml_tr_pbmn) !== undefined ? num(o.acml_tr_pbmn)! * kt : undefined;
+        out.push({ date: day(o.stck_bsop_date), close: close(o), changePct: pct(o), values: { netAmt: net, buyAmt: amt('whol_smtn_shnu_tr_pbmn'), sellAmt: amt('whol_smtn_seln_tr_pbmn'), netQty: num(o.whol_smtn_ntby_qty), turnoverShare: net !== undefined && turnover ? (net / turnover) * 100 : undefined } });
+      }
+    } else if (kind === 'credit') {
+      const k = scaleBy('whol_loan_rmnd_amt', 'whol_loan_rmnd_stcn');
+      for (const o of rows) out.push({ date: day(o.deal_date), close: close(o), changePct: pct(o), values: { loanBal: num(o.whol_loan_rmnd_stcn), loanAmt: num(o.whol_loan_rmnd_amt) !== undefined ? num(o.whol_loan_rmnd_amt)! * k : undefined, loanRate: num(o.whol_loan_rmnd_rate), loanNew: num(o.whol_loan_new_stcn), loanRepay: num(o.whol_loan_rdmp_stcn), stlnBal: num(o.whol_stln_rmnd_stcn) } });
+    } else if (kind === 'loan') {
+      const k = scaleBy('rmnd_amt', 'rmnd_stcn');
+      for (const o of rows) out.push({ date: day(o.bsop_date), close: close(o), changePct: pct(o), values: { balance: num(o.rmnd_stcn), balanceAmt: num(o.rmnd_amt) !== undefined ? num(o.rmnd_amt)! * k : undefined, change: num(o.prdy_rmnd_vrss), newQty: num(o.new_stcn), repayQty: num(o.rdmp_stcn) } });
+    } else {
+      const k = scaleBy('ssts_tr_pbmn', 'ssts_cntg_qty');
+      for (const o of rows) out.push({ date: day(o.stck_bsop_date), close: close(o), changePct: pct(o), values: { qty: num(o.ssts_cntg_qty), qtyShare: num(o.ssts_vol_rlim), amt: num(o.ssts_tr_pbmn) !== undefined ? num(o.ssts_tr_pbmn)! * k : undefined, amtShare: num(o.ssts_tr_pbmn_rlim), avgPrice: num(o.avrg_prc) } });
+    }
+    return out.filter((r) => r.date).sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  /**
+   * KWRN: 오늘 VI 발동 목록(변동성완화장치 현황 FHPST01390000, 공식 예제 inquire_vi_status: 분류 0 전체, 화면 20139, 시장 0 전체, 정렬 0 전체)
+   */
+  async viStatus(): Promise<ViRow[]> {
+    const today = ymdKst(Date.now());
+    const out: ViRow[] = [];
+    await this.getPages(
+      '/uapi/domestic-stock/v1/quotations/inquire-vi-status',
+      'FHPST01390000',
+      { FID_DIV_CLS_CODE: '0', FID_COND_SCR_DIV_CODE: '20139', FID_MRKT_CLS_CODE: '0', FID_INPUT_ISCD: '', FID_RANK_SORT_CLS_CODE: '0', FID_INPUT_DATE_1: today, FID_TRGT_CLS_CODE: '', FID_TRGT_EXLS_CLS_CODE: '' },
+      1,
+      3,
+      (r) => {
+        for (const o of asRows(r.output)) {
+          const code = String(o.mksc_shrn_iscd ?? '').trim();
+          if (!code) continue;
+          const hms = (v: unknown) => {
+            const t = String(v ?? '').padStart(6, '0');
+            return /^\d{6}$/.test(t) && t !== '000000' ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : undefined;
+          };
+          const kind = { '1': '정적', '2': '동적', '3': '정적·동적' }[String(o.vi_kind_code).trim()] ?? String(o.vi_kind_code ?? '').trim();
+          const gap = Number(o.vi_dprt) || Number(o.vi_dmc_dprt) || undefined;
+          out.push({ code, name: String(o.hts_kor_isnm ?? '').trim(), time: hms(o.cntg_vi_hour) ?? '', releaseTime: hms(o.vi_cncl_hour), kind, price: Number(o.vi_prc) || undefined, gap, count: Number(o.vi_count) || undefined });
+        }
+      },
+    );
+    return out.sort((a, b) => b.time.localeCompare(a.time));
   }
 
   /**

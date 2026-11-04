@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { isUsMapIndex, type BarInterval, type ClientMessage, type CredentialStatus, type InstrumentsResponse, type MapIndex, type MostKind, type SectorIndex, type ServerMessage, type Settings } from '@bt/shared';
+import { isUsMapIndex, type BarInterval, type ClientMessage, type FlowKind, type CredentialStatus, type InstrumentsResponse, type MapIndex, type MostKind, type SectorIndex, type ServerMessage, type Settings } from '@bt/shared';
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
 import type { NewsService } from './news';
@@ -166,6 +166,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return reply.code(502).send({ error: (e as Error).message });
     }
   });
+
+  // v0.4 수급(KINV·KPGM·KCRD·SI)과 KWRN 시장경보·VI
+  app.get<{ Querystring: { id?: string; kind?: string } }>('/api/flows', async (req, reply) => {
+    const id = req.query.id ?? '';
+    const kind = req.query.kind ?? '';
+    if (!hub.instruments.has(id)) return reply.code(404).send({ error: '종목을 찾지 못했어요' });
+    if (!['investor', 'program', 'credit', 'loan', 'short'].includes(kind)) return reply.code(400).send({ error: '종류가 맞지 않아요' });
+    try {
+      return await hub.flows(id, kind as FlowKind);
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+  app.get<{ Querystring: { id?: string } }>('/api/warnings', async (req) => hub.warnings(req.query.id || undefined));
 
   app.get<{ Querystring: { market?: string; kind?: string } }>('/api/most', async (req, reply) => {
     const market = req.query.market ?? 'KS';

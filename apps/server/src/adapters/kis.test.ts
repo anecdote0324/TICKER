@@ -524,3 +524,67 @@ describe('IMAP 미국 지수(한국투자증권)', () => {
     expect(theme.map((r) => `${r.q.get('EXCD')}:${r.q.get('ICOD')}`)).toEqual(['NAS:010', 'NAS:020', 'NYS:010']);
   });
 });
+
+describe('v0.4 수급(한국투자증권)', () => {
+  it('투자자: 공식 예제의 변수로 받고, 금액(백만 원)을 원으로 맞추고 최근 날짜를 먼저', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/domestic-stock/v1/quotations/inquire-investor';
+    custom.set(path, () => ({
+      rt_cd: '0',
+      msg_cd: 'MCA00000',
+      msg1: '정상',
+      output: [
+        { stck_bsop_date: '20261103', stck_clpr: '70000', prdy_ctrt: '1.00', prdy_vrss_sign: '2', frgn_ntby_qty: '10000', frgn_ntby_tr_pbmn: '700', orgn_ntby_qty: '-5000', orgn_ntby_tr_pbmn: '-350', prsn_ntby_qty: '-5000', prsn_ntby_tr_pbmn: '-350' },
+        { stck_bsop_date: '20261104', stck_clpr: '71000', prdy_ctrt: '1.43', prdy_vrss_sign: '2', frgn_ntby_qty: '20000', frgn_ntby_tr_pbmn: '1420', orgn_ntby_qty: '', orgn_ntby_tr_pbmn: '', prsn_ntby_qty: '-20000', prsn_ntby_tr_pbmn: '-1420' },
+      ],
+    }));
+    const { kis } = adapter(memoryStore());
+    const rows = await kis.flows('005930', 'investor');
+    expect(rows.map((r) => r.date)).toEqual(['2026-11-04', '2026-11-03']);
+    expect(rows[1].values.frgnAmt).toBe(700e6);
+    expect(rows[0].values.orgnAmt).toBeUndefined();
+    expect(rows[0].changePct).toBe(1.43);
+    const req = requests.find((r) => r.path === path)!;
+    expect([req.q.get('FID_COND_MRKT_DIV_CODE'), req.q.get('FID_INPUT_ISCD'), req.h.tr_id]).toEqual(['J', '005930', 'FHKST01010900']);
+  });
+
+  it('공매도: output2의 칸, 하락 부호면 등락률 음수', async () => {
+    mode.token = 'ok';
+    const path = '/uapi/domestic-stock/v1/quotations/daily-short-sale';
+    custom.set(path, () => ({
+      rt_cd: '0',
+      msg_cd: 'MCA00000',
+      msg1: '정상',
+      output1: {},
+      output2: [{ stck_bsop_date: '20261104', stck_clpr: '50000', prdy_ctrt: '2.00', prdy_vrss_sign: '5', ssts_cntg_qty: '1000', ssts_vol_rlim: '3.5', ssts_tr_pbmn: '50000000', ssts_tr_pbmn_rlim: '3.4', avrg_prc: '50000' }],
+    }));
+    const { kis } = adapter(memoryStore());
+    const [r] = await kis.flows('000660', 'short');
+    expect(r.changePct).toBe(-2);
+    expect(r.values).toMatchObject({ qty: 1000, qtyShare: 3.5, amt: 50_000_000, avgPrice: 50000 });
+    const req = requests.find((x) => x.path === path)!;
+    expect(req.h.tr_id).toBe('FHPST04830000');
+    expect(req.q.get('FID_INPUT_DATE_1')).toMatch(/^\d{8}$/);
+  });
+
+  it('VI 현황: 시각·종류·해제, 최근 발동이 먼저', async () => {
+    mode.token = 'ok';
+    custom.set('/uapi/domestic-stock/v1/quotations/inquire-vi-status', (q) => ({
+      rt_cd: '0',
+      msg_cd: 'MCA00000',
+      msg1: '정상',
+      output: [
+        { mksc_shrn_iscd: '123456', hts_kor_isnm: '가나다', cntg_vi_hour: '091500', vi_cncl_hour: '091700', vi_kind_code: '1', vi_prc: '11000', vi_dprt: '10.00', vi_count: '1' },
+        { mksc_shrn_iscd: '654321', hts_kor_isnm: '라마바', cntg_vi_hour: '101000', vi_cncl_hour: '', vi_kind_code: '2', vi_prc: '5000', vi_dmc_dprt: '-3.10', vi_count: '2' },
+      ],
+      _q: q.get('FID_COND_SCR_DIV_CODE'),
+    }));
+    const { kis } = adapter(memoryStore());
+    const list = await kis.viStatus();
+    expect(list.map((v) => [v.code, v.time, v.kind, v.releaseTime])).toEqual([
+      ['654321', '10:10:00', '동적', undefined],
+      ['123456', '09:15:00', '정적', '09:17:00'],
+    ]);
+    expect(list[0].gap).toBe(-3.1);
+  });
+});

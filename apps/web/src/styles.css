@@ -2405,3 +2405,90 @@ button {
 .port-add .row {
   width: 100%;
 }
+
+/* ── v0.4 수급(KINV·KPGM·KCRD·SI) ── */
+.flow {
+  overflow: auto;
+  padding: 4px 8px;
+}
+.flow-chart svg {
+  width: 100%;
+  height: 110px;
+  display: block;
+}
+.flow-legend {
+  font-size: 10.5px;
+  padding: 2px 0 4px;
+}
+.flow-legend span {
+  margin-right: 8px;
+}
+.flow-table {
+  border-collapse: collapse;
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+}
+.flow-table th {
+  color: var(--label);
+  font-weight: 500;
+  text-align: right;
+  padding: 2px 6px;
+  border-bottom: 1px solid #222;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+}
+.flow-table td {
+  padding: 1px 6px;
+  text-align: right;
+  color: var(--value);
+  white-space: nowrap;
+}
+.flow-table td:first-child,
+.flow-table th:first-child {
+  text-align: left;
+  color: var(--amber);
+}
+.flow-table td.up {
+  color: var(--up);
+}
+.flow-table td.down {
+  color: var(--down);
+}
+
+/* ── KWRN 시장경보·VI ── */
+.kwrn {
+  overflow: auto;
+  padding: 4px 8px;
+}
+.kwrn-mine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 0 6px;
+  font-size: 12px;
+}
+.kwrn-tag {
+  padding: 0 6px;
+  border: 1px solid var(--down);
+  color: var(--down);
+  font-size: 11px;
+}
+.kwrn-tag.vi {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.kwrn-sum,
+.kwrn-err {
+  font-size: 11px;
+  padding: 2px 0 4px;
+}
+.flow-table tr.click {
+  cursor: pointer;
+}
+.flow-table tr.click:hover td {
+  background: #151515;
+}

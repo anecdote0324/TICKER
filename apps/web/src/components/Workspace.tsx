@@ -25,6 +25,8 @@ import { Alrt } from '../widgets/Alrt';
 import { Port } from '../widgets/Port';
 import { Eco } from '../widgets/Eco';
 import { Fa } from '../widgets/Fa';
+import { Flow } from '../widgets/Flow';
+import { Kwrn } from '../widgets/Kwrn';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
 import { Menu } from '../widgets/Menu';
@@ -121,6 +123,13 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Gc panel={p} />;
     case 'FA':
       return <Fa panel={p} />;
+    case 'KINV':
+    case 'KPGM':
+    case 'KCRD':
+    case 'SI':
+      return <Flow panel={p} />;
+    case 'KWRN':
+      return <Kwrn panel={p} />;
     case 'ECO':
       return <Eco panel={p} />;
     case 'PORT':
