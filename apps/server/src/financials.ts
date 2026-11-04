@@ -192,9 +192,12 @@ export function secSeries(gaap: UsGaap, id: FinLineId, kind: FinPeriodKind): Map
   return new Map();
 }
 
-/** SEC 요청 머리글. 요청 머리글에는 영문(ASCII)만 넣을 수 있어요 */
+/**
+ * SEC 요청 머리글. SEC 공개 규칙의 예('Sample Company Name AdminContact@sample.com')처럼 User-Agent는 연락처(이름 이메일)만.
+ * 앞에 앱 이름을 붙였을 때 실제 PC에서 'Undeclared Automated Tool'(403)이 났어요(v0.3.0-beta.2). 요청 머리글에는 영문(ASCII)만
+ */
 export function secHeaders(contact: string): Record<string, string> {
-  return { 'user-agent': `TICKER ${contact}`, accept: 'application/json', 'accept-encoding': 'gzip, deflate' };
+  return { 'user-agent': contact, accept: 'application/json', 'accept-encoding': 'gzip, deflate' };
 }
 
 /** SEC 연락처 모양: 영문(ASCII)·이메일 포함·120자 이하. 틀리면 이유 */
