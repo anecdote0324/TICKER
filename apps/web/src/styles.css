@@ -602,6 +602,24 @@ button {
 .row.sel {
   background: var(--select);
 }
+/* 줄 위에 겹쳐 보이는 단추(MON의 ✕): 마우스를 올리거나 고른 줄에서만 */
+.row {
+  position: relative;
+}
+.row .row-act {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  display: none;
+  background: #1c1c1c;
+}
+.row:hover .row-act,
+.row.sel .row-act {
+  display: flex;
+}
+.row.sel .row-act {
+  background: var(--select);
+}
 .row.sel .label {
   color: #a0a0a0;
 }

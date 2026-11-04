@@ -44,6 +44,8 @@ export function QuoteRow(props: {
   spark?: boolean;
   extra?: ReactNode;
   badgeCol?: boolean;
+  /** 줄 오른쪽 끝에 겹쳐 보이는 단추(마우스를 올리거나 고른 줄에서만, MON의 ✕ 빼기) */
+  actions?: ReactNode;
 }) {
   const { inst, quote: q } = props;
   const flash = useFlash(q?.last, q?.fresh.mode);
@@ -68,6 +70,7 @@ export function QuoteRow(props: {
         </span>
       )}
       {props.spark !== false && <Sparkline id={inst.id} />}
+      {props.actions && <span className="row-act">{props.actions}</span>}
     </div>
   );
 }

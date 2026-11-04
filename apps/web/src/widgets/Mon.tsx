@@ -9,6 +9,7 @@ import { getInstrument, index } from '../stores/instruments';
 import { patchPanel, setPanelSecurity, type PanelState } from '../stores/panels';
 import { checkSlots } from '../stores/slots';
 import { appState, updateState } from '../stores/state';
+import { showToast } from '../stores/ui';
 import { useStore } from '../stores/store';
 import { QuoteRow, TitleBar } from './common';
 
@@ -32,7 +33,22 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
     checkSlots();
   };
 
-  const remove = (gid: string, id: string) => updateState('watchlists', (ws) => ws.map((g) => (g.id === gid ? { ...g, ids: g.ids.filter((x) => x !== id) } : g)));
+  // 종목 빼기: ✕ 단추 또는 본문에서 Delete·Backspace(Mac ⌫). 알림의 되돌리기로 같은 자리에 돌아와요
+  const remove = (gid: string, id: string) => {
+    const g = groups.find((x) => x.id === gid);
+    const at = g ? g.ids.indexOf(id) : -1;
+    if (!g || at < 0) return;
+    updateState('watchlists', (ws) => ws.map((x) => (x.id === gid ? { ...x, ids: x.ids.filter((y) => y !== id) } : x)));
+    if (sel === id) setSel(null);
+    const inst = getInstrument(id);
+    showToast(`${inst ? inst.nameKo ?? inst.nameEn ?? inst.code : id}을(를) ${g.name}에서 뺐어요`, {
+      label: '되돌리기',
+      run: () =>
+        updateState('watchlists', (ws) =>
+          ws.map((x) => (x.id === gid && !x.ids.includes(id) ? { ...x, ids: [...x.ids.slice(0, at), id, ...x.ids.slice(at)] } : x)),
+        ),
+    });
+  };
 
   return (
     <>
@@ -66,7 +82,8 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
           } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             pick(flat[Math.max(0, i - 1)]);
-          } else if (e.key === 'Delete' && sel) {
+          } else if ((e.key === 'Delete' || e.key === 'Backspace') && sel) {
+            e.preventDefault();
             const g = visible.find((x) => x.ids.includes(sel));
             if (g) remove(g.id, sel);
           }
@@ -99,6 +116,19 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
                   selected={sel === id}
                   onClick={() => pick(id)}
                   extra={undefined}
+                  actions={
+                    <button
+                      className="icon-btn"
+                      title={`${g.name}에서 빼기 (Delete)`}
+                      aria-label={`${inst.nameKo ?? inst.nameEn ?? inst.code}을(를) ${g.name}에서 빼기`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        remove(g.id, id);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  }
                 />
               );
             })}
