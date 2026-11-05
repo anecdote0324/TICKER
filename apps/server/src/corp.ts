@@ -81,6 +81,23 @@ export function parseDividends(rows: Row[]): DividendRow[] {
     .sort((a, b) => b.recordDate.localeCompare(a.recordDate));
 }
 
+/** DVD 미국: 해외 기간별권리 → 배당 줄(배당 03·특별배당 75만, 현지 기준일 최근 먼저) */
+export function parseUsDividends(rows: Row[]): DividendRow[] {
+  return rows
+    .filter((o) => ['03', '75'].includes(String(o.rght_type_cd ?? '').trim()))
+    .map((o) => {
+      const cash = num(o.stkp_dvdn_frcr_amt2) || num(o.stkp_dvdn_frcr_amt3) || num(o.stkp_dvdn_frcr_amt4) || num(o.alct_frcr_unpr) || undefined;
+      return {
+        recordDate: ksdDate(o.acpl_bass_dt) ?? ksdDate(o.bass_dt) ?? '',
+        kind: String(o.rght_type_cd).trim() === '75' ? '특별배당' : '배당',
+        cash,
+        stockKind: String(o.dfnt_yn ?? '').trim() === 'N' ? '미확정' : undefined,
+      };
+    })
+    .filter((r) => r.recordDate)
+    .sort((a, b) => b.recordDate.localeCompare(a.recordDate));
+}
+
 /** 예탁원 정보 줄 → 이벤트(공모는 청약과 상장 두 줄) */
 export function ksdEvents(kind: KsdKind, rows: Row[]): CorpEvent[] {
   const out: CorpEvent[] = [];
@@ -163,6 +180,12 @@ export class CorpService {
     return { inst, kis };
   }
 
+  private kisOrThrow(): KisAdapter {
+    const kis = this.kis();
+    if (!kis) throw new Error('한국투자증권 키를 넣으면 보여요(설정 → 데이터 연결)');
+    return kis;
+  }
+
   private fresh(ttl: number): Freshness {
     const now = Date.now();
     return { source: 'KIS', mode: 'poll', asOf: now, receivedAt: now, intervalMs: ttl };
@@ -194,15 +217,19 @@ export class CorpService {
 
   dividends(id: string): Promise<DividendResponse> {
     return this.cached(`dvd|${id}`, STOCK_TTL, async () => {
-      const { inst, kis } = this.need(id);
+      const inst0 = this.instruments().get(id);
+      const us = inst0?.market === 'US' && inst0.assetClass === 'EQUITY';
+      const { inst, kis } = us ? { inst: inst0!, kis: this.kisOrThrow() } : this.need(id);
       const now = Date.now();
-      const rows = parseDividends(await kis.ksd('dividend', { code: inst.code, from: ymd(now - 10 * 365 * 86400_000), to: ymd(now + 365 * 86400_000) }));
+      const rows = us
+        ? parseUsDividends(await kis.usRights(inst.code, inst.exchange, ymd(now - 5 * 365 * 86400_000), ymd(now + 180 * 86400_000)))
+        : parseDividends(await kis.ksd('dividend', { code: inst.code, from: ymd(now - 10 * 365 * 86400_000), to: ymd(now + 365 * 86400_000) }));
       const last = await this.price(id).catch(() => undefined);
       const yearAgo = iso(now - 365 * 86400_000);
       const today = iso(now);
       const recent = rows.filter((r) => r.recordDate > yearAgo && r.recordDate <= today && r.cash);
       const cash = recent.reduce((t, r) => t + (r.cash ?? 0), 0);
-      return { id, rows, trailing: cash ? { cash, yieldPct: last ? (cash / last) * 100 : undefined } : undefined, fresh: this.fresh(STOCK_TTL) };
+      return { id, currency: us ? 'USD' : 'KRW', rows, trailing: cash ? { cash, yieldPct: last ? (cash / last) * 100 : undefined } : undefined, fresh: this.fresh(STOCK_TTL) };
     });
   }
 

@@ -17,7 +17,7 @@ export interface ExtraKeyDef {
 
 export type ExtraKeys = Partial<Record<ExtraKeyName, ExtraKeyDef>>;
 
-export const EXTRA_KEY_NAMES: ExtraKeyName[] = ['ecos', 'fred', 'sec'];
+export const EXTRA_KEY_NAMES: ExtraKeyName[] = ['ecos', 'fred', 'sec', 'krx'];
 
 /** 끝 4자리 힌트 */
 export const tailHint = (k: string) => `…${k.slice(-4)}`;

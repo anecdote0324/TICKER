@@ -2,14 +2,14 @@
 // 값마다 출처가 달라서 묶음 제목에 출처와 기준을 적어요(02 데이터 신선도 표시).
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { MARKET_LABEL, type Freshness, type Instrument, type SecurityProfile } from '@bt/shared';
+import { MARKET_LABEL, type EtfResponse, type Freshness, type Instrument, type SecurityProfile } from '@bt/shared';
 import { api } from '../api';
 import { FreshBadge } from '../components/FreshBadge';
 import { arrow, dirClass, fmtBig, fmtNum, fmtPct, fmtPrice, fmtShares } from '../format';
 import { useQuotes } from '../stores/feed';
 import { useInstrument } from '../stores/instruments';
 import type { PanelState } from '../stores/panels';
-import { TitleBar, useFlash } from './common';
+import { TitleBar, useFlash, usePoll } from './common';
 
 /** 한국투자증권 현재가 조회를 다시 받는 간격(서버도 30초 동안 같은 값을 써요) */
 const REFRESH_MS = 60_000;
@@ -60,6 +60,7 @@ export function Des({ panel }: { panel: PanelState }) {
         <DesHead inst={inst} data={data} last={q?.last} change={q?.change} changePct={q?.changePct} quoteFresh={q?.fresh} />
         {!data && !cur?.error && <div className="des-note label">불러오는 중…</div>}
         {cur?.error && !data && <div className="des-note err">{cur.error}</div>}
+        {isKrEtf(inst) && <DesEtf inst={inst} />}
         {data && <DesBody inst={inst} data={data} last={q?.last} volume={q?.volume} turnover={q?.turnover} />}
       </div>
     </>
@@ -199,6 +200,40 @@ function DesBody({ inst, data, last, volume, turnover }: { inst: Instrument; dat
       </div>
       {data.liveError && <div className="des-note label">{data.liveError}</div>}
     </>
+  );
+}
+
+const isKrEtf = (i: Instrument) => (i.market === 'KS' || i.market === 'KQ') && !!i.flags?.includes('ETF');
+
+/** DES의 ETF 유형(v0.4): NAV·괴리율·추적오차·순자산·분류와 구성 상위 5종목. 자세한 것은 ETF 화면 */
+function DesEtf({ inst }: { inst: Instrument }) {
+  const res = usePoll<EtfResponse>(`/api/etf?id=${encodeURIComponent(inst.id)}`, REFRESH_MS);
+  const d = res?.data;
+  if (!res) return null;
+  if (res.error && !d) return <div className="des-note label">{`ETF 정보: ${res.error}`}</div>;
+  if (!d) return null;
+  const pct = (v?: number) => (v === undefined ? '—' : `${v.toFixed(2)}%`);
+  return (
+    <Section title="ETF" note={`한국투자증권 ETF 현재가 · 자세히는 ${inst.code} ETF`}>
+      <div className="des-grid">
+        <Kv k="NAV" v={d.nav === undefined ? '—' : d.nav.toLocaleString('en-US', { maximumFractionDigits: 2 })} />
+        <Kv k="괴리율" v={pct(d.gap)} cls={dirClass(d.gap)} />
+        <Kv k="추적 오차율" v={pct(d.trackingError)} />
+        <Kv k="순자산" v={fmtBig(d.netAssets, 'KRW')} />
+        <Kv k="상장 주수" v={fmtShares(d.listedShares)} />
+        <Kv k="분류" v={d.category ?? '—'} />
+        <Kv k="구성 종목 수" v={d.componentCount ?? '—'} />
+        <Kv k="분배 주기" v={d.dividendCycle ?? '—'} />
+      </div>
+      {d.components.length > 0 && (
+        <div className="des-etf-top label">
+          {`구성 상위: ${d.components
+            .slice(0, 5)
+            .map((c) => `${c.name} ${c.weight === undefined ? '' : `${c.weight.toFixed(1)}%`}`)
+            .join(' · ')}`}
+        </div>
+      )}
+    </Section>
   );
 }
 

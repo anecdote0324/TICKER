@@ -92,6 +92,8 @@ export interface CredentialStatus {
   fred?: ApiKeyStatus;
   /** SEC EDGAR 요청에 넣을 연락처(FA 미국 재무제표, v0.3). SEC가 요청마다 연락처를 달라고 해요 */
   sec?: ApiKeyStatus;
+  /** KRX Open API 인증키(FFLO ETF 일별 상장 좌수, v0.4) */
+  krx?: ApiKeyStatus;
 }
 
 export interface ApiKeyStatus {
@@ -102,7 +104,7 @@ export interface ApiKeyStatus {
 }
 
 /** 설정 → 데이터 연결에서 넣는 v0.3 키 */
-export type ExtraKeyName = 'ecos' | 'fred' | 'sec';
+export type ExtraKeyName = 'ecos' | 'fred' | 'sec' | 'krx';
 
 /** 강조 색 후보: 등락·선택·자산군 칩 색과 겹치지 않는 색만(02) */
 /** 강조 색 후보: 블룸버그 앰버(기본), 예전 주황, 흰색, 청록 */

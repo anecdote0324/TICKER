@@ -10,6 +10,7 @@ import type { EcoService } from './eco';
 import type { DartCorpService } from './dart-corp';
 import type { MarketService } from './market';
 import { breakingItems, topNews, topicItems } from './news-views';
+import { FinraService } from './finra';
 
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -198,14 +199,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get<{ Querystring: { id?: string } }>('/api/opinions', (req, reply) => corp(reply, () => hub.corp.opinions(req.query.id ?? '')));
   app.get<{ Querystring: { id?: string } }>('/api/dividends', (req, reply) => corp(reply, () => hub.corp.dividends(req.query.id ?? '')));
   app.get<{ Querystring: { id?: string; view?: string } }>('/api/corp-events', (req, reply) =>
-    corp(reply, () =>
-      hub.corp.events(
-        req.query.id || undefined,
-        req.query.view === 'actions' ? ['paidin', 'bonus', 'capdcrs', 'merger', 'revsplit', 'deposit'] : ['meeting', 'ipo', 'dividend', 'paidin', 'bonus', 'deposit'],
-      ),
-    ),
+    corp(reply, async () => {
+      const id = req.query.id || undefined;
+      const actions = req.query.view === 'actions';
+      const ksd = hub.corp.events(id, actions ? ['paidin', 'bonus', 'capdcrs', 'merger', 'revsplit', 'deposit'] : ['meeting', 'ipo', 'dividend', 'paidin', 'bonus', 'deposit']);
+      if (actions || !deps.dartCorp) return ksd;
+      // EVTS(v0.4): DART IR·잠정실적 공시를 더해요. 한쪽이 실패해도 다른 쪽은 보여 줘요
+      const [k, d] = await Promise.allSettled([ksd, deps.dartCorp.events(id)]);
+      if (k.status === 'rejected' && d.status === 'rejected') throw k.reason;
+      const base = k.status === 'fulfilled' ? k.value : { id, events: [], fresh: { source: 'DART' as const, mode: 'poll' as const, asOf: Date.now(), receivedAt: Date.now() }, errors: [`예탁원 정보: ${(k.reason as Error).message}`] };
+      const extra = d.status === 'fulfilled' ? d.value : [];
+      const errors = [...(base.errors ?? []), ...(d.status === 'rejected' ? [`DART: ${(d.reason as Error).message}`] : [])];
+      const events = [...base.events, ...extra].sort((a, b) => (id ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
+      return { ...base, events, errors: errors.length ? errors : undefined };
+    }),
   );
   app.get('/api/ipo', (_req, reply) => corp(reply, () => hub.corp.ipo()));
+  // SI 미국(v0.4): FINRA 공매도 잔고
+  const finra = new FinraService();
+  app.get<{ Querystring: { id?: string } }>('/api/short-interest', (req, reply) =>
+    corp(reply, async () => {
+      const inst = hub.instruments.get(req.query.id ?? '');
+      if (!inst || inst.market !== 'US' || inst.assetClass !== 'EQUITY') throw new Error('미국 주식만 볼 수 있어요(FINRA)');
+      return finra.shortInterest(inst.id, inst.code);
+    }),
+  );
+
   // v0.4 지수·ETF·호가
   const market = () => {
     if (!deps.market) throw new Error('이 기능을 쓸 수 없어요');

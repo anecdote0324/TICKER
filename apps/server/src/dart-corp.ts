@@ -6,6 +6,7 @@ import {
   dartNum,
   quarterBefore,
   type Bar,
+  type CorpEvent,
   type DartPeriod,
   type DisclosureResponse,
   type DisclosureRow,
@@ -91,6 +92,11 @@ export function parseInsiders(list: Row[]): InsiderRow[] {
     }))
     .filter((r) => r.date && r.reporter)
     .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** EVTS: IR(기업설명회) 개최 공시 */
+export function isIrTitle(title: string): boolean {
+  return /기업설명회|\(IR\)|IR\s*개최/.test(title);
 }
 
 /** ERN: 잠정실적 공시만 골라요(정정 공시도 포함) */
@@ -241,6 +247,32 @@ export class DartCorpService {
         if ((r.list?.length ?? 0) < 100) break;
       }
       return { id, type, rows, fresh: { source: 'DART', mode: 'poll', asOf: now, receivedAt: now, intervalMs: LIST_TTL } };
+    });
+  }
+
+  /**
+   * EVTS(v0.4): DART 거래소공시에서 IR(기업설명회) 개최 공시와 잠정실적 발표. 날짜는 공시일이에요(IR 개최일은 원문에 있어요).
+   * 종목이면 그 회사 지난 2년, 없으면 전체 지난 7일
+   */
+  events(id: string | undefined): Promise<CorpEvent[]> {
+    return this.cached(`evts|${id ?? 'all'}`, id ? TTL : 30 * 60_000, async () => {
+      const key = this.key();
+      const now = Date.now();
+      const params: Record<string, string> = { bgn_de: ymd(now - (id ? 2 * 365 : 7) * 86400_000), end_de: ymd(now), pblntf_ty: 'I' };
+      if (id) params.corp_code = (await this.corp(id)).corp;
+      const out: CorpEvent[] = [];
+      for (let page = 1; page <= (id ? 3 : 5); page++) {
+        const r = await dartList(key, { ...params, page_no: String(page) });
+        for (const x of r.list ?? []) {
+          const title = x.report_nm.replace(/\s+/g, ' ').trim();
+          const type = isIrTitle(title) ? 'ir' : isEarningsTitle(title) ? 'earnings' : undefined;
+          const code = x.stock_code?.trim();
+          if (!type || !code) continue;
+          out.push({ date: day(x.rcept_dt), type, code, name: x.corp_name, detail: title, url: viewer(x.rcept_no) });
+        }
+        if ((r.list?.length ?? 0) < 100) break;
+      }
+      return out;
     });
   }
 

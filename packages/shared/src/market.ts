@@ -93,8 +93,10 @@ export interface EtfResponse {
   navDaily: EtfNavRow[];
   /** 구성종목(비중 큰 순) */
   components: MembRow[];
-  /** FFLO: 앱이 모은 상장 주수 일별 기록(최근 먼저) */
+  /** FFLO: 상장 주수 일별 기록(최근 먼저) */
   flows: EtfFlowRow[];
+  /** 자금 흐름 출처: KRX Open API 일별 자료, 또는 앱이 ETF 화면을 연 날의 기록 */
+  flowSource?: 'krx' | 'app';
   fresh: Freshness;
   note?: string;
 }

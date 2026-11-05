@@ -42,8 +42,46 @@ export interface NewsAlertRule {
   lastFiredAt?: number;
 }
 
+/** ALRT 지표 탭(v0.4): ECO 경제지표 발표 알림(미리 알림과 발표 뒤 값) */
+export interface EcoAlertRule {
+  id: string;
+  /** ECO 발표 이름(EcoEvent.name) */
+  name: string;
+  /** 발표 몇 분 전에 미리 알릴지(0이면 미리 알리지 않아요) */
+  beforeMin: number;
+  enabled: boolean;
+  createdAt: number;
+  /** 이미 알린 것('pre:이벤트id', 'rel:이벤트id', 최근 50개) */
+  fired: string[];
+  lastFiredAt?: number;
+}
+
+/**
+ * 지표 알림 판단: 미리 알림(발표 beforeMin분 전부터 발표 전까지)과 발표 알림(발표 시각이 지났고 규칙을 만든 뒤의 발표).
+ * 돌려준 key를 fired에 더해요
+ */
+export function ecoAlertsDue(rule: EcoAlertRule, events: Array<{ id: string; name: string; at: number; latest?: string; previous?: string }>, now: number): Array<{ key: string; text: string }> {
+  if (!rule.enabled) return [];
+  const out: Array<{ key: string; text: string }> = [];
+  for (const e of events) {
+    if (e.name !== rule.name) continue;
+    const pre = `pre:${e.id}`;
+    const rel = `rel:${e.id}`;
+    if (rule.beforeMin > 0 && now < e.at && now >= e.at - rule.beforeMin * 60_000 && !rule.fired.includes(pre)) {
+      out.push({ key: pre, text: `지표 ${e.name} 발표 ${Math.max(1, Math.round((e.at - now) / 60_000))}분 전` });
+    }
+    // 발표 뒤 6시간 안에만(앱을 오래 꺼 뒀다 켰을 때 지난 발표를 한꺼번에 알리지 않게)
+    if (now >= e.at && now - e.at < 6 * 3600_000 && e.at > rule.createdAt && !rule.fired.includes(rel)) {
+      out.push({ key: rel, text: `지표 ${e.name} 발표${e.latest ? `: ${e.latest}` : ''}${e.previous ? ` (이전 ${e.previous})` : ''}` });
+    }
+  }
+  return out;
+}
+
 export interface AlertsState {
   rules: AlertRule[];
+  /** 지표 조건(v0.4) */
+  ecoRules?: EcoAlertRule[];
   /** 뉴스 조건(v0.4) */
   newsRules?: NewsAlertRule[];
   /** 최근 알림(새것부터, 100개까지) */

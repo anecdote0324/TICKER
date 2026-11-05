@@ -734,7 +734,7 @@ function Data() {
       </p>
 
       <h3>앞으로 추가될 키</h3>
-      <p className="note">BOK ECOS·FRED·KOSIS·SEC EDGAR 연락처(v0.3), 네이버·KRX Open API(v0.4), 공공데이터포털(v0.7), EIA(v0.11). 소스마다 출처 표시 문구와 이용 조건 링크를 함께 보여 줄 거예요.</p>
+      <p className="note">KOSIS(v0.6), 공공데이터포털(v0.7), EIA(v0.11). 소스마다 출처 표시 문구와 이용 조건 링크를 함께 보여 줄 거예요.</p>
     </>
   );
 }
@@ -843,6 +843,14 @@ const EXTRA_KEYS: ExtraKeyUi[] = [
     minLength: 6,
     plain: true,
     emptyLabel: '연락처 없음 · FA에는 국내 재무제표만 보여요',
+  },
+  {
+    name: 'krx',
+    title: 'KRX Open API (한국거래소)',
+    note: 'FFLO(ETF 자금 흐름)의 ETF 일별 상장 좌수·NAV에 써요(v0.4). 인증키는 KRX Open API(openapi.krx.co.kr)에서 회원 가입 뒤 "ETF 일별매매정보" 서비스를 신청해 무료로 받아요. 저장할 때 최근 거래일 ETF 자료를 한 번 받아 확인해요.',
+    placeholder: '인증키',
+    minLength: 10,
+    emptyLabel: '인증키 없음 · FFLO는 앱이 ETF 화면을 연 날의 상장 주수만 써요',
   },
 ];
 

@@ -62,7 +62,7 @@ export interface PanelState {
   nseDays?: number;
   nseSaved?: string[];
   /** ALRT 탭(v0.4): 가격·뉴스 */
-  alrtTab?: 'price' | 'news';
+  alrtTab?: 'price' | 'news' | 'eco';
   /** v0.4: MOV 보기, ETF 탭, BQ 호가 시장 */
   movView?: 'contrib' | 'up' | 'down';
   etfTab?: 'nav' | 'components' | 'flows';

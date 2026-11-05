@@ -11,7 +11,7 @@
 | 공시 | DART OpenAPI | REST | v0.2 |
 | 뉴스 | RSS 헤드라인 | 주기적 조회 | v0.2 |
 | 금리 커브·매크로·미국 재무제표 | 한국은행 ECOS, 미국 재무부 금리 XML, FRED, BLS·BEA 공표일정, SEC EDGAR (KOSIS는 v0.6) | REST·파일 | v0.3 |
-| 수급·공매도·종목 심화 | KIS 확장 조회, FINRA, 네이버 뉴스 검색, KRX Open API(ETF 일별) | REST | v0.4 |
+| 수급·공매도·종목 심화 | KIS 확장 조회, FINRA, KRX Open API(ETF 일별) | REST | v0.4 |
 | 해외 금리·환율 고시 | ECB, 일본 재무성 CSV, 한국수출입은행, IMF·OECD·World Bank | REST·파일 | v0.6 |
 | 채권 | KIS 장내채권, 금융위원회 채권 데이터(공공데이터포털), KRX Open API | REST + WebSocket | v0.7 |
 | 원자재 | CFTC COT, EIA, KIS 해외선물 일봉 | REST | v0.11 |
@@ -156,7 +156,7 @@
 
 - v0.3 FA(만듦): SEC는 설정에 넣은 연락처를 `User-Agent: <연락처>`(공개 규칙의 예처럼 이름 이메일만. 앞에 `TICKER`를 붙였을 때 실제 PC에서 403 'Your Request Originates from an Undeclared Automated Tool'이 났어요, v0.3.0-beta.2)와 `Accept-Encoding: gzip, deflate`(SEC 공개 규칙의 모양)로 보내요(연락처가 없으면 요청하지 않아요). 연락처는 영문(ASCII)만 받아요: 한글 이름을 넣으면 요청 머리글을 만들지 못했어요(v0.3.0-beta.1). 막히면(403·429) 응답 제목(Request Rate Threshold Exceeded 등)을 화면에 보여 줘요. v0.3.0-beta.1~beta.3 실제 PC에서 영문 연락처로도 403 'Undeclared Automated Tool'이 났고, 같은 PC에서 Windows curl로 SEC 규칙대로(User-Agent에 이름 이메일, Accept-Encoding gzip·deflate) 보내도 403이었어요(2026-11-05). 브라우저로는 열려요. 앱의 요청 모양이 아니라 그 인터넷 연결에서 오는 도구 요청이 막힌 거예요(SEC는 막은 IP를 10분~24시간 막아 둔다고 알려져 있어요). 브라우저인 척하는 우회는 하지 않아요. 막힘이 길어지지 않게, 403·429를 받으면 재무제표 화면은 1시간, 설정의 확인 버튼은 10분 동안 SEC에 보내지 않고 남은 시간을 보여 줘요. 0.2초 간격(초당 5건). 티커 → CIK는 `www.sec.gov/files/company_tickers.json`(하루 한 번, `BRK.B` → `BRK-B`), 재무는 `data.sec.gov/api/xbrl/companyfacts/CIK##########.json`(12시간). 2026-11 확인: 연락처 없는 요청은 `www.sec.gov`에서 '요청 한도 초과' 페이지가 와요(우회하지 않아요). 계정은 us-gaap 개념 여러 이름을 앞에서부터(매출: RevenueFromContractWithCustomerExcludingAssessedTax → Revenues …). 기간 길이로 연간(350~380일)·분기(80~100일)·시점을 나누고, 같은 기말일은 나중에 제출한 값. 10-Q의 현금흐름은 회계연도 시작부터의 누적(3·6·9개월)이라 같은 시작일 누적끼리 빼고, 4분기는 연간 − 앞 세 분기.
 - DART 재무제표(v0.3 FA, 만듦): `fnlttSinglAcntAll.json`(`reprt_code` 11011 사업·11012 반기·11013 1분기·11014 3분기, `fs_div` CFS 연결 → 없으면 OFS 별도, 013은 자료 없음). 계정은 `account_id`(ifrs-full_Revenue, dart_OperatingIncomeLoss 등) 먼저, 없으면 계정 이름. 연간은 사업보고서 2번(당기·전기·전전기 → 6년), 분기는 2개 연도 × 4개 보고서(8번). 손익은 반기·3분기 보고서의 `thstrm_add_amount`(누적), 현금흐름은 `thstrm_amount`(누적)라 누적끼리 빼서 분기 값. 고유번호는 N의 corpCode.xml을 함께 써요
-| 네이버 검색 API(뉴스) | 종목 뉴스(CN), 뉴스 검색. 무료, 앱 등록 필요, 하루 한도 확인 필요. 본문은 원문 링크로 열어요 | v0.4 |
+| 네이버 검색 API(뉴스) | 쓰지 않아요(사용자 결정, v0.4). CN은 RSS 아카이브와 DART로 충분해요 | — |
 
 미국 실적 발표 일정의 무료 소스는 확인 필요예요. 없으면 SEC 8-K(실적 발표 항목)로 발표 뒤에 표시만 해요.
 
@@ -170,6 +170,7 @@
 | KOSIS | 국내 통계(ECST, ECO 한국 지표) | 무료, 한도 확인 필요 | 키 | v0.6(v0.3에서 옮김) |
 | BLS·BEA 공표일정 | 미국 지표 발표 시각(FRED는 날짜만 줘요) | 무료 | — | v0.3 |
 
+- v0.4 남은 일(만듦): SI 미국은 FINRA Query API `POST api.finra.org/data/group/otcMarket/name/consolidatedShortInterest`(키 없음, `symbolCode` EQUAL + `settlementDate` 날짜 범위. 정렬을 쓰려면 결제일을 EQUAL로 줘야 해서 정렬은 앱에서), 칸은 `currentShortPositionQuantity`·`previousShortPositionQuantity`·`changePercent`·`averageDailyVolumeQuantity`·`daysToCoverQuantity`, 12시간 캐시. FFLO는 KRX Open API `data-dbg.krx.co.kr/svc/apis/etp/etf_bydd_trd?basDd=YYYYMMDD`(머리글 `AUTH_KEY`, 응답 `OutBlock_1`의 `ISU_CD`·`LIST_SHRS`·`NAV`·`INVSTASST_NETASST_TOTAMT`, 값은 문자열). 날짜마다 모든 ETF가 와서 지난 날은 데이터 폴더(krx-etf.json, 90일)에 두고 다시 받지 않아요. DVD 미국은 한국투자증권 해외주식 기간별권리(CTRGT011R, 권리유형 전체에서 03 배당·75 특별배당, 조회구분 02 현지기준일, 상품유형 512·513·529). EVTS의 DART는 거래소공시(`pblntf_ty=I`)에서 제목에 기업설명회·(IR)·잠정실적이 든 것(종목 2년, 전체 7일)
 - v0.4 뉴스 보기(만듦): 새 소스 없이 뉴스 아카이브(news.db)에서 골라요. TOP은 최근 헤드라인을 제목 낱말 겹침(45% 이상)으로 묶고 출처 가중치(MarketWatch 1.3, 한경 1.2, 서경·Investing 1.0, MW Pulse 0.9, 전자신문 0.8) 합 + 같은 이야기 줄 수 + 최근 정도로 점수를 매겨요. NI는 주제 낱말, NSE·ALRT 뉴스는 SQLite 제목 LIKE 검색, FIRS는 속보 표시·MW Pulse·주요 공시. 네이버 뉴스 검색 API(CN)는 아직 붙이지 않았어요
 - v0.4 DART 종목 정보(만듦): 정기보고서 주요정보 `exctvSttus`(임원)·`hmvAuditAllSttus`(임원 전체 보수)·`hmvAuditIndvdlBySttus`(5억 원 이상 개인별)·`otrCprInvstmntSttus`(타법인 출자)·`hyslrSttus`(최대주주)는 `corp_code`·`bsns_year`·`reprt_code`(1분기 11013, 반기 11012, 3분기 11014, 사업 11011)로, 올해 3분기부터 거꾸로 가장 최근 보고서를 찾아요. 지분공시 `majorstock`(5% 대량보유)·`elestock`(임원·주요주주 소유)은 `corp_code`만. ERN은 `list.json`의 거래소공시(`pblntf_ty=I`)에서 제목에 '(잠정)실적'이 든 것. CF는 `list.json`(종목은 1년, 전체는 7일, 100건씩 2~3쪽). 종목별 12시간, 공시 목록 5분 캐시
 - v0.3 ECO(만듦): BEA `apps.bea.gov/API/signup/release_dates.json`(키 없음)은 `{발표 이름: {release_dates: [ISO 시각]}}`이라 시각까지 써요(2026-11 확인). BLS `www.bls.gov/schedule/news_release/bls.ics`는 자동 요청을 403으로 막아서(2026-11) 쓰지 않아요(우회하지 않아요). FRED `releases/dates`(키, 날짜만)는 이름이 맞는 주요 발표만 골라 뉴욕 관례 시각(CPI·고용·PPI·소매판매·실업수당 청구·주택 착공 08:30, 산업생산 09:15, JOLTS·미시간대 10:00, FOMC 14:00)을 붙이고 화면에 `*`로 표시해요. BEA와 겹치는 발표(GDP·개인소득·무역수지)는 BEA 것만. 최근·이전 값은 FRED `series/observations`(최근 14개, CPIAUCSL·PCEPI·PPIFIS 전년 대비, RSAFS·INDPRO 전월 대비, PAYEMS 증감, A191RL1Q225SBEA·UNRATE 등 그대로). 한국은 ECOS `KeyStatisticList`(100대 통계지표, 최근 값만)에서 이름에 기준금리·경제성장률·소비자물가 등이 들어간 줄. 3시간 캐시
@@ -238,7 +239,7 @@ S&P 500과 나스닥100의 구성 종목 목록은 지수 회사(S&P Dow Jones I
 
 ## 설정에 필요한 키
 
-설정의 "데이터 연결"에서 입력해요: KIS 앱키·앱시크릿, DART, ECOS, FRED, KOSIS, KRX Open API, 공공데이터포털, 네이버, EIA 키, 그리고 SEC EDGAR 요청에 넣을 연락처. 모두 PC 안에 암호화해서 저장해요.
+설정의 "데이터 연결"에서 입력해요: KIS 앱키·앱시크릿, DART, ECOS, FRED, KOSIS, KRX Open API, 공공데이터포털, EIA 키, 그리고 SEC EDGAR 요청에 넣을 연락처. 모두 PC 안에 암호화해서 저장해요.
 
 ## 한국투자증권 공식 저장소에서 확인한 것
 

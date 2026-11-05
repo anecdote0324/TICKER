@@ -126,6 +126,13 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       // 연락처는 앞부분만 보여 줘요
       hint: (k) => `${k.slice(0, 3)}…`,
     },
+    krx: {
+      label: 'KRX Open API 인증키',
+      validate: (k) => (/^[0-9A-Za-z_-]{10,100}$/.test(k) ? undefined : 'KRX 인증키는 영문·숫자 10~100자예요'),
+      test: (k) => market.testKrx(k),
+      apply: (k) => market.setKrxKey(k),
+      hint: tailHint,
+    },
   };
   for (const name of EXTRA_KEY_NAMES) {
     const def = extraKeys[name];

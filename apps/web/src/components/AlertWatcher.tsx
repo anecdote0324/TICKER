@@ -2,7 +2,7 @@
 // 조건이 맞으면 알림(앱 안 알림 + 설정에 따라 운영체제 알림·소리)을 띄우고 기록을 남겨요. 데모 시세로는 알리지 않아요.
 
 import { useEffect, useMemo, useRef } from 'react';
-import { ALERT_KIND_LABEL, evaluateAlert, type AlertRule, type NewsViewResponse } from '@bt/shared';
+import { ALERT_KIND_LABEL, ecoAlertsDue, evaluateAlert, type AlertRule, type EcoResponse, type NewsViewResponse } from '@bt/shared';
 import { api } from '../api';
 import { fmtPct, fmtPrice } from '../format';
 import { useQuotes } from '../stores/feed';
@@ -69,6 +69,7 @@ function useNewsAlerts() {
           const at = Date.now();
           const text = `뉴스 "${r.query}" ${res.items.length}건: ${res.items[0].title}`;
           updateState('alerts', (s) => ({
+            ...s,
             rules: s?.rules ?? [],
             newsRules: (s?.newsRules ?? []).map((x) => (x.id === r.id ? { ...x, lastSeen: newest, lastFiredAt: at } : x)),
             log: [{ ruleId: r.id, instrumentId: '', at, text }, ...(s?.log ?? [])].slice(0, 100),
@@ -89,8 +90,49 @@ function useNewsAlerts() {
   }, []);
 }
 
+/** ALRT 지표 조건(v0.4): 1분마다 ECO 일정을 보고(서버는 3시간 동안 같은 값을 써요) 미리 알림·발표 알림 */
+function useEcoAlerts() {
+  useEffect(() => {
+    let alive = true;
+    let eco: { at: number; data?: EcoResponse } = { at: 0 };
+    const check = async () => {
+      const rules = (appState.get().alerts?.ecoRules ?? []).filter((r) => r.enabled);
+      if (!rules.length) return;
+      if (Date.now() - eco.at > 10 * 60_000) {
+        try {
+          eco = { at: Date.now(), data: await api.get<EcoResponse>('/api/eco') };
+        } catch {
+          return;
+        }
+      }
+      if (!alive || !eco.data) return;
+      const now = Date.now();
+      const due = rules.map((r) => ({ r, items: ecoAlertsDue(r, eco.data!.events, now) })).filter((x) => x.items.length);
+      if (!due.length) return;
+      updateState('alerts', (s) => ({
+        ...s,
+        rules: s?.rules ?? [],
+        ecoRules: (s?.ecoRules ?? []).map((x) => {
+          const d = due.find((y) => y.r.id === x.id);
+          return d ? { ...x, fired: [...x.fired, ...d.items.map((i) => i.key)].slice(-50), lastFiredAt: now } : x;
+        }),
+        log: [...due.flatMap((d) => d.items.map((i) => ({ ruleId: d.r.id, instrumentId: '', at: now, text: i.text }))), ...(s?.log ?? [])].slice(0, 100),
+      }));
+      notify(due.flatMap((d) => d.items.map((i) => i.text)));
+    };
+    const t = window.setInterval(() => void check(), 60_000);
+    const first = window.setTimeout(() => void check(), 20_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+      window.clearTimeout(first);
+    };
+  }, []);
+}
+
 export function AlertWatcher() {
   useNewsAlerts();
+  useEcoAlerts();
   const rules = useStore(appState, (s) => s.alerts?.rules ?? []);
   const ids = useMemo(() => [...new Set(rules.filter((r) => r.enabled).map((r) => r.instrumentId))], [rules]);
   const quotes = useQuotes(ids);
@@ -114,6 +156,7 @@ export function AlertWatcher() {
         return f ? { ...r, lastFiredAt: at, enabled: r.once ? false : r.enabled } : r;
       }),
       newsRules: s?.newsRules,
+      ecoRules: s?.ecoRules,
       log: [...fired.map((f) => ({ ruleId: f.rule.id, instrumentId: f.rule.instrumentId, at, text: f.text })), ...(s?.log ?? [])].slice(0, 100),
     }));
     notify(fired.map((f) => f.text));

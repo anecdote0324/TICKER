@@ -225,7 +225,7 @@ export function Etf({ panel }: { panel: PanelState }) {
             {tab === 'components' && <MembTable rows={d.components} panel={panel} />}
             {tab === 'flows' &&
               (d.flows.length < 2 ? (
-                <div className="empty-body label">상장 주수를 모으는 중이에요. 이 화면을 연 날마다 상장 주수를 기록해서, 이틀째부터 자금 흐름(주수 변화 × NAV)이 보여요.</div>
+                <div className="empty-body label">상장 주수를 모으는 중이에요. 이 화면을 연 날마다 상장 주수를 기록해서, 이틀째부터 자금 흐름(주수 변화 × NAV)이 보여요. 설정 → 데이터 연결에 KRX Open API 인증키를 넣으면 지난 거래일 자료를 바로 받아요.</div>
               ) : (
                 <table className="flow-table">
                   <thead>
@@ -248,7 +248,7 @@ export function Etf({ panel }: { panel: PanelState }) {
                   </tbody>
                 </table>
               ))}
-            <div className="attr">한국투자증권 ETF/ETN 현재가·NAV 비교추이(일)·ETF 구성종목시세 · 자금 흐름은 앱이 이 화면을 연 날의 상장 주수로 계산해요(KRX 일별 자료는 뒤에)</div>
+            <div className="attr">{`한국투자증권 ETF/ETN 현재가·NAV 비교추이(일)·ETF 구성종목시세 · 자금 흐름은 ${d.flowSource === 'krx' ? 'KRX Open API ETF 일별매매정보(상장 좌수 × NAV)' : '앱이 이 화면을 연 날의 상장 주수로 계산해요(KRX 인증키를 넣으면 KRX 일별 자료)'}`}</div>
           </>
         )}
       </div>

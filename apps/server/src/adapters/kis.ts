@@ -1344,6 +1344,23 @@ export class KisAdapter implements Adapter {
   }
 
   /**
+   * DVD 미국: 해외주식 기간별권리조회(CTRGT011R, 공식 예제 overseas_stock/period_rights). 권리유형 전체에서 배당(03)·특별배당(75)만,
+   * 조회구분 02(현지기준일), 상품유형은 거래소별(나스닥 512, 뉴욕 513, 아멕스 529)
+   */
+  async usRights(symbol: string, exchange: string | undefined, from: string, to: string): Promise<KisRow[]> {
+    const prdt = exchange === 'NYS' ? '513' : exchange === 'AMS' ? '529' : '512';
+    const r = await this.get(
+      '/uapi/overseas-price/v1/quotations/period-rights',
+      'CTRGT011R',
+      { RGHT_TYPE_CD: '%%', INQR_DVSN_CD: '02', INQR_STRT_DT: from, INQR_END_DT: to, PDNO: symbol, PRDT_TYPE_CD: prdt, CTX_AREA_NK50: '', CTX_AREA_FK50: '' },
+      2,
+    );
+    const rows = asRows(r.output);
+    if (rows.length) this.sampleRows('CTRGT011R', symbol, `${from}~${to}`, rows, (x) => [x.acpl_bass_dt, x.rght_type_cd, x.stkp_dvdn_frcr_amt2, x.crcy_cd]);
+    return rows;
+  }
+
+  /**
    * 예탁원 정보(ksdinfo, 공식 예제 ksdinfo_*): 배당·유상증자·무상증자·감자·합병분할·액면변경·의무예치·주주총회·공모.
    * 공통 변수 SHT_CD(빈 값이면 전체)·F_DT·T_DT·CTS. 연속 조회는 3쪽까지
    */

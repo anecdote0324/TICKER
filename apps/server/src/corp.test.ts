@@ -79,3 +79,19 @@ describe('DVD·CACS·EVTS·IPO', () => {
     ]);
   });
 });
+
+describe('DVD 미국(해외 기간별권리)', async () => {
+  const { parseUsDividends } = await import('./corp');
+  it('배당·특별배당만, 현지 기준일 최근 먼저', () => {
+    const r = parseUsDividends([
+      { rght_type_cd: '03', acpl_bass_dt: '20260810', stkp_dvdn_frcr_amt2: '0.26', dfnt_yn: 'Y' },
+      { rght_type_cd: '14', acpl_bass_dt: '20260601' },
+      { rght_type_cd: '75', acpl_bass_dt: '20261110', stkp_dvdn_frcr_amt2: '1.00', dfnt_yn: 'N' },
+    ]);
+    expect(r.map((x) => [x.recordDate, x.kind, x.cash])).toEqual([
+      ['2026-11-10', '특별배당', 1],
+      ['2026-08-10', '배당', 0.26],
+    ]);
+    expect(r[0].stockKind).toBe('미확정');
+  });
+});

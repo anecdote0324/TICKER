@@ -19,6 +19,29 @@ import {
   type SectorMapResponse,
 } from '@bt/shared';
 import type { KisAdapter } from './adapters/kis';
+import { fetchJson, HttpError } from './util';
+
+const KRX_ETF_URL = 'https://data-dbg.krx.co.kr/svc/apis/etp/etf_bydd_trd';
+
+/** KRX ETF 일별매매정보 한 줄에서 쓰는 칸(값은 모두 문자열) */
+export interface KrxEtfDay {
+  shares: number;
+  nav?: number;
+  netAssets?: number;
+}
+
+/** KRX ETF 일별매매정보 응답 → 종목코드 → 상장 좌수·NAV·순자산. ISU_CD가 12자리 표준코드면 가운데 6자리가 단축코드예요 */
+export function parseKrxEtf(res: { OutBlock_1?: Array<Record<string, string>> }): Map<string, KrxEtfDay> {
+  const out = new Map<string, KrxEtfDay>();
+  for (const o of res.OutBlock_1 ?? []) {
+    const raw = String(o.ISU_CD ?? o.ISU_SRT_CD ?? '').trim();
+    const code = raw.length === 12 ? raw.slice(3, 9) : raw.replace(/^A/, '');
+    const shares = num(o.LIST_SHRS);
+    if (!code || !shares) continue;
+    out.set(code, { shares, nav: num(o.NAV), netAssets: num(o.INVSTASST_NETASST_TOTAMT) });
+  }
+  return out;
+}
 
 type Row = Record<string, string>;
 
@@ -89,6 +112,9 @@ interface ShareRecord {
 export class MarketService {
   private cache = new Map<string, { at: number; p: Promise<unknown> }>();
   private shares?: Record<string, ShareRecord[]>;
+  private krxKey?: string;
+  /** KRX 날짜별 ETF 자료(지난 날은 바뀌지 않아서 데이터 폴더 krx-etf.json에 둬요) */
+  private krxDays?: Record<string, Record<string, KrxEtfDay>>;
 
   constructor(
     private dataDir: string | undefined,
@@ -159,7 +185,14 @@ export class MarketService {
       const navDaily = nav.status === 'fulfilled' ? parseNavDaily(nav.value).slice(0, 30) : [];
       // 지난 NAV 비교추이로 기록에 NAV를 채워요(그날 상장 주수는 앱이 본 날만 있어요)
       const navByDate = new Map(navDaily.map((r) => [r.date, r.nav]));
-      const recs = (await this.shareRecords(inst.code)).map((r) => ({ ...r, nav: r.nav ?? navByDate.get(r.date) }));
+      // KRX 인증키가 있으면 KRX 일별 자료, 없거나 실패하면 앱이 모은 기록
+      let krxNote: string | undefined;
+      const krx = await this.krxRecords(inst.code).catch((e: Error) => {
+        krxNote = `KRX 조회 실패(앱 기록으로 보여 줘요): ${e.message}`;
+        return undefined;
+      });
+      const own = (await this.shareRecords(inst.code)).map((r) => ({ ...r, nav: r.nav ?? navByDate.get(r.date) }));
+      const recs = krx && krx.length ? [...krx, ...own.filter((r) => !krx.some((k) => k.date === r.date))] : own;
       return {
         id,
         name: inst.nameKo,
@@ -176,8 +209,9 @@ export class MarketService {
         navDaily,
         components: comp.status === 'fulfilled' ? parseComponents(comp.value.rows).map((r) => ({ ...r, id: this.idOf(r.code) })) : [],
         flows: etfFlows(recs),
+        flowSource: krx && krx.length ? 'krx' : 'app',
         fresh: this.fresh(60_000),
-        note: comp.status === 'rejected' ? `구성종목 조회 실패: ${(comp.reason as Error).message}` : undefined,
+        note: [comp.status === 'rejected' ? `구성종목 조회 실패: ${(comp.reason as Error).message}` : '', krxNote ?? ''].filter(Boolean).join(' · ') || undefined,
       };
     });
   }
@@ -191,6 +225,79 @@ export class MarketService {
       const now = Date.now();
       return { id, market, ...parseBook(r.book, r.expected), fresh: { source: 'KIS', mode: 'poll', asOf: now, receivedAt: now, intervalMs: 2_000 } };
     });
+  }
+
+  // ── KRX Open API(FFLO 일별 상장 좌수) ──
+
+  setKrxKey(key: string | undefined) {
+    this.krxKey = key;
+    this.cache.clear();
+  }
+
+  private async krxDay(key: string, ymd: string): Promise<Map<string, KrxEtfDay>> {
+    const res = await fetchJson<{ OutBlock_1?: Array<Record<string, string>>; respMsg?: string; respCode?: string }>(`${KRX_ETF_URL}?basDd=${ymd}`, { headers: { AUTH_KEY: key }, timeoutMs: 20_000 });
+    if (res.respCode && res.respCode !== '200' && !res.OutBlock_1) throw new Error(`KRX ${res.respCode} ${res.respMsg ?? ''}`.trim());
+    return parseKrxEtf(res);
+  }
+
+  /** 인증키 확인: 최근 거래일(오늘부터 거꾸로 7일 안) ETF 자료를 받아 봐요 */
+  async testKrx(key: string): Promise<{ ok: boolean; message: string }> {
+    try {
+      for (let i = 1; i <= 7; i++) {
+        const d = kstIso(Date.now() - i * 86400_000).replace(/-/g, '');
+        const m = await this.krxDay(key, d);
+        if (m.size) return { ok: true, message: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)} ETF ${m.size}개 자료를 받았어요` };
+      }
+      return { ok: false, message: '최근 7일 ETF 자료가 비어 있어요(ETF 일별매매정보 서비스를 신청했는지 확인해 주세요)' };
+    } catch (e) {
+      if (e instanceof HttpError && (e.status === 401 || e.status === 403)) return { ok: false, message: 'KRX가 인증키를 받지 않았어요(키와 ETF 일별매매정보 서비스 신청을 확인해 주세요)' };
+      return { ok: false, message: `KRX에 연결하지 못했어요: ${(e as Error).message}` };
+    }
+  }
+
+  private async loadKrxDays(): Promise<Record<string, Record<string, KrxEtfDay>>> {
+    if (this.krxDays) return this.krxDays;
+    try {
+      this.krxDays = this.dataDir ? (JSON.parse(await readFile(join(this.dataDir, 'krx-etf.json'), 'utf8')) as Record<string, Record<string, KrxEtfDay>>) : {};
+    } catch {
+      this.krxDays = {};
+    }
+    return this.krxDays;
+  }
+
+  /** FFLO: KRX로 최근 거래일(달력 45일)의 상장 좌수·NAV. 지난 날은 한 번 받으면 다시 받지 않아요 */
+  private async krxRecords(code: string): Promise<ShareRecord[] | undefined> {
+    const key = this.krxKey;
+    if (!key) return undefined;
+    const days = await this.loadKrxDays();
+    const today = kstIso(Date.now());
+    let changed = false;
+    const out: ShareRecord[] = [];
+    for (let i = 1; i <= 45; i++) {
+      const iso = kstIso(Date.now() - i * 86400_000);
+      const dow = new Date(`${iso}T00:00:00Z`).getUTCDay();
+      if (dow === 0 || dow === 6) continue;
+      const ymd = iso.replace(/-/g, '');
+      let day = days[ymd];
+      if (!day) {
+        const m = await this.krxDay(key, ymd);
+        day = Object.fromEntries(m);
+        // 휴장일은 빈 자료라 그대로 둬요(다시 묻지 않게). 오늘 자료는 장이 끝나야 나와서 어제까지만 물어요
+        if (iso < today) {
+          days[ymd] = day;
+          changed = true;
+        }
+      }
+      const r = day[code];
+      if (r) out.push({ date: iso, shares: r.shares, nav: r.nav });
+    }
+    if (changed && this.dataDir) {
+      // 오래된 날은 지워요(90일)
+      const cutoff = kstIso(Date.now() - 90 * 86400_000).replace(/-/g, '');
+      for (const k of Object.keys(days)) if (k < cutoff) delete days[k];
+      void writeFile(join(this.dataDir, 'krx-etf.json'), JSON.stringify(days)).catch(() => undefined);
+    }
+    return out;
   }
 
   // ── FFLO 상장 주수 기록(데이터 폴더의 etf-shares.json, ETF마다 최근 400일) ──

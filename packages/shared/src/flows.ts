@@ -120,3 +120,24 @@ export interface WarningsResponse {
   fresh: Freshness;
   error?: string;
 }
+
+/** SI 미국(v0.4): FINRA 공매도 잔고(반월, 결제일 기준) */
+export interface ShortInterestRow {
+  /** 결제일 YYYY-MM-DD */
+  date: string;
+  /** 공매도 잔고(주) */
+  shares: number;
+  previous?: number;
+  changePct?: number;
+  /** 평균 일 거래량(주) */
+  avgVolume?: number;
+  /** 잔고 ÷ 평균 거래량(일) */
+  daysToCover?: number;
+}
+
+export interface ShortInterestResponse {
+  id: string;
+  /** 최근 먼저 */
+  rows: ShortInterestRow[];
+  fresh: Freshness;
+}

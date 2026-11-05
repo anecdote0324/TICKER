@@ -16,6 +16,7 @@ import { dirClass } from '../format';
 import { getInstrument, useInstrument } from '../stores/instruments';
 import { setPanelSecurity, type PanelState } from '../stores/panels';
 import { TitleBar, usePoll } from './common';
+import { openLink } from './News';
 
 const HOURS = 3600_000;
 
@@ -157,8 +158,11 @@ export function Anr({ panel }: { panel: PanelState }) {
 
 export function Dvd({ panel }: { panel: PanelState }) {
   const inst = useInstrument(panel.securityId);
-  const res = usePoll<DividendResponse>(isKr(inst) ? `/api/dividends?id=${encodeURIComponent(inst!.id)}` : '', 6 * HOURS);
-  if (!isKr(inst)) return <NeedStock fn="DVD" name="배당" inst={inst} />;
+  // 미국 주식도 돼요(한국투자증권 해외 기간별권리)
+  const ok = isKr(inst) || (inst?.market === 'US' && inst.assetClass === 'EQUITY');
+  const res = usePoll<DividendResponse>(ok ? `/api/dividends?id=${encodeURIComponent(inst!.id)}` : '', 6 * HOURS);
+  if (!ok) return <NeedStock fn="DVD" name="배당" inst={inst} />;
+  const usd = res?.data?.currency === 'USD';
   return (
     <>
       <TitleBar fn="DVD" name="배당" sub={stockLabel(inst!)} fresh={res?.data?.fresh} inst={inst} />
@@ -169,7 +173,7 @@ export function Dvd({ panel }: { panel: PanelState }) {
               <div className="anr-sum">
                 {d.trailing ? (
                   <>
-                    <span>{`최근 1년 주당 ${nf(d.trailing.cash)}원`}</span>
+                    <span>{usd ? `최근 1년 주당 $${nf(d.trailing.cash, 4)}` : `최근 1년 주당 ${nf(d.trailing.cash)}원`}</span>
                     {d.trailing.yieldPct !== undefined && <span className="up">{`배당수익률 ${d.trailing.yieldPct.toFixed(2)}%`}</span>}
                   </>
                 ) : (
@@ -193,7 +197,7 @@ export function Dvd({ panel }: { panel: PanelState }) {
                     <tr key={`${r.recordDate}-${i}`}>
                       <td>{r.recordDate}</td>
                       <td style={{ textAlign: 'left', color: 'var(--value)' }}>{r.kind}</td>
-                      <td className="num">{nf(r.cash)}</td>
+                      <td className="num">{usd ? (r.cash === undefined ? '—' : `$${nf(r.cash, 4)}`) : nf(r.cash)}</td>
                       <td className="num">{r.cashRate === undefined ? '—' : `${r.cashRate}%`}</td>
                       <td className="num">{r.stockRate === undefined ? '—' : `${r.stockRate}%`}</td>
                       <td>{r.payDate ?? '—'}</td>
@@ -202,7 +206,7 @@ export function Dvd({ panel }: { panel: PanelState }) {
                   ))}
                 </tbody>
               </table>
-              <div className="attr">한국투자증권 예탁원 정보(배당) · 지난 10년 · 현금배당률은 액면가 대비, 배당수익률은 지금 가격 대비</div>
+              <div className="attr">{usd ? '한국투자증권 해외주식 기간별권리(배당·특별배당) · 지난 5년 · 기준일은 현지 기준일 · 배당수익률은 지금 가격 대비' : '한국투자증권 예탁원 정보(배당) · 지난 10년 · 현금배당률은 액면가 대비, 배당수익률은 지금 가격 대비'}</div>
             </>
           )}
         </Body>
@@ -244,7 +248,11 @@ export function CorpEvents({ panel }: { panel: PanelState }) {
                     {d.events.map((e, i) => {
                       const id = getInstrument(`EQ:KS:${e.code}`)?.id ?? getInstrument(`EQ:KQ:${e.code}`)?.id;
                       return (
-                        <tr key={`${e.date}-${e.type}-${e.code}-${i}`} className={`${id && !kr ? 'click' : ''} ${e.date < today ? 'past' : e.date === today ? 'today' : ''}`} onClick={() => id && !kr && setPanelSecurity(panel.id, id)}>
+                        <tr
+                          key={`${e.date}-${e.type}-${e.code}-${i}`}
+                          className={`${(id && !kr) || e.url ? 'click' : ''} ${e.date < today ? 'past' : e.date === today ? 'today' : ''}`}
+                          onClick={() => (e.url ? openLink(e.url) : id && !kr && setPanelSecurity(panel.id, id))}
+                        >
                           <td>{e.date}</td>
                           <td style={{ textAlign: 'left' }}>{CORP_EVENT_LABEL[e.type]}</td>
                           {!kr && <td style={{ textAlign: 'left', color: 'var(--value)' }}>{`${e.name ?? ''} `}<span className="label">{e.code}</span></td>}
@@ -256,7 +264,7 @@ export function CorpEvents({ panel }: { panel: PanelState }) {
                 </table>
               )}
               <div className="attr">
-                {`한국투자증권 예탁원 정보 · ${actions ? '유상·무상증자, 감자, 합병·분할, 액면 변경, 의무보유(보호예수)' : '주주총회, 공모 청약·상장, 배당 기준일, 유상·무상증자, 의무보유'}${kr ? ' · 지난 2년~앞으로 1년' : ' · 줄을 누르면 연동'}`}
+                {`${actions ? '한국투자증권 예탁원 정보 · 유상·무상증자, 감자, 합병·분할, 액면 변경, 의무보유(보호예수)' : '한국투자증권 예탁원 정보(주주총회, 공모 청약·상장, 배당 기준일, 유상·무상증자, 의무보유)와 DART(IR·잠정실적 공시, 날짜는 공시일 · 누르면 원문)'}${kr ? ' · 지난 2년~앞으로 1년' : ' · 줄을 누르면 연동'}`}
               </div>
             </>
           )}

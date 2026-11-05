@@ -2,14 +2,14 @@
 // 감시는 메인 창의 AlertWatcher가 해요(이 패널을 닫아도 동작). 앱이 켜져 있을 때만 알려요.
 
 import { useEffect, useMemo, useState } from 'react';
-import { ALERT_KIND_LABEL, alertDistance, type AlertKind, type AlertRule, type Instrument, type NewsAlertRule } from '@bt/shared';
+import { ALERT_KIND_LABEL, alertDistance, type AlertKind, type AlertRule, type EcoAlertRule, type EcoResponse, type Instrument, type NewsAlertRule } from '@bt/shared';
 import { fmtPct, fmtPrice } from '../format';
 import { useQuotes } from '../stores/feed';
 import { getInstrument, index, useInstrument } from '../stores/instruments';
 import { patchPanel, setPanelSecurity, type PanelState } from '../stores/panels';
 import { appState, updateState } from '../stores/state';
 import { useStore } from '../stores/store';
-import { TitleBar } from './common';
+import { TitleBar, usePoll } from './common';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const when = (t: number) => {
@@ -26,13 +26,15 @@ export function Alrt({ panel }: { panel: PanelState }) {
   const setNews = (f: (rules: NewsAlertRule[]) => NewsAlertRule[]) => updateState('alerts', (s) => ({ ...s, rules: s?.rules ?? [], newsRules: f(s?.newsRules ?? []), log: s?.log ?? [] }));
   const tab = panel.alrtTab ?? 'price';
   const newsRules = state.newsRules ?? [];
+  const ecoRules = state.ecoRules ?? [];
+  const setEco = (f: (rules: EcoAlertRule[]) => EcoAlertRule[]) => updateState('alerts', (s) => ({ ...s, rules: s?.rules ?? [], ecoRules: f(s?.ecoRules ?? []), log: s?.log ?? [] }));
   const demo = [...quotes.values()].some((q) => q.fresh.mode === 'demo');
   return (
     <>
       <TitleBar
         fn="ALRT"
         name="알림"
-        sub={`${state.rules.filter((r) => r.enabled).length + newsRules.filter((r) => r.enabled).length}개 켜짐 · 앱이 켜져 있을 때만`}
+        sub={`${state.rules.filter((r) => r.enabled).length + newsRules.filter((r) => r.enabled).length + ecoRules.filter((r) => r.enabled).length}개 켜짐 · 앱이 켜져 있을 때만`}
         tools={
           <>
             <button className={tab === 'price' ? 'on' : ''} onClick={() => patchPanel(panel.id, { alrtTab: 'price' })}>
@@ -41,11 +43,15 @@ export function Alrt({ panel }: { panel: PanelState }) {
             <button className={tab === 'news' ? 'on' : ''} onClick={() => patchPanel(panel.id, { alrtTab: 'news' })}>
               뉴스
             </button>
+            <button className={tab === 'eco' ? 'on' : ''} onClick={() => patchPanel(panel.id, { alrtTab: 'eco' })}>
+              지표
+            </button>
           </>
         }
       />
       <div className="pbody alrt">
         {tab === 'news' && <NewsAlerts rules={newsRules} setNews={setNews} />}
+        {tab === 'eco' && <EcoAlerts rules={ecoRules} setEco={setEco} />}
         {tab === 'price' && (
           <>
         <AlrtAdd initial={panelInst?.assetClass === 'EQUITY' || panelInst?.assetClass === 'CRYPTO' || panelInst?.assetClass === 'CURNCY' || panelInst?.assetClass === 'INDEX' ? panelInst : undefined} onAdd={(r) => setRules((rs) => [...rs, r])} />
@@ -119,6 +125,80 @@ export function Alrt({ panel }: { panel: PanelState }) {
         )}
         <div className="attr">조건이 맞으면 앱 안 알림을 띄우고, 설정 → 알림에 따라 운영체제 알림과 소리도 내요. 이미 조건이 맞아 있으면 만들자마자 알려요. '반복'은 조건이 풀렸다가 다시 맞을 때마다 알려요.</div>
       </div>
+    </>
+  );
+}
+
+/** 지표 탭(v0.4): ECO의 발표 이름을 골라 미리 알림(15분·1시간 전)과 발표 알림(최근 값) */
+function EcoAlerts({ rules, setEco }: { rules: EcoAlertRule[]; setEco: (f: (r: EcoAlertRule[]) => EcoAlertRule[]) => void }) {
+  const eco = usePoll<EcoResponse>('/api/eco', 30 * 60_000);
+  const now = Date.now();
+  const names = [...new Set((eco?.data?.events ?? []).map((e) => e.name))].sort();
+  const next = (name: string) => (eco?.data?.events ?? []).filter((e) => e.name === name && e.at > now).sort((a, b) => a.at - b.at)[0];
+  const [name, setName] = useState('');
+  const [before, setBefore] = useState(15);
+  const add = () => {
+    if (!name) return;
+    setEco((rs) => [...rs, { id: `e${Date.now().toString(36)}`, name, beforeMin: before, enabled: true, createdAt: Date.now(), fired: [] }]);
+    setName('');
+  };
+  return (
+    <>
+      <div className="port-add">
+        <select value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }}>
+          <option value="">{names.length ? '지표 고르기(ECO 발표 일정)' : 'ECO 일정을 불러오는 중이거나 없어요'}</option>
+          {names.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <select value={before} onChange={(e) => setBefore(Number(e.target.value))}>
+          <option value={0}>미리 알림 없음</option>
+          <option value={15}>15분 전</option>
+          <option value={60}>1시간 전</option>
+        </select>
+        <button className="btn primary" disabled={!name} onClick={add}>
+          지표 알림 만들기
+        </button>
+      </div>
+      {rules.length === 0 ? (
+        <div className="empty-body label">지표 알림이 없어요. ECO의 발표 이름을 골라 만들면, 발표 전(고른 만큼)과 발표 뒤에 알려요.</div>
+      ) : (
+        <table className="port-table">
+          <thead>
+            <tr>
+              <th>지표</th>
+              <th>다음 발표</th>
+              <th>미리 알림</th>
+              <th>마지막 알림</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rules.map((r) => {
+              const n = next(r.name);
+              return (
+                <tr key={r.id} style={{ opacity: r.enabled ? 1 : 0.55 }}>
+                  <td>{r.name}</td>
+                  <td className="num">{n ? when(n.at) : '—'}</td>
+                  <td>{r.beforeMin ? `${r.beforeMin === 60 ? '1시간' : `${r.beforeMin}분`} 전` : '없음'}</td>
+                  <td className="num">{r.lastFiredAt ? when(r.lastFiredAt) : '—'}</td>
+                  <td>
+                    <button className="btn" onClick={() => setEco((rs) => rs.map((x) => (x.id === r.id ? { ...x, enabled: !x.enabled } : x)))}>
+                      {r.enabled ? '끄기' : '켜기'}
+                    </button>
+                    <button className="icon-btn" aria-label="지우기" onClick={() => setEco((rs) => rs.filter((x) => x.id !== r.id))}>
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <div className="attr">ECO 일정(BEA 시각·FRED 관례 시각)으로 알려요. 발표 알림의 값은 ECO가 받은 최근 값이라, 원천이 값을 올리기 전이면 지난 값일 수 있어요. 반복 알림이에요(발표마다).</div>
     </>
   );
 }

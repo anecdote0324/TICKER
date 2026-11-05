@@ -97,6 +97,8 @@ export interface DividendRow {
 
 export interface DividendResponse {
   id: string;
+  /** 'KRW' 국내(예탁원), 'USD' 미국(한국투자증권 해외 권리) */
+  currency?: string;
   rows: DividendRow[];
   /** 최근 1년 주당 배당 합과 지금 가격 기준 배당수익률 */
   trailing?: { cash: number; yieldPct?: number };
@@ -104,7 +106,7 @@ export interface DividendResponse {
 }
 
 /** CACS·EVTS: 기업 이벤트 */
-export type CorpEventType = 'dividend' | 'paidin' | 'bonus' | 'capdcrs' | 'merger' | 'revsplit' | 'deposit' | 'meeting' | 'ipo' | 'listing';
+export type CorpEventType = 'dividend' | 'paidin' | 'bonus' | 'capdcrs' | 'merger' | 'revsplit' | 'deposit' | 'meeting' | 'ipo' | 'listing' | 'ir' | 'earnings';
 
 export const CORP_EVENT_LABEL: Record<CorpEventType, string> = {
   dividend: '배당 기준일',
@@ -117,6 +119,8 @@ export const CORP_EVENT_LABEL: Record<CorpEventType, string> = {
   meeting: '주주총회',
   ipo: '공모 청약',
   listing: '신규 상장',
+  ir: 'IR(기업설명회) 공시',
+  earnings: '실적 발표(잠정)',
 };
 
 export interface CorpEvent {
@@ -127,6 +131,8 @@ export interface CorpEvent {
   name?: string;
   /** 한 줄 설명(배정률, 공모가, 주총 사유 등) */
   detail?: string;
+  /** 원문(DART 공시 뷰어) */
+  url?: string;
 }
 
 export interface CorpEventsResponse {
