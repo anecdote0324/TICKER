@@ -6,4 +6,6 @@ export const focusRegistry = {
   body: new Map<string, () => void>(),
   /** 커맨드 라인으로 가서 F1 기능 목록 열기(v0.2) */
   fnList: new Map<string, () => void>(),
+  /** 화면 탭 옮기기(v0.4): 누른 창(메인 또는 떼어낸 창)의 화면 탭을 dir만큼 */
+  screenNav: undefined as ((dir: 1 | -1, view: Window | null) => void) | undefined,
 };

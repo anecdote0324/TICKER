@@ -93,6 +93,20 @@ export function onGlobalKey(e: KeyboardEvent) {
     else focusPanel(active);
     return;
   }
+  // 화면 탭 옮기기(v0.4): 입력칸 밖에서만(입력칸의 Shift+방향키는 글자 선택), 설정·도움말·팔레트가 떠 있으면 안 해요
+  const nextScreen = isShortcut(e, 'nextScreen');
+  const prevScreen = !nextScreen && isShortcut(e, 'prevScreen');
+  if (nextScreen || prevScreen) {
+    const t = e.target as HTMLElement | null;
+    const typing = !!t?.closest?.('input, textarea, select, [contenteditable="true"]');
+    const u = ui.get();
+    if (!typing && !u.settings && !u.help && !u.palette) {
+      e.preventDefault();
+      e.stopPropagation();
+      focusRegistry.screenNav?.(nextScreen ? 1 : -1, e.view as Window | null);
+      return;
+    }
+  }
   const back = isShortcut(e, 'back');
   const fwd = !back && isShortcut(e, 'forward');
   if ((back || fwd) && active) {

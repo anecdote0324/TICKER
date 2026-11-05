@@ -49,3 +49,17 @@ describe('단축키', () => {
     expect(isReservedBinding('Alt+Shift+E', false)).toBe(false);
   });
 });
+
+describe('화면 탭 옮기기(v0.4)', () => {
+  const k = (key: string, shift: boolean): KeyLike => ({ key, code: key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: shift });
+  it('Shift+→·Shift+↑는 오른쪽, Shift+←·Shift+↓는 왼쪽 화면 탭(Windows·Mac 같음)', () => {
+    for (const mac of [false, true]) {
+      expect(matchesShortcut(k('ArrowRight', true), 'nextScreen', {}, mac)).toBe(true);
+      expect(matchesShortcut(k('ArrowUp', true), 'nextScreen', {}, mac)).toBe(true);
+      expect(matchesShortcut(k('ArrowLeft', true), 'prevScreen', {}, mac)).toBe(true);
+      expect(matchesShortcut(k('ArrowDown', true), 'prevScreen', {}, mac)).toBe(true);
+    }
+    // Shift 없는 방향키는 아니에요
+    expect(matchesShortcut(k('ArrowRight', false), 'nextScreen', {}, false)).toBe(false);
+  });
+});

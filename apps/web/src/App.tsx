@@ -13,6 +13,7 @@ import { WorkspaceMenu } from './components/WorkspaceMenu';
 import { AlertWatcher } from './components/AlertWatcher';
 import { buildWorkspaceFile, mergeWatchlists, mergeWorkspaces, parseWorkspaceFile, workspaceFileName } from './workspaceFile';
 import { attachGlobalKeys } from './keys';
+import { focusRegistry } from './components/focus';
 import { panels, type PanelState } from './stores/panels';
 import { settings } from './stores/settings';
 import { appState, updateState, type NamedWorkspace } from './stores/state';
@@ -249,6 +250,28 @@ export function App() {
   const overlayHost = u.host && screens.some((s) => winOf(s) === u.host) ? u.host : undefined;
   // 떼어낸 창들(창 id 순서는 화면 순서)
   const wins = [...new Set(screens.map(winOf).filter((w): w is string => !!w))];
+
+  // 화면 탭 옮기기(v0.4): 누른 창의 화면 탭 목록에서 오른쪽·왼쪽으로(끝에서는 처음으로 돌아가요)
+  const screenNav = useRef<(dir: 1 | -1, view: Window | null) => void>(() => undefined);
+  screenNav.current = (dir, view) => {
+    const win = [...screenWindows.entries()].find(([, w]) => w === view)?.[0];
+    if (win) {
+      const ids = screens.filter((s) => winOf(s) === win).map((s) => s.id);
+      if (ids.length < 2) return;
+      const cur = winActive[win] && ids.includes(winActive[win]) ? winActive[win] : ids[0];
+      setWinActive((m) => ({ ...m, [win]: ids[(ids.indexOf(cur) + dir + ids.length) % ids.length] }));
+      return;
+    }
+    const ids = mainScreens.map((s) => s.id);
+    if (ids.length < 2) return;
+    setActive(ids[(ids.indexOf(mainActive) + dir + ids.length) % ids.length]);
+  };
+  useEffect(() => {
+    focusRegistry.screenNav = (dir, view) => screenNav.current(dir, view);
+    return () => {
+      focusRegistry.screenNav = undefined;
+    };
+  }, []);
 
   useEffect(() => {
     attachGlobalKeys(window);

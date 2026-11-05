@@ -13,6 +13,8 @@ export type ShortcutId =
   | 'forward'
   | 'nextPanel'
   | 'prevPanel'
+  | 'nextScreen'
+  | 'prevScreen'
   | 'openList'
   | 'descCard'
   | 'functionList'
@@ -25,7 +27,7 @@ export interface ShortcutDef {
   id: ShortcutId;
   label: string;
   /** 어디서 쓰는지 */
-  scope: '어디서나' | '커맨드 라인';
+  scope: '어디서나' | '커맨드 라인' | '입력칸 밖';
   win: string[];
   mac: string[];
 }
@@ -43,6 +45,9 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'forward', label: '패널 화면 앞으로', scope: '어디서나', win: ['Alt+ArrowRight'], mac: ['Mod+]'] },
   { id: 'nextPanel', label: '다음 패널', scope: '어디서나', win: ['Ctrl+Tab'], mac: ['Ctrl+Tab'] },
   { id: 'prevPanel', label: '이전 패널', scope: '어디서나', win: ['Ctrl+Shift+Tab'], mac: ['Ctrl+Shift+Tab'] },
+  // 화면 탭 옮기기(v0.4, 사용자 결정): 입력칸에서는 글자 선택이라 입력칸 밖에서만
+  { id: 'nextScreen', label: '오른쪽 화면 탭으로', scope: '입력칸 밖', win: ['Shift+ArrowRight', 'Shift+ArrowUp'], mac: ['Shift+ArrowRight', 'Shift+ArrowUp'] },
+  { id: 'prevScreen', label: '왼쪽 화면 탭으로', scope: '입력칸 밖', win: ['Shift+ArrowLeft', 'Shift+ArrowDown'], mac: ['Shift+ArrowLeft', 'Shift+ArrowDown'] },
   // Ctrl+Space는 일부 IME에서 입력 언어 전환 키예요. Mac에서는 입력 소스 전환이라 묶지 않아요
   { id: 'openList', label: '지금 칸 목록 열기(다른 뜻 보기)', scope: '커맨드 라인', win: ['Alt+ArrowDown', 'Ctrl+Space'], mac: ['Alt+ArrowDown'] },
   // F1: 기능 목록(v0.2). 커맨드 라인 밖에서 누르면 활성 패널의 커맨드 라인으로 가서 열어요
