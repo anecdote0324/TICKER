@@ -1358,6 +1358,39 @@ export class KisAdapter implements Adapter {
   }
 
   /**
+   * ETF 구성종목시세(FHKST121600C0, 공식 예제 etfetn/inquire_component_stock_price: 시장 J, 화면 11216).
+   * output1 = ETF 요약, output2 = 구성종목(코드·이름·현재가·등락률·구성비중 etf_cnfg_issu_rlim)
+   */
+  async etfComponents(code: string): Promise<{ summary: KisRow; rows: KisRow[] }> {
+    const r = await this.get('/uapi/etfetn/v1/quotations/inquire-component-stock-price', 'FHKST121600C0', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: code, FID_COND_SCR_DIV_CODE: '11216' }, 2);
+    const rows = asRows(r.output2);
+    if (rows.length) this.sampleRows('FHKST121600C0', code, `${rows.length}종목`, rows, (x) => [x.stck_shrn_iscd, x.hts_kor_isnm, x.etf_cnfg_issu_rlim, x.prdy_ctrt]);
+    return { summary: asRows(r.output1)[0] ?? {}, rows };
+  }
+
+  /** ETF/ETN 현재가(FHPST02400000, 공식 예제 etfetn/inquire_price): NAV·괴리율·추적오차율·순자산·상장주수 */
+  async etfPrice(code: string): Promise<KisRow> {
+    const r = await this.get('/uapi/etfetn/v1/quotations/inquire-price', 'FHPST02400000', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: code }, 1);
+    return (r.output as KisRow) ?? {};
+  }
+
+  /** NAV 비교추이(일)(FHPST02440200, 공식 예제 etfetn/nav_comparison_daily_trend): 최근 45일 */
+  async etfNavDaily(code: string): Promise<KisRow[]> {
+    const now = Date.now();
+    const r = await this.get('/uapi/etfetn/v1/quotations/nav-comparison-daily-trend', 'FHPST02440200', { FID_COND_MRKT_DIV_CODE: 'J', FID_INPUT_ISCD: code, FID_INPUT_DATE_1: ymdKst(now - 45 * 86400_000), FID_INPUT_DATE_2: ymdKst(now) }, 1);
+    return asRows(r.output);
+  }
+
+  /**
+   * BQ 10호가: 주식현재가 호가/예상체결(FHKST01010200, 공식 예제 inquire_asking_price_exp_ccn). 시장 J(KRX)·NX(NXT)·UN(통합).
+   * 실시간 등록 칸을 쓰지 않으려고 화면이 열려 있는 동안 조회로 받아요
+   */
+  async orderbook(code: string, market: 'J' | 'NX' | 'UN'): Promise<{ book: KisRow; expected: KisRow }> {
+    const r = await this.get('/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn', 'FHKST01010200', { FID_COND_MRKT_DIV_CODE: market, FID_INPUT_ISCD: code }, 0);
+    return { book: asRows(r.output1)[0] ?? {}, expected: asRows(r.output2)[0] ?? {} };
+  }
+
+  /**
    * KWRN: 오늘 VI 발동 목록(변동성완화장치 현황 FHPST01390000, 공식 예제 inquire_vi_status: 분류 0 전체, 화면 20139, 시장 0 전체, 정렬 0 전체)
    */
   async viStatus(): Promise<ViRow[]> {

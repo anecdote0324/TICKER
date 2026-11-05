@@ -2563,3 +2563,98 @@ button {
   padding: 0 5px;
   cursor: pointer;
 }
+
+/* ── v0.4 ETF·BQ ── */
+.etf-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 2px 0 6px;
+  font: 12px var(--mono);
+  color: var(--value);
+}
+.etf-head .up {
+  color: var(--up);
+}
+.etf-head .down {
+  color: var(--down);
+}
+.bq {
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px;
+  overflow: auto;
+}
+.bq-left {
+  flex: 0 0 220px;
+}
+.bq-right {
+  flex: 1;
+  min-width: 260px;
+}
+.bq-price {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 20px;
+  padding-bottom: 6px;
+}
+.bq-price .up {
+  color: var(--up);
+}
+.bq-price .down {
+  color: var(--down);
+}
+.bq-book {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.bq-book td {
+  padding: 1px 6px;
+  border-bottom: 1px solid #151515;
+}
+.bq-px {
+  text-align: center;
+  width: 30%;
+}
+.bq-px.up {
+  color: var(--up);
+}
+.bq-px.down {
+  color: var(--down);
+}
+.bq-qty {
+  position: relative;
+  width: 35%;
+}
+.bq-qty.ask {
+  text-align: right;
+}
+.bq-qty .num {
+  position: relative;
+  color: var(--value);
+}
+.bq-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  opacity: 0.25;
+}
+.bq-bar.ask {
+  right: 0;
+  background: var(--down);
+}
+.bq-bar.bid {
+  left: 0;
+  background: var(--up);
+}
+.bq-total td {
+  border-top: 1px solid #333;
+  text-align: center;
+}
+.bq-exp {
+  font-size: 11px;
+  padding: 4px 0;
+}

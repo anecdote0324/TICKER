@@ -39,6 +39,8 @@
 - ANR: 종목투자의견 응답에 증권사 이름 칸(`mbcr_name`)이 오는지(예제 칸 목록에는 없어요)
 - 예탁원 정보: 날짜 칸 모양(YYYYMMDD인지), 청약기간 모양, 시장 전체로 물을 때 한 쪽에 몇 줄이 오는지, 의무예치의 `depo_date`가 예치일인지 해제일인지
 - DART(MGMT·RELS·HDS·ERN): 임원 보수 칸(`se`·`nmpr`·`mendng_totamt`·`jan_avrg_mendng_am`)의 실제 이름, `elestock`의 증감 칸(`sp_stock_lmp_irds_cnt`)이 부호를 주는지, 타법인 출자의 합계 줄 이름, 잠정실적 공시가 `pblntf_ty=I`로 걸러지는지(공정공시 분류)
+- ETF·MEMB: ETF 구성종목시세 output2의 구성비중(`etf_cnfg_issu_rlim`)이 %인지, 현금·선물 줄 코드 모양, ETF 현재가의 순자산 총액(`etf_ntas_ttam`) 단위(억 원으로 읽어요), NAV 비교추이(일)의 기간
+- BQ: 호가 조회의 NXT(`NX`)·통합(`UN`) 시장 코드가 장 시간 밖(NXT 프리·애프터마켓)에도 오는지, 2초 조회가 초당 한도 안에서 다른 화면을 느리게 하지 않는지
 - KWRN: VI 현황의 `vi_kind_code`(1 정적·2 동적·3 둘 다로 읽어요)와 해제 시각이 비어 오는지, 장 마감 뒤·휴일에 무엇이 오는지
 
 ## v0.2를 만들면서 실제로 확인할 것

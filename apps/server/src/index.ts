@@ -19,6 +19,7 @@ import { RatesService } from './rates';
 import { UsMapService } from './us-map';
 import { FinancialsService, secContactError } from './financials';
 import { DartCorpService } from './dart-corp';
+import { MarketService } from './market';
 import { EcoService } from './eco';
 import { fileSecretBox, Store, type SecretBox } from './store';
 import { recordingLogger, withTimeout, type RecordingLogger } from './util';
@@ -90,6 +91,13 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     () => hub.instruments,
     async (id) => (await hub.bars(id, '1d')).bars,
     (inst) => financials.get(inst, 'quarter'),
+  );
+  // v0.4 지수·ETF·호가(MEMB·MOV·ETF·FFLO·BQ)
+  const market = new MarketService(
+    opts.dataDir,
+    () => hub.kis,
+    () => hub.instruments,
+    (index) => hub.sectorMap(index),
   );
   const eco = new EcoService(log, () => rates.ecosKeyValue);
   // FRED 크레딧 스프레드는 최근 3년만 줘서 지금부터 쌓아요(03 v0.3)
@@ -195,6 +203,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     rates,
     financials,
     dartCorp,
+    market,
     eco,
     extraKeys,
   });

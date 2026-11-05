@@ -63,6 +63,10 @@ export interface PanelState {
   nseSaved?: string[];
   /** ALRT 탭(v0.4): 가격·뉴스 */
   alrtTab?: 'price' | 'news';
+  /** v0.4: MOV 보기, ETF 탭, BQ 호가 시장 */
+  movView?: 'contrib' | 'up' | 'down';
+  etfTab?: 'nav' | 'components' | 'flows';
+  bookMarket?: 'J' | 'NX' | 'UN';
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

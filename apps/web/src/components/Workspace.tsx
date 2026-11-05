@@ -30,6 +30,7 @@ import { Kwrn } from '../widgets/Kwrn';
 import { Anr, CorpEvents, Dvd, Ee, Ipo } from '../widgets/Corp';
 import { Cf, Em, Ern, Hds, Mgmt, Own, Rels } from '../widgets/Dart';
 import { Firs, Ni, Nse, Top } from '../widgets/NewsViews';
+import { Bq, Etf, Memb, Mov, Watc } from '../widgets/MarketViews';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
 import { Menu } from '../widgets/Menu';
@@ -168,6 +169,17 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Nse panel={p} />;
     case 'FIRS':
       return <Firs panel={p} />;
+    case 'MEMB':
+      return <Memb panel={p} />;
+    case 'MOV':
+      return <Mov panel={p} />;
+    case 'ETF':
+    case 'FFLO':
+      return <Etf panel={p} />;
+    case 'WATC':
+      return <Watc panel={p} />;
+    case 'BQ':
+      return <Bq panel={p} />;
     case 'ECO':
       return <Eco panel={p} />;
     case 'PORT':

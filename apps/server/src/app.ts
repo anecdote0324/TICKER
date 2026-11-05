@@ -8,6 +8,7 @@ import type { RatesService } from './rates';
 import type { FinancialsService } from './financials';
 import type { EcoService } from './eco';
 import type { DartCorpService } from './dart-corp';
+import type { MarketService } from './market';
 import { breakingItems, topNews, topicItems } from './news-views';
 
 import { timingSafeEqual } from 'node:crypto';
@@ -44,6 +45,8 @@ export interface AppDeps {
   eco?: EcoService;
   /** v0.4 DART 종목 정보(MGMT·RELS·HDS·OWN·ERN·CF) */
   dartCorp?: DartCorpService;
+  /** v0.4 지수·ETF·호가(MEMB·MOV·ETF·FFLO·BQ) */
+  market?: MarketService;
   /** v0.3 키(ECOS·FRED·SEC 연락처) */
   extraKeys?: ExtraKeys;
 }
@@ -203,6 +206,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ),
   );
   app.get('/api/ipo', (_req, reply) => corp(reply, () => hub.corp.ipo()));
+  // v0.4 지수·ETF·호가
+  const market = () => {
+    if (!deps.market) throw new Error('이 기능을 쓸 수 없어요');
+    return deps.market;
+  };
+  app.get<{ Querystring: { index?: string } }>('/api/memb', (req, reply) =>
+    corp(reply, () => market().memb((['KOSPI200', 'KOSDAQ150', 'SPX', 'NDX'] as const).find((x) => x === req.query.index) ?? 'KOSPI200')),
+  );
+  app.get<{ Querystring: { id?: string } }>('/api/etf', (req, reply) => corp(reply, () => market().etf(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string; market?: string } }>('/api/orderbook', (req, reply) =>
+    corp(reply, () => market().orderbook(req.query.id ?? '', req.query.market === 'NX' || req.query.market === 'UN' ? req.query.market : 'J')),
+  );
+
   // v0.4 DART 종목 정보
   const dart = () => {
     if (!deps.dartCorp) throw new Error('DART 기능을 쓸 수 없어요');
