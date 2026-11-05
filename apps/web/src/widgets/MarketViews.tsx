@@ -11,7 +11,6 @@ import {
   type MembRow,
   type NewsResponse,
   type OrderbookResponse,
-  type SecurityProfile,
 } from '@bt/shared';
 import { dirClass, fmtBig, fmtPct, fmtPrice } from '../format';
 import { getBars } from '../stores/bars';
@@ -342,19 +341,16 @@ export function Watc({ panel }: { panel: PanelState }) {
   );
 }
 
-/** BQ 쿼트 대시보드: 시세·주요 지표와 10호가(KRX·NXT·통합). 호가는 조회로 2초마다(실시간 등록 칸을 쓰지 않아요) */
+/** BQ 쿼트 대시보드: 10호가만(KRX·NXT·통합). 호가는 조회로 2초마다(실시간 등록 칸을 쓰지 않아요) */
 export function Bq({ panel }: { panel: PanelState }) {
   const inst = useInstrument(panel.securityId);
   const kr = !!inst && inst.assetClass === 'EQUITY' && (inst.market === 'KS' || inst.market === 'KQ');
   const market = (panel.bookMarket ?? 'J') as BookMarket;
-  const quotes = useQuotes(inst ? [inst.id] : []);
-  const q = inst ? quotes.get(inst.id) : undefined;
   const book = usePoll<OrderbookResponse>(kr ? `/api/orderbook?id=${encodeURIComponent(inst!.id)}&market=${market}` : '', 2_000);
-  const prof = usePoll<SecurityProfile>(inst?.assetClass === 'EQUITY' ? `/api/profile?id=${encodeURIComponent(inst.id)}` : '', 5 * 60_000);
   if (!inst) {
     return (
       <>
-        <TitleBar fn="BQ" name="쿼트 대시보드" />
+        <TitleBar fn="BQ" name="10호가" />
         <div className="empty-body">
           <div>종목이 필요해요</div>
           <div className="label">예: 005930 BQ ⏎</div>
@@ -364,7 +360,6 @@ export function Bq({ panel }: { panel: PanelState }) {
   }
   const b = book?.data;
   const maxQty = Math.max(1, ...(b?.asks ?? []).map((x) => x.qty), ...(b?.bids ?? []).map((x) => x.qty));
-  const live = prof?.data?.live;
   const tools = kr ? (
     <>
       {BOOK_MARKETS.map((m) => (
@@ -376,76 +371,45 @@ export function Bq({ panel }: { panel: PanelState }) {
   ) : undefined;
   return (
     <>
-      <TitleBar fn="BQ" name="쿼트 대시보드" sub={`${inst.nameKo || inst.nameEn || inst.code} ${inst.code}`} fresh={q?.fresh} inst={inst} tools={tools} />
+      <TitleBar fn="BQ" name="10호가" sub={`${inst.nameKo || inst.nameEn || inst.code} ${inst.code}`} fresh={b?.fresh} inst={inst} tools={tools} />
       <div className="pbody bq">
-        <div className="bq-left">
-          <div className="bq-price">
-            <span className="num">{fmtPrice(inst, q?.last)}</span>
-            <span className={`num ${dirClass(q?.changePct)}`}>{fmtPct(q?.changePct)}</span>
-          </div>
-          <table className="flow-table">
+        {!kr && <div className="empty-body label">10호가는 국내 종목만 볼 수 있어요(미국은 무료로 1호가만)</div>}
+        {kr && !book && <div className="empty-body label">호가 불러오는 중…</div>}
+        {kr && book?.error && !b && <div className="empty-body err">{book.error}</div>}
+        {b && (
+          <table className="bq-book">
             <tbody>
-              {[
-                ['시가', fmtPrice(inst, q?.open)],
-                ['고가', fmtPrice(inst, q?.high)],
-                ['저가', fmtPrice(inst, q?.low)],
-                ['거래량', nf(q?.volume)],
-                ['거래대금', fmtBig(q?.turnover, inst.currency ?? (inst.market === 'US' ? 'USD' : 'KRW'))],
-                ['PER', nf(live?.per, 2)],
-                ['PBR', nf(live?.pbr, 2)],
-                ['EPS', nf(live?.eps)],
-                ['52주 최고', nf(live?.high52)],
-                ['52주 최저', nf(live?.low52)],
-                ['시가총액', fmtBig(live?.marketCap, prof?.data?.currency)],
-              ].map(([k, v]) => (
-                <tr key={k}>
-                  <td>{k}</td>
-                  <td className="num">{v}</td>
+              {[...b.asks].reverse().map((a, i) => (
+                <tr key={`a${i}`}>
+                  <td className="bq-qty ask">
+                    <span className="bq-bar ask" style={{ width: `${(a.qty / maxQty) * 100}%` }} />
+                    <span className="num">{nf(a.qty)}</span>
+                  </td>
+                  <td className="num bq-px down">{nf(a.price)}</td>
+                  <td />
                 </tr>
               ))}
+              {b.bids.map((x, i) => (
+                <tr key={`b${i}`}>
+                  <td />
+                  <td className="num bq-px up">{nf(x.price)}</td>
+                  <td className="bq-qty bid">
+                    <span className="bq-bar bid" style={{ width: `${(x.qty / maxQty) * 100}%` }} />
+                    <span className="num">{nf(x.qty)}</span>
+                  </td>
+                </tr>
+              ))}
+              <tr className="bq-total">
+                <td className="num">{nf(b.totalAsk)}</td>
+                <td className="label">{b.time ?? '총 잔량'}</td>
+                <td className="num">{nf(b.totalBid)}</td>
+              </tr>
             </tbody>
           </table>
-        </div>
-        <div className="bq-right">
-          {!kr && <div className="empty-body label">10호가는 국내 종목만 볼 수 있어요(미국은 무료로 1호가만)</div>}
-          {kr && !book && <div className="empty-body label">호가 불러오는 중…</div>}
-          {kr && book?.error && !b && <div className="empty-body err">{book.error}</div>}
-          {b && (
-            <table className="bq-book">
-              <tbody>
-                {[...b.asks].reverse().map((a, i) => (
-                  <tr key={`a${i}`}>
-                    <td className="bq-qty ask">
-                      <span className="bq-bar ask" style={{ width: `${(a.qty / maxQty) * 100}%` }} />
-                      <span className="num">{nf(a.qty)}</span>
-                    </td>
-                    <td className="num bq-px down">{nf(a.price)}</td>
-                    <td />
-                  </tr>
-                ))}
-                {b.bids.map((x, i) => (
-                  <tr key={`b${i}`}>
-                    <td />
-                    <td className="num bq-px up">{nf(x.price)}</td>
-                    <td className="bq-qty bid">
-                      <span className="bq-bar bid" style={{ width: `${(x.qty / maxQty) * 100}%` }} />
-                      <span className="num">{nf(x.qty)}</span>
-                    </td>
-                  </tr>
-                ))}
-                <tr className="bq-total">
-                  <td className="num">{nf(b.totalAsk)}</td>
-                  <td className="label">{b.time ?? '총 잔량'}</td>
-                  <td className="num">{nf(b.totalBid)}</td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-          {b?.expected && <div className="label bq-exp">{`예상 체결 ${nf(b.expected.price)}${b.expected.qty ? ` · ${nf(b.expected.qty)}주` : ''}`}</div>}
-          {kr && <div className="attr">{`${BOOK_MARKETS.find((m) => m.code === market)?.label} 10호가 · 한국투자증권 호가 조회로 2초마다(실시간 등록 칸 0개 사용)`}</div>}
-        </div>
+        )}
+        {b?.expected && <div className="label bq-exp">{`예상 체결 ${nf(b.expected.price)}${b.expected.qty ? ` · ${nf(b.expected.qty)}주` : ''}`}</div>}
+        {kr && <div className="attr">{`${BOOK_MARKETS.find((m) => m.code === market)?.label} 10호가 · 한국투자증권 호가 조회로 2초마다(실시간 등록 칸 0개 사용)`}</div>}
       </div>
     </>
   );
 }
-

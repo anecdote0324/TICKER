@@ -2580,30 +2580,8 @@ button {
   color: var(--down);
 }
 .bq {
-  display: flex;
-  gap: 8px;
   padding: 4px 8px;
   overflow: auto;
-}
-.bq-left {
-  flex: 0 0 220px;
-}
-.bq-right {
-  flex: 1;
-  min-width: 260px;
-}
-.bq-price {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  font-size: 20px;
-  padding-bottom: 6px;
-}
-.bq-price .up {
-  color: var(--up);
-}
-.bq-price .down {
-  color: var(--down);
 }
 .bq-book {
   width: 100%;
