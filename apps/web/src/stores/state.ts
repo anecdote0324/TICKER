@@ -1,6 +1,7 @@
 // 앱 상태: 명령 기록, 사용 점수, 기억된 선택, 겹침 기본값, 관심종목, 화면 배치.
 // 서버(메인 프로세스)만 파일에 써요. 여러 창이 동시에 써서 기록이 사라지는 일을 막아요(05 §14.2).
 
+import { DEFAULT_CHART_PREFS, type ChartPrefs } from '../widgets/chartPrefs';
 import type { AlertsState, AssetClass, Holding } from '@bt/shared';
 import { api } from '../api';
 import { createStore } from './store';
@@ -39,6 +40,19 @@ export interface AppState {
   portfolio: Holding[];
   /** ALRT 알림 규칙과 최근 알림(v0.3) */
   alerts: AlertsState;
+  /** 차트 기본값·템플릿·그림(v0.5, TDEF·G·드로잉) */
+  chart: ChartPrefs;
+  /** FAVE 즐겨찾기(v0.5): 명령 줄 */
+  favorites: Favorite[];
+}
+
+/** FAVE 즐겨찾기 한 줄: 커맨드 라인에 그대로 칠 수 있는 명령 */
+export interface Favorite {
+  id: string;
+  command: string;
+  /** 화면에 보이는 이름(종목 이름·기능 이름) */
+  label: string;
+  at: number;
 }
 
 export const DEFAULT_WATCHLISTS: WatchGroup[] = [
@@ -61,11 +75,13 @@ const DEFAULT: AppState = {
   aliases: [],
   portfolio: [],
   alerts: { rules: [], log: [] },
+  chart: DEFAULT_CHART_PREFS,
+  favorites: [],
 };
 
 export const appState = createStore<AppState>(DEFAULT);
 
-const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts'];
+const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites'];
 
 export async function loadAppState() {
   const next: AppState = { ...DEFAULT };

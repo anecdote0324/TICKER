@@ -31,6 +31,7 @@ import { Anr, CorpEvents, Dvd, Ee, Ipo } from '../widgets/Corp';
 import { Cf, Em, Ern, Hds, Mgmt, Own, Rels } from '../widgets/Dart';
 import { Firs, Ni, Nse, Top } from '../widgets/NewsViews';
 import { Bq, Etf, Memb, Mov, Watc } from '../widgets/MarketViews';
+import { Tdef, Tech } from '../widgets/ChartTools';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
 import { Menu } from '../widgets/Menu';
@@ -103,6 +104,12 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <PriceChart panel={p} intraday={false} />;
     case 'GIP':
       return <PriceChart panel={p} intraday />;
+    case 'G':
+      return <PriceChart panel={p} intraday={false} />;
+    case 'TECH':
+      return <Tech panel={p} />;
+    case 'TDEF':
+      return <Tdef panel={p} />;
     case 'WEI':
       return <Wei panel={p} />;
     case 'FXC':

@@ -1134,6 +1134,7 @@ export class CommandEngine {
     };
     if (argSegs.length > 0) exec.args = argSegs.map((s) => s.inst!.id);
     else if (r.fnImplied) exec.keepArgs = true;
+    if (r.fnSeg?.fnVia) exec.via = r.fnSeg.fnVia;
     return { kind: 'execute', exec };
   }
 

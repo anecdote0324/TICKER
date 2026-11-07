@@ -7,10 +7,12 @@
 // 종목을 바꾸면 새 봉이 올 때까지 앞 종목의 봉과 시고저종을 지우고 '불러오는 중'을 보여 줘요.
 // v0.2: 끌어서 위아래로도 움직이고(가격 축 자동 맞춤이 꺼져요), 가격 눈금 위에서 휠을 돌리면 세로 배율이 바뀌어요.
 // 일·주·월봉은 왼쪽 끝으로 끌면 더 오래된 봉을 받아 앞에 붙여요(MAX는 받을 수 있는 데까지).
-// 보조지표: 이동평균 5·20·60·120·200, 볼린저 밴드, 일목균형표(가격 위), RSI·MACD(아래 창). 패널마다 기억해요.
+// 보조지표: 이동평균 5·20·60·120·200, 볼린저 밴드, 일목균형표(가격 위), RSI·MACD·스토캐스틱·ATR·OBV(아래 창). 패널마다 기억해요.
+// v0.5: 표시 모드(캔들·바·선, GPC·GPO), 그리기 도구(추세선·수평선·피보나치, 종목마다 기억), G 사용자 차트(템플릿 저장), TDEF 기본값.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  BarSeries as OhlcBarSeries,
   CandlestickSeries,
   TickMarkType,
   ColorType,
@@ -36,7 +38,10 @@ import { useStore } from '../stores/store';
 import { GIP_RANGES, GP_HOUR_DEFAULT, GP_RANGES, GIP_DEFAULT, GP_DEFAULT, RIGHT_PAD, visibleBarCount } from './chartRange';
 import { TitleBar } from './common';
 import { IchimokuCloud } from './ichimokuCloud';
-import { activeIndicators, bollinger, futureTimes, ichimoku, INDICATORS, MA_PERIOD, macd, prependBars, rsi, sma, type IndicatorId } from './indicators';
+import { activeIndicators, atr, bollinger, futureTimes, ichimoku, INDICATORS, MA_PERIOD, macd, obv, PANE_INDICATORS, prependBars, rsi, sma, stochastic, type IndicatorId } from './indicators';
+import { ChartDrawings } from './chartDrawings';
+import { CHART_STYLES, DEFAULT_CHART_PREFS, type ChartPoint, type ChartStyle, type DrawingKind } from './chartPrefs';
+import { appState, updateState } from '../stores/state';
 
 // 십자선 동기화: 한 차트에 마우스를 올리면 다른 차트에도 같은 시점에 세로선(02)
 type CrossListener = (t: number | null, from: IChartApi) => void;
@@ -98,7 +103,11 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const interval: BarInterval = intraday ? '1m' : isHourInterval(gpInterval) && !hourOk ? '1d' : gpInterval;
   const hourly = isHourInterval(interval);
   // 시간봉은 기간을 따로 기억해요(처음은 1M. 일봉의 3M을 시간봉으로 보면 봉이 너무 촘촘해요)
-  const gpRange = hourly ? (panel.gpHourRange ?? GP_HOUR_DEFAULT) : (panel.gpRange ?? GP_DEFAULT);
+  const prefs = useStore(appState, (s) => s.chart ?? DEFAULT_CHART_PREFS);
+  const gpRange = hourly ? (panel.gpHourRange ?? GP_HOUR_DEFAULT) : (panel.gpRange ?? (GP_RANGES[prefs.defaults.range] ? prefs.defaults.range : GP_DEFAULT));
+  // 표시 모드(v0.5): 패널마다, 처음은 TDEF 기본값
+  const style: ChartStyle = panel.gpStyle ?? prefs.defaults.style ?? 'candle';
+  const isG = panel.fn === 'G';
   const range = intraday ? (panel.gipRange && GIP_RANGES[panel.gipRange] ? panel.gipRange : GIP_DEFAULT) : GP_RANGES[gpRange] ? gpRange : GP_DEFAULT;
   // 가로축에 시각을 보여 줄지(분봉·시간봉)
   const timeMode = intraday || hourly;
@@ -119,6 +128,10 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const boxRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const barSRef = useRef<ISeriesApi<'Bar'> | null>(null);
+  /** 그리기 도구(v0.5): 지금 보이는 주 시리즈에 붙여요 */
+  const drawRef = useRef<ChartDrawings | null>(null);
+  const drawHostRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const volRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   /** 켜 둔 보조지표의 선들(지표 id → 시리즈) */
   const indRef = useRef(new Map<string, Array<ISeriesApi<SeriesType>>>());
@@ -162,6 +175,11 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     // 환율처럼 종가만 있는 데이터는 캔들 대신 선으로 그려요
     const closeLine = chart.addSeries(LineSeries, { color: '#E6E6E6', lineWidth: 1, priceLineColor: accentColor, visible: false });
     closeRef.current = closeLine;
+    // 바 표시(GPO, v0.5)
+    const barS = chart.addSeries(OhlcBarSeries, { thinBars: false, priceLineColor: accentColor, visible: false });
+    barSRef.current = barS;
+    drawRef.current = new ChartDrawings(accentColor);
+    drawHostRef.current = null;
     chartRef.current = chart;
     candleRef.current = candle;
     volRef.current = vol;
@@ -177,7 +195,15 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       if (t === null) chart.clearCrosshairPosition();
       else {
         const b = barsRef.current.find((x) => x.t === t);
-        if (b) chart.setCrosshairPosition(b.c, t as UTCTimestamp, candle);
+        // 보이는 주 시리즈에 맞춰요(바·선 표시면 캔들이 숨어 있어서 캔들로는 십자선을 못 놓아요)
+        const vis = closeRef.current?.options().visible ? closeRef.current : barSRef.current?.options().visible ? barSRef.current : candle;
+        if (b && vis) {
+          try {
+            chart.setCrosshairPosition(b.c, t as UTCTimestamp, vis as ISeriesApi<SeriesType>);
+          } catch {
+            // 아직 데이터가 없는 차트
+          }
+        }
       }
     };
     crossListeners.add(listener);
@@ -202,7 +228,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
 
     // ── 손으로 움직이기(v0.2) ──
     const ps = chart.priceScale('right');
-    const mainSeries = () => (closeRef.current?.options().visible ? closeRef.current : candle);
+    const mainSeries = () => (closeRef.current?.options().visible ? closeRef.current : barSRef.current?.options().visible ? barSRef.current : candle);
     const local = (e: MouseEvent) => {
       const r = el.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -280,6 +306,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const down = cssVar('--down') || '#E8203C';
     const accentColor = cssVar('--accent') || '#FFA028';
     candleRef.current?.applyOptions({ upColor: up, downColor: down, wickUpColor: up, wickDownColor: down, priceLineColor: accentColor });
+    barSRef.current?.applyOptions({ upColor: up, downColor: down, priceLineColor: accentColor });
+    drawRef.current?.setColor(accentColor);
     for (const x of indRef.current.get('ma20') ?? []) x.applyOptions({ color: accentColor });
     closeRef.current?.applyOptions({ priceLineColor: accentColor });
     const bars = barsRef.current;
@@ -358,7 +386,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     if (!ready || !viewBars) {
       // 종목을 바꾼 직후: 앞 종목의 봉을 지우고 새 봉을 기다려요(제목만 바뀌고 앞 종목의 차트가 남지 않게)
       if (barsIdRef.current !== null) {
-        for (const x of [c, volRef.current, closeRef.current, ...[...indRef.current.values()].flat()]) x?.setData([]);
+        for (const x of [c, volRef.current, closeRef.current, barSRef.current, ...[...indRef.current.values()].flat()]) x?.setData([]);
         barsRef.current = [];
         barsIdRef.current = null;
         setHover(null);
@@ -381,10 +409,23 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const d = priceDigits(inst, bars[bars.length - 1]?.c);
     c.applyOptions({ priceFormat: { type: 'price', precision: d, minMove: Math.pow(10, -d) } });
     const closeOnly = bars.length > 0 && bars.every((b) => b.o === b.c && b.h === b.c && b.l === b.c);
-    c.applyOptions({ visible: !closeOnly });
-    closeRef.current?.applyOptions({ visible: closeOnly, priceFormat: { type: 'price', precision: d, minMove: Math.pow(10, -d) } });
-    closeRef.current?.setData(closeOnly ? bars.map((b) => ({ time: b.t as UTCTimestamp, value: b.c })) : []);
-    c.setData(bars.map((b) => ({ time: b.t as UTCTimestamp, open: b.o, high: b.h, low: b.l, close: b.c })));
+    // 표시 모드(v0.5): 종가만 있는 데이터(환율 등)는 늘 선
+    const shownStyle: ChartStyle = closeOnly ? 'line' : style;
+    const fmtOpt = { priceFormat: { type: 'price' as const, precision: d, minMove: Math.pow(10, -d) } };
+    c.applyOptions({ visible: shownStyle === 'candle' });
+    barSRef.current?.applyOptions({ visible: shownStyle === 'bar', ...fmtOpt });
+    closeRef.current?.applyOptions({ visible: shownStyle === 'line', ...fmtOpt });
+    closeRef.current?.setData(bars.map((b) => ({ time: b.t as UTCTimestamp, value: b.c })));
+    const ohlc = bars.map((b) => ({ time: b.t as UTCTimestamp, open: b.o, high: b.h, low: b.l, close: b.c }));
+    c.setData(ohlc);
+    barSRef.current?.setData(ohlc);
+    // 그림은 보이는 주 시리즈에 붙여요
+    const host = (shownStyle === 'line' ? closeRef.current : shownStyle === 'bar' ? barSRef.current : c) as ISeriesApi<SeriesType> | null;
+    if (host && drawRef.current && drawHostRef.current !== host) {
+      drawHostRef.current?.detachPrimitive(drawRef.current);
+      host.attachPrimitive(drawRef.current);
+      drawHostRef.current = host;
+    }
     const up = cssVar('--up') || '#1FBF3F';
     const down = cssVar('--down') || '#E8203C';
     volRef.current?.setData(bars.map((b, i) => ({ time: b.t as UTCTimestamp, value: b.v, color: (i > 0 && b.c < bars[i - 1].c) || b.c < b.o ? `${down}66` : `${up}66` })));
@@ -414,10 +455,10 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       setManualScale(false);
     }
     viewRef.current = { id: ready.id, key };
-  }, [ready, viewBars, range, interval, intraday, inst, fitTick]);
+  }, [ready, viewBars, range, interval, intraday, inst, fitTick, style]);
 
   // ── 보조지표(GP만) ──
-  const indicators = useMemo(() => (intraday ? [] : activeIndicators(panel.gpIndicators)), [intraday, panel.gpIndicators]);
+  const indicators = useMemo(() => (intraday ? [] : activeIndicators(panel.gpIndicators, prefs.defaults.indicators)), [intraday, panel.gpIndicators, prefs.defaults.indicators]);
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -431,12 +472,11 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       for (const x of map.get(id) ?? []) chart.removeSeries(x);
       map.delete(id);
     };
-    // 아래 창(RSI·MACD)은 순서가 바뀌면 모두 지우고 다시 만들어요
-    const paneIds = indicators.filter((x) => x === 'rsi' || x === 'macd');
+    // 아래 창(RSI·MACD·스토캐스틱·ATR·OBV)은 순서가 바뀌면 모두 지우고 다시 만들어요
+    const paneIds = indicators.filter((x) => PANE_INDICATORS.includes(x));
     const sig = paneIds.join(',');
     if (sig !== paneSigRef.current) {
-      drop('rsi');
-      drop('macd');
+      for (const p of PANE_INDICATORS) drop(p);
       for (let i = chart.panes().length - 1; i >= 1; i--) if (chart.panes()[i].getSeries().length === 0) chart.removePane(i);
       paneSigRef.current = sig;
     }
@@ -465,6 +505,23 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         for (const p of [70, 30]) r.createPriceLine({ price: p, color: '#555', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
         chart.panes()[pane]?.setHeight(90);
         return [r];
+      }
+      if (id === 'stoch') {
+        const opt = { lineWidth: 1, priceLineVisible: false, crosshairMarkerVisible: false, priceFormat: { type: 'price', precision: 1, minMove: 0.1 } } as const;
+        const k = chart.addSeries(LineSeries, { ...opt, color: def.color, lastValueVisible: true }, pane);
+        const dd = chart.addSeries(LineSeries, { ...opt, color: '#FFA726', lastValueVisible: false }, pane);
+        for (const p of [80, 20]) k.createPriceLine({ price: p, color: '#555', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
+        chart.panes()[pane]?.setHeight(90);
+        return [k, dd];
+      }
+      if (id === 'atr' || id === 'obv') {
+        const s = chart.addSeries(
+          LineSeries,
+          { lineWidth: 1, color: def.color, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false, priceFormat: id === 'obv' ? { type: 'volume' } : { type: 'price', precision: 2, minMove: 0.01 } },
+          pane,
+        );
+        chart.panes()[pane]?.setHeight(80);
+        return [s];
       }
       const fmt = { type: 'price', precision: 2, minMove: 0.01 } as const;
       const out = [
@@ -503,6 +560,12 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         );
         ss[4].setData(line(bars, ich.lagging));
       } else if (id === 'rsi') ss[0].setData(line(bars, rsi(closes)));
+      else if (id === 'stoch') {
+        const st = stochastic(bars);
+        ss[0].setData(line(bars, st.k));
+        ss[1].setData(line(bars, st.d));
+      } else if (id === 'atr') ss[0].setData(line(bars, atr(bars)));
+      else if (id === 'obv') ss[0].setData(line(bars, obv(bars)));
       else if (id === 'macd') {
         const m = macd(closes);
         (ss[0] as ISeriesApi<'Histogram'>).setData(
@@ -518,6 +581,87 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const cur = activeIndicators(panel.gpIndicators);
     patchPanel(panel.id, { gpIndicators: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
   };
+  // ── 그리기 도구(v0.5): 종목마다 앱 상태에 기억해요 ──
+  const [drawMenu, setDrawMenu] = useState(false);
+  const [drawMode, setDrawMode] = useState<DrawingKind | null>(null);
+  const [pendingPt, setPendingPt] = useState<ChartPoint | null>(null);
+  const drawings = useMemo(() => (inst ? (prefs.drawings[inst.id] ?? []) : []), [prefs.drawings, inst?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveDrawings = (list: typeof drawings) => {
+    if (!inst) return;
+    updateState('chart', (c) => {
+      const cur = c ?? DEFAULT_CHART_PREFS;
+      const next = { ...cur.drawings };
+      if (list.length) next[inst.id] = list;
+      else delete next[inst.id];
+      return { ...cur, drawings: next };
+    });
+  };
+  const startDraw = (k: DrawingKind) => {
+    setDrawMode((m) => (m === k ? null : k));
+    setPendingPt(null);
+    setDrawMenu(false);
+  };
+  useEffect(() => {
+    drawRef.current?.setItems(drawings);
+  }, [drawings]);
+  // 빠른 두 번 클릭도 놓치지 않게 클릭 처리는 최신 값을 참조로 읽어요
+  const pendingRefPt = useRef<ChartPoint | null>(null);
+  const drawingsRef = useRef(drawings);
+  drawingsRef.current = drawings;
+  useEffect(() => {
+    pendingRefPt.current = pendingPt;
+    drawRef.current?.setPending(pendingPt);
+  }, [pendingPt]);
+  // 종목을 바꾸면 그리던 것은 취소
+  useEffect(() => {
+    setDrawMode(null);
+    setPendingPt(null);
+  }, [inst?.id]);
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !drawMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDrawMode(null);
+        setPendingPt(null);
+      }
+    };
+    const win = boxRef.current?.ownerDocument.defaultView ?? window;
+    win.addEventListener('keydown', onKey);
+    const onClick = (param: { time?: unknown; point?: { x: number; y: number } }) => {
+      const host = drawHostRef.current;
+      if (!param.point || param.time === undefined || !host) return;
+      const price = host.coordinateToPrice(param.point.y);
+      if (price === null) return;
+      const pt: ChartPoint = { t: param.time as number, p: price };
+      const id = `d${Date.now().toString(36)}`;
+      const cur = drawingsRef.current;
+      if (drawMode === 'hline') {
+        saveDrawings([...cur, { id, kind: 'hline', p1: pt }]);
+        setDrawMode(null);
+        return;
+      }
+      const first = pendingRefPt.current;
+      if (!first) {
+        pendingRefPt.current = pt;
+        setPendingPt(pt);
+        return;
+      }
+      pendingRefPt.current = null;
+      saveDrawings([...cur, { id, kind: drawMode, p1: first, p2: pt }]);
+      setPendingPt(null);
+      setDrawMode(null);
+    };
+    chart.subscribeClick(onClick);
+    // 빨리 두 번 누르면 둘째 누름이 더블클릭으로만 와요
+    chart.subscribeDblClick(onClick);
+    return () => {
+      chart.unsubscribeClick(onClick);
+      chart.unsubscribeDblClick(onClick);
+      win.removeEventListener('keydown', onKey);
+    };
+  }, [drawMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const resetScale = () => {
     chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
     setManualScale(false);
@@ -542,6 +686,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         const nb: Bar = { t, o: quote.last, h: quote.last, l: quote.last, c: quote.last, v: 0 };
         bars.push(nb);
         c.update({ time: t as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
+        barSRef.current?.update({ time: t as UTCTimestamp, open: nb.o, high: nb.h, low: nb.l, close: nb.c });
+        closeRef.current?.update({ time: t as UTCTimestamp, value: nb.c });
         setLiveBar({ ...nb });
         return;
       }
@@ -550,6 +696,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     last.h = Math.max(last.h, quote.last);
     last.l = Math.min(last.l, quote.last);
     c.update({ time: last.t as UTCTimestamp, open: last.o, high: last.h, low: last.l, close: last.c });
+    barSRef.current?.update({ time: last.t as UTCTimestamp, open: last.o, high: last.h, low: last.l, close: last.c });
+    closeRef.current?.update({ time: last.t as UTCTimestamp, value: last.c });
     setLiveBar({ ...last });
   }, [quote, intraday, hourly]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -558,7 +706,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const loading = !!inst && !noIntraday && !error && !ready;
   const empty = !!ready && ready.bars.length === 0;
   const name = inst ? (inst.nameKo ?? inst.nameEn ?? inst.code) : '';
-  const fnCode = intraday ? 'GIP' : 'GP';
+  const fnCode = intraday ? 'GIP' : isG ? 'G' : 'GP';
   const tools = useMemo(
     () =>
       intraday ? (
@@ -596,19 +744,22 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
             </button>
           ))}
           <span style={{ width: 8 }} />
-          <button className={menuOpen ? 'on' : ''} title="보조지표: 이동평균·볼린저 밴드·일목균형표·RSI·MACD" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
-            지표
+          <button className={menuOpen ? 'on' : ''} title={isG ? '표시 모드·보조지표·템플릿' : '표시 모드(캔들·바·선)와 보조지표'} aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
+            {isG ? '지표·템플릿' : '지표'}
+          </button>
+          <button className={drawMenu || drawMode ? 'on' : ''} title="그리기: 추세선·수평선·피보나치(종목마다 기억)" aria-expanded={drawMenu} onClick={() => setDrawMenu((o) => !o)}>
+            그리기
           </button>
         </>
       ),
-    [interval, range, intraday, hourOk, panel.id, menuOpen], // eslint-disable-line react-hooks/exhaustive-deps
+    [interval, range, intraday, hourOk, panel.id, menuOpen, drawMenu, drawMode, isG], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   return (
     <>
       <TitleBar
         fn={fnCode}
-        name={inst ? `${intraday ? '장중 차트' : '가격 차트'} · ${name}` : intraday ? '장중 차트' : '가격 차트'}
+        name={inst ? `${intraday ? '장중 차트' : isG ? '사용자 차트' : '가격 차트'} · ${name}` : intraday ? '장중 차트' : isG ? '사용자 차트' : '가격 차트'}
         sub={inst ? `${inst.code}${inst.market ? ` ${inst.market}` : ''}` : undefined}
         tools={tools}
       />
@@ -652,6 +803,43 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         <div className="chart-box" ref={boxRef} />
         {menuOpen && !intraday && (
           <div className="chart-menu" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.key === 'Escape' && setMenuOpen(false)}>
+            <div className="chart-menu-grp">
+              <div className="label">표시</div>
+              {CHART_STYLES.map((s) => (
+                <label key={s.code} title={s.desc}>
+                  <input type="radio" name={`style-${panel.id}`} checked={style === s.code} onChange={() => patchPanel(panel.id, { gpStyle: s.code })} />
+                  {s.label}
+                </label>
+              ))}
+            </div>
+            {isG && (
+              <div className="chart-menu-grp">
+                <div className="label">템플릿</div>
+                {prefs.templates.map((t) => (
+                  <span key={t.name} className="chart-tpl">
+                    <button onClick={() => patchPanel(panel.id, { gpIndicators: t.indicators, gpStyle: t.style })} title={`${t.indicators.length}개 지표 · ${CHART_STYLES.find((x) => x.code === t.style)?.label}`}>
+                      {t.name}
+                    </button>
+                    <button aria-label="지우기" onClick={() => updateState('chart', (c) => ({ ...(c ?? DEFAULT_CHART_PREFS), templates: (c ?? DEFAULT_CHART_PREFS).templates.filter((x) => x.name !== t.name) }))}>
+                      ✕
+                    </button>
+                  </span>
+                ))}
+                <input
+                  className="chart-tpl-name"
+                  placeholder="이름 넣고 Enter: 지금 설정 저장"
+                  onKeyDown={(e) => {
+                    const name = (e.target as HTMLInputElement).value.trim();
+                    if (e.key !== 'Enter' || !name) return;
+                    updateState('chart', (c) => {
+                      const cur = c ?? DEFAULT_CHART_PREFS;
+                      return { ...cur, templates: [...cur.templates.filter((x) => x.name !== name), { name, indicators: indicators, style }] };
+                    });
+                    (e.target as HTMLInputElement).value = '';
+                  }}
+                />
+              </div>
+            )}
             {(['ma', 'overlay', 'pane'] as const).map((g) => (
               <div key={g} className="chart-menu-grp">
                 <div className="label">{g === 'ma' ? '이동평균' : g === 'overlay' ? '가격 위에 겹쳐 그리기' : '아래 창'}</div>
@@ -669,6 +857,28 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
             </button>
           </div>
         )}
+        {drawMenu && !intraday && (
+          <div className="chart-menu chart-draw-menu" onMouseDown={(e) => e.stopPropagation()}>
+            {(
+              [
+                ['trend', '추세선', '두 점을 눌러요. 둘째 점 너머로 점선이 이어져요'],
+                ['hline', '수평선', '한 점을 눌러요'],
+                ['fib', '피보나치', '시작(0%)과 끝(100%) 두 점을 눌러요'],
+              ] as Array<[DrawingKind, string, string]>
+            ).map(([k, l, d]) => (
+              <button key={k} className={drawMode === k ? 'on' : ''} title={d} onClick={() => startDraw(k)}>
+                {l}
+              </button>
+            ))}
+            <button disabled={!drawings.length} onClick={() => saveDrawings(drawings.slice(0, -1))}>
+              마지막 지우기
+            </button>
+            <button disabled={!drawings.length} onClick={() => saveDrawings([])}>
+              모두 지우기
+            </button>
+          </div>
+        )}
+        {drawMode && <div className="chart-draw-hint label">{`${drawMode === 'hline' ? '수평선: 한 점을' : drawMode === 'trend' ? (pendingPt ? '추세선: 둘째 점을' : '추세선: 첫 점을') : pendingPt ? '피보나치: 끝(100%)을' : '피보나치: 시작(0%)을'} 눌러요 · Esc 취소`}</div>}
         {manualScale && (
           <button className="chart-auto" title="가격 축 자동 맞춤(가격 눈금 더블클릭과 같아요)" onClick={resetScale}>
             자동

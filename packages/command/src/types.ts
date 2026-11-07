@@ -152,6 +152,8 @@ export type EnterPlan =
 export interface Execution {
   kind: 'function' | 'command' | 'asset-list' | 'lookup';
   fn?: string;
+  /** 별칭으로 불렀으면 그 별칭(GPO·GPC → GP 표시 모드, v0.5) */
+  via?: string;
   /** lookup: 한국투자증권에서 직접 조회할 코드와 시장. 찾으면 fn으로 열어요 */
   lookup?: { code: string; market: 'KR' | 'US' };
   /** 실행할 종목 id(종목이 필요 없는 기능이면 패널이 기억할 종목) */

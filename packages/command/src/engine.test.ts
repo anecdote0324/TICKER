@@ -56,16 +56,11 @@ describe('(a) 0059 → Tab → G → Tab → Enter', () => {
     expect(a.label).toBe('⏎ 실행: 삼성전자 가격 차트 (GP)');
   });
 
-  it('G는 v0.1에서 앞부분일 뿐이라 GP를 선택만 해요', () => {
+  it('v0.5부터 종목 뒤 G는 정확한 기능 코드라 Enter 한 번에 G(사용자 차트)가 실행돼요(§6.3)', () => {
     const a = run('005930 KS EQUITY G');
-    expect(a.plan.kind).toBe('select');
-    expect(a.label).toBe('⏎ 선택: GP 가격 차트');
-    expect(a.ghost).toMatchObject({ tab: 'P', confirmed: false });
-    const t = tab(a);
-    expect(t.input).toBe('005930 KS EQUITY GP');
-    expect(t.closeList).toBe(true);
-    const done = run(t.input);
-    expect(done.plan).toMatchObject({ kind: 'execute', exec: { canonical: '005930 KS EQUITY GP', fn: 'GP' } });
+    expect(a.plan).toMatchObject({ kind: 'execute', exec: { canonical: '005930 KS EQUITY G', fn: 'G' } });
+    // 가격 차트는 GP까지 쳐요
+    expect(run('005930 KS EQUITY GP').plan).toMatchObject({ kind: 'execute', exec: { canonical: '005930 KS EQUITY GP', fn: 'GP' } });
   });
 
   it('0059⏎⏎ 도 같은 결과', () => {
@@ -142,9 +137,14 @@ describe('(e) 종목 없이 GP', () => {
     expect(a.rows[1].id).toBe('sec:EQ:US:GP');
     expect(a.contextChip).toBe('AAPL US');
   });
-  it('G 한 글자는 GP를 선택만', () => {
+  it('GPO·GPC 별칭은 GP로 열고 별칭을 실행에 실어요(표시 모드, v0.5)', () => {
+    expect(run('GPO', aapl).plan).toMatchObject({ kind: 'execute', exec: { fn: 'GP', via: 'GPO' } });
+    expect(run('005930 GPC').plan).toMatchObject({ kind: 'execute', exec: { fn: 'GP', via: 'GPC' } });
+  });
+  it('줄 첫머리 G 한 글자는 선택만(v0.5부터 G가 1번 줄, GP·GIP가 뒤)', () => {
     const a = run('G', aapl);
-    expect(a.plan).toMatchObject({ kind: 'select', rowId: 'fn:GP' });
+    expect(a.plan).toMatchObject({ kind: 'select', rowId: 'fn:G' });
+    expect(a.rows.slice(0, 3).map((r) => r.id)).toEqual(expect.arrayContaining(['fn:G', 'fn:GP', 'fn:GIP']));
   });
   it('띄운 종목이 없으면 종목 필요', () => {
     expect(run('GP').plan.kind).toBe('need-security');

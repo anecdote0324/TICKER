@@ -2642,3 +2642,58 @@ button {
   font-size: 11px;
   padding: 2px 0 4px;
 }
+
+/* ── v0.5 차트: 그리기·템플릿 ── */
+.chart-draw-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  right: 60px;
+}
+.chart-draw-menu button.on {
+  color: var(--amber);
+}
+.chart-draw-hint {
+  position: absolute;
+  left: 50%;
+  top: 30px;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 2px 8px;
+  font-size: 11px;
+  pointer-events: none;
+}
+.chart-tpl {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 4px 4px 0;
+}
+.chart-tpl button {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: var(--value);
+  font-size: 11px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+.chart-tpl-name {
+  width: 100%;
+  box-sizing: border-box;
+  background: #111;
+  color: var(--value);
+  border: 1px solid #333;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+.tech-table td {
+  vertical-align: top;
+  padding: 4px 6px;
+}
+.tdef-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0 8px;
+  font-size: 12px;
+}

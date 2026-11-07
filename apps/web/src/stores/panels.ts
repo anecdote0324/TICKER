@@ -1,6 +1,7 @@
 // 패널 상태: 지금 기능, 띄운 종목, 연동 그룹, 뒤로·앞으로 기록.
 // 연동 그룹(같은 색)끼리는 종목이 함께 바뀌어요. 기능 변경은 퍼지지 않아요(05 §3.4).
 
+import { styleForAlias } from '../widgets/chartPrefs';
 import type { Execution } from '@bt/command';
 import { canonicalSecurity, type FunctionDef } from '@bt/shared';
 import { getInstrument } from './instruments';
@@ -41,6 +42,8 @@ export interface PanelState {
   gpHourRange?: string;
   /** GP 보조지표(v0.2, 없으면 20·60선). widgets/indicators.ts의 id */
   gpIndicators?: string[];
+  /** GP·G 표시 모드(v0.5): 캔들·바·선 */
+  gpStyle?: 'candle' | 'bar' | 'line';
   /** GC 비교 커브(v0.3): 1W·1M·1Y */
   gcCompare?: string;
   /** GRID 칸(종목 id)과 기간(v0.3) */
@@ -130,6 +133,9 @@ export function applyExecution(panelId: string, exec: Execution) {
   // 종목만 바꿔 지금 기능을 유지하면(COMP를 보던 패널에서 000660⏎) 비교 종목 같은 인자도 그대로 둬요
   const args = exec.args ?? (exec.keepArgs && exec.fn === p.fn ? p.args : undefined);
   patchPanel(panelId, { fn: exec.fn, securityId, args, back: [...p.back, prev].slice(-50), fwd: [] });
+  // GPO(바)·GPC(캔들)로 열면 표시 모드를 바꿔요(v0.5)
+  const viaStyle = exec.fn === 'GP' || exec.fn === 'G' ? styleForAlias(exec.via) : undefined;
+  if (viaStyle) patchPanel(panelId, { gpStyle: viaStyle });
   if (exec.instrumentId) {
     propagateSecurity({ ...p, fn: exec.fn }, exec.instrumentId);
     const inst = getInstrument(exec.instrumentId);

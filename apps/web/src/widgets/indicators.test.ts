@@ -95,3 +95,23 @@ describe('저장값과 과거 봉', () => {
     expect(prependBars([bar(1, 1), bar(2, 2), bar(3, 3)], [bar(3, 30), bar(4, 4)]).map((b) => b.c)).toEqual([1, 2, 30, 4]);
   });
 });
+
+describe('v0.5 지표: 스토캐스틱·ATR·OBV', async () => {
+  const { stochastic, atr, obv } = await import('./indicators');
+  const mk = (c: number[], v = 100) => c.map((x, i) => ({ t: i, o: x, h: x + 1, l: x - 1, c: x, v }));
+  it('스토캐스틱: 계속 오르면 %K가 100 가까이, 앞부분은 비어요', () => {
+    const bars = mk(Array.from({ length: 30 }, (_, i) => 100 + i));
+    const s = stochastic(bars);
+    expect(s.k[14]).toBeUndefined();
+    expect(s.k[29]).toBeGreaterThan(90);
+    expect(s.d[29]).toBeGreaterThan(90);
+  });
+  it('ATR: 고저 폭이 늘 2면 2', () => {
+    const a = atr(mk(Array.from({ length: 20 }, () => 100)));
+    expect(a[12]).toBeUndefined();
+    expect(a[19]).toBeCloseTo(2);
+  });
+  it('OBV: 오르면 더하고 내리면 빼요', () => {
+    expect(obv(mk([10, 11, 10, 10, 12], 5))).toEqual([0, 5, 0, 0, 5]);
+  });
+});
