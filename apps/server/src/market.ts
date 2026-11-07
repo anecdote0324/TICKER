@@ -17,6 +17,10 @@ import {
   type MembRow,
   type OrderbookResponse,
   type SectorMapResponse,
+  mergeTape,
+  tickRuleSides,
+  type TapeResponse,
+  type TapeRow,
 } from '@bt/shared';
 import type { KisAdapter } from './adapters/kis';
 import { fetchJson, HttpError } from './util';
@@ -111,6 +115,8 @@ interface ShareRecord {
 
 export class MarketService {
   private cache = new Map<string, { at: number; p: Promise<unknown> }>();
+  /** QR 체결 테이프: 종목·시장마다 이어 붙인 체결 */
+  private tapes = new Map<string, { rows: TapeRow[]; at: number; gaps: number }>();
   private shares?: Record<string, ShareRecord[]>;
   private krxKey?: string;
   /** KRX 날짜별 ETF 자료(지난 날은 바뀌지 않아서 데이터 폴더 krx-etf.json에 둬요) */
@@ -213,6 +219,27 @@ export class MarketService {
         fresh: this.fresh(60_000),
         note: [comp.status === 'rejected' ? `구성종목 조회 실패: ${(comp.reason as Error).message}` : '', krxNote ?? ''].filter(Boolean).join(' · ') || undefined,
       };
+    });
+  }
+
+  /**
+   * QR 체결 테이프: 체결 조회 한 번에 최근 30건 남짓이라, 화면이 받는 동안 서버가 이어 붙여 둬요(종목·시장마다 500건, 5분 안 받으면 버려요).
+   * 2초 동안 같은 값
+   */
+  tape(id: string, market: BookMarket): Promise<TapeResponse> {
+    const inst = this.instruments().get(id);
+    const us = inst?.market === 'US';
+    return this.cached(`tape|${id}|${us ? '' : market}`, 2_000, async () => {
+      if (!inst || inst.assetClass !== 'EQUITY' || (inst.market !== 'KS' && inst.market !== 'KQ' && inst.market !== 'US')) throw new Error('체결 테이프는 국내·미국 주식만 볼 수 있어요');
+      const fresh = us ? parseUsTicks(await this.needKis().ticksUs(inst.code, inst.exchange)) : tickRuleSides(parseKrTicks(await this.needKis().ticksKr(inst.code, market)));
+      const key = `${id}|${us ? '' : market}`;
+      const now = Date.now();
+      for (const [k, v] of this.tapes) if (now - v.at > 5 * 60_000) this.tapes.delete(k);
+      const prev = this.tapes.get(key);
+      const m = mergeTape(prev?.rows ?? [], fresh);
+      const gaps = (prev?.gaps ?? 0) + (m.gap ? 1 : 0);
+      this.tapes.set(key, { rows: m.rows, at: now, gaps });
+      return { id, market: us ? undefined : market, rows: m.rows, gaps, fresh: { source: 'KIS', mode: 'poll', asOf: now, receivedAt: now, intervalMs: 2_000 } };
     });
   }
 
@@ -324,4 +351,39 @@ export class MarketService {
     all[code] = list.slice(-400);
     if (this.dataDir) void writeFile(join(this.dataDir, 'etf-shares.json'), JSON.stringify(all)).catch(() => undefined);
   }
+}
+
+const hmsOf = (v: unknown) => {
+  const raw = String(v ?? '').trim();
+  const t = raw.padStart(6, '0');
+  return raw && /^\d{6}$/.test(t) ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : '';
+};
+
+/** 국내 체결(FHKST01010300) → 테이프 줄(최신 먼저). 매수·매도는 tickRuleSides로 추정해요 */
+export function parseKrTicks(rows: Row[]): TapeRow[] {
+  const out: TapeRow[] = [];
+  for (const o of rows) {
+    const price = num(o.stck_prpr);
+    const qty = num(o.cntg_vol);
+    const time = hmsOf(o.stck_cntg_hour);
+    if (!price || qty === undefined || !time) continue;
+    out.push({ time, price, qty: Math.abs(qty), change: signed(o.prdy_vrss, o.prdy_vrss_sign), changePct: signed(o.prdy_ctrt, o.prdy_vrss_sign), strength: num(o.tday_rltv) });
+  }
+  return out;
+}
+
+/** 해외 체결추이(HHDFS76200300) → 테이프 줄(최신 먼저). 체결가가 매도호가 이상이면 매수, 매수호가 이하면 매도 */
+export function parseUsTicks(rows: Row[]): TapeRow[] {
+  const out: TapeRow[] = [];
+  for (const o of rows) {
+    const price = num(o.last);
+    const qty = num(o.evol);
+    const time = hmsOf(o.khms);
+    if (!price || qty === undefined || !time) continue;
+    const bid = num(o.pbid);
+    const ask = num(o.pask);
+    const side = ask && price >= ask ? 'buy' : bid && price <= bid ? 'sell' : undefined;
+    out.push({ time, price, qty, change: signed(o.diff, o.sign), changePct: signed(o.rate, o.sign), strength: num(o.vpow), side, cumVolume: num(o.tvol) });
+  }
+  return tickRuleSides(out);
 }

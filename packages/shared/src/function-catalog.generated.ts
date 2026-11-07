@@ -237,9 +237,9 @@ export const FUNCTION_CATALOG: CatalogEntry[] = [
   {
     "code": "BQ",
     "nameKo": "쿼트 대시보드",
-    "desc": "가격·체결·실적·비율을 한 화면에. 10호가 탭에서 KRX·NXT·통합 호가를 골라 보고, 쓰는 WS 슬롯을 표시해요",
+    "desc": "10호가만 보여 줘요(사용자 결정: 가격·지표 칸은 빼고 호가창만, v0.4). KRX·NXT·통합 호가를 버튼으로 고르고, 호가는 조회로 2초마다 받아 WS 슬롯을 쓰지 않아요",
     "section": "주식 시세·차트",
-    "speed": "실시간",
+    "speed": "2초 조회",
     "version": "v0.4",
     "approx": false,
     "aliases": []
@@ -249,7 +249,7 @@ export const FUNCTION_CATALOG: CatalogEntry[] = [
     "nameKo": "체결 테이프",
     "desc": "지금 보는 1~수 종목의 당일 체결",
     "section": "주식 시세·차트",
-    "speed": "실시간",
+    "speed": "2초 조회",
     "version": "v0.5",
     "approx": false,
     "aliases": [
@@ -1426,7 +1426,7 @@ export const FUNCTION_CATALOG: CatalogEntry[] = [
   {
     "code": "FXC",
     "nameKo": "환율 매트릭스",
-    "desc": "주요 통화 환율 표. 원화는 서울 외환시장이 다음 날 02:00까지 열려서, 값마다 기준 시각을 보여 줘요",
+    "desc": "주요 통화 환율 표. 원화는 서울 외환시장이 다음 날 02:00까지 열려서, 값마다 기준 시각을 보여 줘요. 칸을 누르면 연동 그룹 차트가 그 환율로(v0.2)",
     "section": "외환",
     "speed": "지연(30~60초)",
     "version": "v0.1",

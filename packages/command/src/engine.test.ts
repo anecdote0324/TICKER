@@ -232,10 +232,10 @@ describe('겹침과 예외(§7, §13)', () => {
     expect(run('PDF').plan).toMatchObject({ exec: { cmd: 'settings' } });
     expect(run('?').plan).toMatchObject({ exec: { cmd: 'syntax' } });
   });
-  it('아직 만들지 않은 기능(HP)은 실행 안 됨', () => {
-    const a = run('HP');
+  it('아직 만들지 않은 기능(WB)은 실행 안 됨', () => {
+    const a = run('WB');
     expect(a.plan.kind).toBe('error');
-    expect(a.label).toContain('v0.5에서 제공 예정');
+    expect(a.label).toContain('v0.6에서 제공 예정');
   });
   it('DES 는 v0.2부터 종목을 물어요(빈 패널)', () => {
     const a = run('DES');
@@ -578,7 +578,7 @@ describe('F1 기능 목록(v0.2): 종목 다음에 쓰는 기능과 종목 없�
     expect(codesAfter('flist:hdr:none')).toEqual(expect.arrayContaining(['MON', 'WEI', 'FXC', 'CRYP', 'MOST', 'HMAP', 'IMAP', 'LAST']));
     expect(codesAfter('flist:hdr:sec')).not.toContain('IMAP');
     // 아직 만들지 않은 기능은 빼요
-    expect(rows.some((r) => r.code === 'HP')).toBe(false); // v0.5
+    expect(rows.some((r) => r.code === 'WB')).toBe(false); // v0.6
     expect(rows.find((r) => r.code === 'N')?.info).toContain('종목 없이도 돼요');
     expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
   });

@@ -1408,6 +1408,24 @@ export class KisAdapter implements Adapter {
   }
 
   /**
+   * QR 국내 체결: 주식현재가 체결(FHKST01010300, 공식 예제 domestic_stock/inquire_ccnl). 최근 체결 30건(최신 먼저).
+   * 칸: stck_cntg_hour·stck_prpr·prdy_vrss·prdy_vrss_sign·cntg_vol·tday_rltv·prdy_ctrt
+   */
+  async ticksKr(code: string, market: 'J' | 'NX' | 'UN'): Promise<KisRow[]> {
+    const r = await this.get('/uapi/domestic-stock/v1/quotations/inquire-ccnl', 'FHKST01010300', { FID_COND_MRKT_DIV_CODE: market, FID_INPUT_ISCD: code }, 0);
+    return asRows(r.output);
+  }
+
+  /**
+   * QR 해외 체결: 해외주식 체결추이(HHDFS76200300, 공식 예제 overseas_stock/quot_inquire_ccnl). TDAY 1 당일, 첫 쪽만(최신 먼저).
+   * 칸: khms(한국 기준 시각)·last·evol·tvol·pbid·pask·diff·sign·rate·vpow
+   */
+  async ticksUs(symbol: string, exchange: string | undefined): Promise<KisRow[]> {
+    const r = await this.get('/uapi/overseas-price/v1/quotations/inquire-ccnl', 'HHDFS76200300', { EXCD: exchange ?? 'NAS', TDAY: '1', SYMB: symbol, AUTH: '', KEYB: '' }, 0);
+    return asRows(r.output1);
+  }
+
+  /**
    * KWRN: 오늘 VI 발동 목록(변동성완화장치 현황 FHPST01390000, 공식 예제 inquire_vi_status: 분류 0 전체, 화면 20139, 시장 0 전체, 정렬 0 전체)
    */
   async viStatus(): Promise<ViRow[]> {

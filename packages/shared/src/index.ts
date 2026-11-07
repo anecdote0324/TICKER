@@ -22,3 +22,4 @@ export * from './flows';
 export * from './corp';
 export * from './dartcorp';
 export * from './market';
+export * from './tape';

@@ -234,6 +234,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     corp(reply, () => market().memb((['KOSPI200', 'KOSDAQ150', 'SPX', 'NDX'] as const).find((x) => x === req.query.index) ?? 'KOSPI200')),
   );
   app.get<{ Querystring: { id?: string } }>('/api/etf', (req, reply) => corp(reply, () => market().etf(req.query.id ?? '')));
+  app.get<{ Querystring: { id?: string; market?: string } }>('/api/tape', (req, reply) =>
+    corp(reply, () => market().tape(req.query.id ?? '', req.query.market === 'NX' || req.query.market === 'UN' ? req.query.market : 'J')),
+  );
   app.get<{ Querystring: { id?: string; market?: string } }>('/api/orderbook', (req, reply) =>
     corp(reply, () => market().orderbook(req.query.id ?? '', req.query.market === 'NX' || req.query.market === 'UN' ? req.query.market : 'J')),
   );

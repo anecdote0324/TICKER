@@ -31,6 +31,7 @@ import { Anr, CorpEvents, Dvd, Ee, Ipo } from '../widgets/Corp';
 import { Cf, Em, Ern, Hds, Mgmt, Own, Rels } from '../widgets/Dart';
 import { Firs, Ni, Nse, Top } from '../widgets/NewsViews';
 import { Bq, Etf, Memb, Mov, Watc } from '../widgets/MarketViews';
+import { Aqr, Hp, Qr, Vap } from '../widgets/TradeViews';
 import { Tdef, Tech } from '../widgets/ChartTools';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
@@ -187,6 +188,14 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Watc panel={p} />;
     case 'BQ':
       return <Bq panel={p} />;
+    case 'HP':
+      return <Hp panel={p} />;
+    case 'QR':
+      return <Qr panel={p} />;
+    case 'AQR':
+      return <Aqr panel={p} />;
+    case 'VAP':
+      return <Vap panel={p} />;
     case 'ECO':
       return <Eco panel={p} />;
     case 'PORT':

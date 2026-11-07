@@ -70,6 +70,9 @@ export interface PanelState {
   movView?: 'contrib' | 'up' | 'down';
   etfTab?: 'nav' | 'components' | 'flows';
   bookMarket?: 'J' | 'NX' | 'UN';
+  /** v0.5: HP 봉 크기, VAP 기간 */
+  hpInterval?: '1d' | '1w' | '1M';
+  vapRange?: 'D' | '1M' | '3M' | '6M' | '1Y';
   gipRange?: string;
   /** MON에서 고른 묶음 탭('all'이면 전체). 화면을 떼어냈다 돌려놓거나 다시 켜도 그대로예요 */
   monTab?: string;

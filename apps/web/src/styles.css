@@ -2697,3 +2697,88 @@ button {
   padding: 4px 0 8px;
   font-size: 12px;
 }
+
+/* ── v0.5 HP·QR·AQR·VAP ── */
+.tv-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font: 11px var(--mono);
+  padding: 2px 0 6px;
+  color: var(--value);
+}
+.tv-sum .up {
+  color: var(--up);
+}
+.tv-sum .down {
+  color: var(--down);
+}
+.tv-more {
+  padding: 6px 0;
+  text-align: center;
+}
+.approx-tag {
+  font-size: 10px;
+  color: var(--label);
+  border: 1px solid #333;
+  padding: 0 4px;
+  margin-right: 4px;
+  align-self: center;
+}
+.qr-table tr.qr-big td {
+  font-weight: 700;
+  background: #1a1408;
+}
+.aqr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 12px;
+  font: 11px var(--mono);
+  padding: 2px 0 8px;
+}
+.aqr-grid div {
+  display: flex;
+  flex-direction: column;
+}
+.aqr-grid div span:last-child {
+  color: var(--value);
+  font-size: 12px;
+}
+.aqr-grid .up {
+  color: var(--up) !important;
+}
+.aqr-grid .down {
+  color: var(--down) !important;
+}
+.aqr-bar,
+.vap-bar {
+  width: 35%;
+  position: relative;
+}
+.aqr-bar span,
+.vap-bar span {
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  bottom: 3px;
+  background: var(--amber);
+  opacity: 0.35;
+}
+.vap-table tr.va td {
+  background: #141414;
+}
+.vap-table tr.va .vap-bar span {
+  opacity: 0.55;
+}
+.vap-table tr.poc td {
+  color: var(--amber);
+}
+.vap-table tr.poc .vap-bar span {
+  opacity: 0.9;
+}
+.vap-table tr.here td:first-child {
+  text-decoration: underline;
+}
+.vap-poc-label {
+  color: var(--amber);
+}

@@ -45,3 +45,28 @@ describe('MEMB·MOV·ETF·BQ', () => {
     expect(parseBook({}, {}).asks).toEqual([]);
   });
 });
+
+describe('체결 테이프 해석', () => {
+  it('국내 체결: 시각·부호·체결강도, 매수·매도는 직전 체결과 비교', async () => {
+    const { parseKrTicks } = await import('./market');
+    const { tickRuleSides } = await import('@bt/shared');
+    const rows = tickRuleSides(
+      parseKrTicks([
+        { stck_cntg_hour: '093001', stck_prpr: '70100', prdy_vrss: '900', prdy_vrss_sign: '5', cntg_vol: '12', tday_rltv: '98.5', prdy_ctrt: '1.27' },
+        { stck_cntg_hour: '093000', stck_prpr: '70200', prdy_vrss: '800', prdy_vrss_sign: '5', cntg_vol: '3', tday_rltv: '98.4', prdy_ctrt: '1.13' },
+        { stck_cntg_hour: '', stck_prpr: '1', cntg_vol: '1' },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ time: '09:30:01', price: 70100, qty: 12, change: -900, changePct: -1.27, strength: 98.5, side: 'sell' });
+  });
+  it('해외 체결: 호가와 비교해 매수·매도', async () => {
+    const { parseUsTicks } = await import('./market');
+    const rows = parseUsTicks([
+      { khms: '233001', last: '190.12', evol: '100', tvol: '5000', pbid: '190.10', pask: '190.12', diff: '1.2', sign: '2', rate: '0.63', vpow: '101' },
+      { khms: '233000', last: '190.10', evol: '50', tvol: '4900', pbid: '190.10', pask: '190.12', diff: '1.18', sign: '2', rate: '0.62', vpow: '100' },
+    ]);
+    expect(rows.map((r) => r.side)).toEqual(['buy', 'sell']);
+    expect(rows[0]).toMatchObject({ time: '23:30:01', cumVolume: 5000, change: 1.2 });
+  });
+});
