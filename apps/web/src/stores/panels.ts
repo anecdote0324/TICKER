@@ -70,6 +70,8 @@ export interface PanelState {
   movView?: 'contrib' | 'up' | 'down';
   etfTab?: 'nav' | 'components' | 'flows';
   bookMarket?: 'J' | 'NX' | 'UN';
+  /** NOTE(v0.5): 종목이 있어도 모든 메모를 볼지 */
+  noteAll?: boolean;
   /** v0.5: HP 봉 크기, VAP 기간 */
   hpInterval?: '1d' | '1w' | '1M';
   vapRange?: 'D' | '1M' | '3M' | '6M' | '1Y';

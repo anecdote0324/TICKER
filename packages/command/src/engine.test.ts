@@ -562,6 +562,23 @@ describe('BLP 런치패드(v0.2)', () => {
   });
 });
 
+describe('FAVE·NOTE(v0.5)', () => {
+  it('FAVE⏎은 즐겨찾기, NOTE는 종목 없이도·종목 뒤에도', () => {
+    expect(run('FAVE').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'FAVE' } });
+    expect(run('NOTE').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'NOTE' } });
+    expect(run('005930 NOTE').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'NOTE', instrumentId: 'EQ:KS:005930' } });
+  });
+});
+
+describe('GRAB 화면 캡처(v0.5)', () => {
+  it('GRAB⏎·캡처⏎은 이 패널을 이미지로 복사, GRAB US는 종목', () => {
+    expect(run('GRAB').plan).toMatchObject({ kind: 'execute', exec: { kind: 'command', cmd: 'grab' } });
+    expect(run('GRAB').label).toBe('⏎ 실행: 이 패널을 이미지로 복사 (GRAB)');
+    expect(run('캡처').plan).toMatchObject({ kind: 'execute', exec: { kind: 'command', cmd: 'grab' } });
+    expect(run('GRAB US').plan).toMatchObject({ exec: { instrumentId: 'EQ:US:GRAB' } });
+  });
+});
+
 describe('F1 기능 목록(v0.2): 종목 다음에 쓰는 기능과 종목 없이 쓰는 기능', () => {
   const rows = functionListRows();
   const headers = rows.filter((r) => r.kind === 'header').map((r) => r.id);

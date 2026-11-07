@@ -11,6 +11,7 @@ import { KisAdapter, type KisCredentials, type KisEndpoints, type KisTokenStore,
 import { buildApp } from './app';
 import { History } from './history';
 import { NewsService } from './news';
+import { NoteStore } from './notes';
 import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
@@ -92,6 +93,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     async (id) => (await hub.bars(id, '1d')).bars,
     (inst) => financials.get(inst, 'quarter'),
   );
+  // v0.5 NOTE 메모(notes.db)
+  const notes = new NoteStore(join(opts.dataDir, 'notes.db'), log);
   // v0.4 지수·ETF·호가(MEMB·MOV·ETF·FFLO·BQ)
   const market = new MarketService(
     opts.dataDir,
@@ -213,6 +216,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     market,
     eco,
     extraKeys,
+    notes,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();
@@ -233,6 +237,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       hub.demo.stop();
       hub.kis?.stop();
       news.stop();
+      notes.close();
       await usActivity.flush();
       await app.close();
       // 실시간 구독을 끊은 뒤 남은 분봉을 저장해요(01 종료할 때)

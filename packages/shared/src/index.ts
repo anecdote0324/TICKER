@@ -23,3 +23,4 @@ export * from './corp';
 export * from './dartcorp';
 export * from './market';
 export * from './tape';
+export * from './notes';

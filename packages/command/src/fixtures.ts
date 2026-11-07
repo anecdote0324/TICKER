@@ -63,6 +63,7 @@ export function fixtureInstruments(): Instrument[] {
     us('FXC', 'Invesco CurrencyShares Canadian Dollar Trust', 0.1, { flags: ['ETF'], exchange: 'AMS' }),
     us('DES', 'WisdomTree US SmallCap Dividend Fund', 0.1, { flags: ['ETF'], exchange: 'AMS' }),
     us('HELP', 'Helus Pharma', 0.05),
+    us('GRAB', 'Grab Holdings', 0.3),
     us('GS', 'Goldman Sachs Group Inc', 0.8, { exchange: 'NYS' }),
     us('USD', 'ProShares Ultra Semiconductors', 0.1, { flags: ['ETF'], exchange: 'AMS' }),
     us('EQR', 'Equity Residential', 0.4, { exchange: 'NYS' }),

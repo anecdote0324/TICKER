@@ -748,6 +748,36 @@ const BUILT: FunctionDef[] = [
     similar: ['DES', 'GP'],
   },
   {
+    code: 'FAVE',
+    nameKo: '즐겨찾기',
+    nameEn: 'Favorites',
+    summary: '자주 여는 화면(명령) 모음',
+    detail: '자주 여는 명령(기능·종목)을 모아 두고 누르면 이 패널에서 열어요. 패널 머리글의 ☆로 그 화면을 넣고 빼거나, 명령을 직접 넣거나, 지금 열린 화면에서 골라 넣어요. 순서를 바꿀 수 있어요.',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['즐겨찾기', '북마크', '자주쓰는'],
+    version: 'v0.5',
+    implemented: true,
+    speed: '즉시',
+    examples: ['FAVE'],
+    similar: ['LAST', 'BLP'],
+  },
+  {
+    code: 'NOTE',
+    nameKo: '메모',
+    nameEn: 'Notes',
+    summary: '종목·테마에 태그를 단 메모와 검색',
+    detail: '메모를 쓰고 태그(본문의 #태그 포함)와 종목을 달아 둬요. 종목 화면에서 열면 그 종목 메모만, 전체로 모든 메모를 봐요. 본문·태그 검색과 태그 거르기가 돼요. 메모는 이 컴퓨터의 데이터 폴더(notes.db)에만 남아요.',
+    security: 'optional',
+    assetClasses: ALL_ASSETS,
+    keywords: ['메모', '노트', '기록', '태그'],
+    version: 'v0.5',
+    implemented: true,
+    speed: '즉시',
+    examples: ['NOTE', '005930 NOTE'],
+    similar: ['FAVE', 'N'],
+  },
+  {
     code: 'HP',
     nameKo: '과거 시세 표',
     nameEn: 'Historical Price Table',
@@ -941,7 +971,7 @@ const PLANNED_DETAIL: Record<string, Partial<FunctionDef>> = {
 const K_CODES = new Set(['KINV', 'KPGM', 'KCRD', 'KWRN', 'KCB', 'KELS']);
 
 /** 명령 단어: 기능 패널이 아니라 앱 동작(05 §3.2) */
-const COMMAND_CODES = new Set(['HELP', 'PDF', 'BLP', 'FXTF']);
+const COMMAND_CODES = new Set(['HELP', 'PDF', 'BLP', 'FXTF', 'GRAB']);
 
 function fromCatalog(): FunctionDef[] {
   const built = new Set(BUILT.map((f) => f.code));

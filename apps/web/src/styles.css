@@ -2782,3 +2782,120 @@ button {
 .vap-poc-label {
   color: var(--amber);
 }
+
+/* ── v0.5 FAVE·NOTE ── */
+.fave-star {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--label);
+}
+.fave-star.on {
+  color: var(--amber);
+}
+.fave-add,
+.note-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 0 6px;
+}
+.fave-add input,
+.note-search input,
+.note-edit textarea,
+.note-edit-row input:not([type='checkbox']) {
+  flex: 1;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  color: var(--value);
+  font: 12px var(--mono);
+  padding: 3px 6px;
+}
+.fave-add .err {
+  color: var(--down);
+  font-size: 11px;
+}
+.fave-table td.fave-act {
+  white-space: nowrap;
+}
+.fave-table td.fave-act button {
+  padding: 0 5px;
+  margin-left: 2px;
+}
+.fave-table tr.nolink td {
+  opacity: 0.6;
+}
+.fave-sub {
+  padding: 10px 0 2px;
+  font-size: 11px;
+}
+.note-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+.note-edit textarea {
+  resize: vertical;
+  min-height: 48px;
+  font-family: var(--sans, inherit);
+}
+.note-edit-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.note-link {
+  font-size: 11px;
+  color: var(--label);
+  white-space: nowrap;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.note-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 6px;
+}
+.note-tags button,
+.note-tag,
+.note-sec {
+  font-size: 10.5px;
+  padding: 0 5px;
+}
+.note-tags button.on {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.note-tag {
+  color: #8fb8ff;
+}
+.note-sec {
+  color: var(--amber);
+}
+.note-item {
+  border-bottom: 1px solid #1a1a1a;
+  padding: 4px 0 6px;
+}
+.note-item.sel {
+  background: var(--select);
+}
+.note-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+}
+.note-head .grow {
+  flex: 1;
+}
+.note-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--value);
+  font-size: 12.5px;
+  padding-top: 2px;
+}

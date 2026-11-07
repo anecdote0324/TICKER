@@ -11,6 +11,9 @@ declare global {
       setZoom?(factor: number): void;
       /** 이름이 name인 창(빈 이름은 메인 창)의 전체 화면을 바꿔요. 바뀐 뒤 전체 화면인지 */
       toggleFullScreen?(name: string): Promise<boolean>;
+      /** GRAB(v0.5): 이 창의 영역(CSS 픽셀)을 찍어 클립보드에. 마지막 캡처를 파일로 저장 */
+      capture?(name: string, rect: { x: number; y: number; width: number; height: number }): Promise<{ ok: boolean; message?: string }>;
+      saveCapture?(fileName: string): Promise<{ ok: boolean; path?: string; message?: string }>;
     };
   }
 }

@@ -2,6 +2,7 @@
 // 입력칸 구현은 05 §9의 (a)안: 글자를 투명하게 한 입력칸 아래에 같은 글꼴의 거울 줄을 두고, 칩·밑줄·흐린 글씨를 거울에 그려요.
 // 한글을 조합하는 동안에는 입력칸 글자를 보이게 바꿔서 조합 중인 글자가 사라지지 않게 해요.
 
+import { grabPanel } from '../grab';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { functionListLine, functionListRows, type Analysis, type ChosenToken, type EngineContext, type Execution, type Row } from '@bt/command';
 import { ASSET_LABEL, canonicalSecurity, displayName, FUNCTIONS, MARKET_LABEL, type AssetClass, type Instrument } from '@bt/shared';
@@ -286,6 +287,7 @@ export function CommandLine({ panelId, variant = 'panel', autoFocus, onDone, onE
       if (exec.kind === 'command') {
         if (exec.cmd === 'settings') openSettings();
         else if (exec.cmd === 'launchpad') openWorkspaceMenu();
+        else if (exec.cmd === 'grab') void grabPanel(panelId, inputRef.current?.ownerDocument ?? document);
         else if (exec.cmd === 'alias') {
           const name = exec.args?.[0];
           const inst = getInstrument(exec.instrumentId);

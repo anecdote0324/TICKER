@@ -22,6 +22,7 @@ import { isUsMapIndex, type BarInterval, type ClientMessage, type FlowKind, type
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
 import type { NewsService } from './news';
+import type { NoteStore } from './notes';
 import { STATE_NAMES, type StateName, type Store } from './store';
 import { withTimeout, type RecordingLogger } from './util';
 
@@ -50,6 +51,8 @@ export interface AppDeps {
   market?: MarketService;
   /** v0.3 키(ECOS·FRED·SEC 연락처) */
   extraKeys?: ExtraKeys;
+  /** v0.5 NOTE 메모 */
+  notes?: NoteStore;
 }
 
 /** 키를 암호화하거나 푸는 데 이보다 오래 걸리면 보안 저장소가 응답하지 않는 걸로 봐요 */
@@ -293,6 +296,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get<{ Querystring: { ids?: string } }>('/api/quotes', async (req) => hub.quoteSnapshot((req.query.ids ?? '').split(',').filter(Boolean)));
 
   app.get('/api/status', async () => ({ sources: hub.statuses(), kisBudget: hub.kis?.budgetUsage() }));
+
+  // ── v0.5 NOTE 메모 ──
+  app.get<{ Querystring: { q?: string; tag?: string; id?: string } }>('/api/notes', async (req, reply) => {
+    if (!deps.notes) return reply.code(503).send({ error: '메모 저장소가 준비되지 않았어요' });
+    return deps.notes.list({ q: req.query.q, tag: req.query.tag, securityId: req.query.id || undefined });
+  });
+  app.post<{ Body: { securityId?: string; tags?: string[]; body?: string } }>('/api/notes', async (req, reply) => {
+    if (!deps.notes) return reply.code(503).send({ error: '메모 저장소가 준비되지 않았어요' });
+    try {
+      return deps.notes.add({ securityId: req.body?.securityId, tags: req.body?.tags, body: req.body?.body ?? '' });
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message });
+    }
+  });
+  app.put<{ Params: { id: string }; Body: { securityId?: string; tags?: string[]; body?: string } }>('/api/notes/:id', async (req, reply) => {
+    if (!deps.notes) return reply.code(503).send({ error: '메모 저장소가 준비되지 않았어요' });
+    try {
+      return deps.notes.update(Number(req.params.id), { securityId: req.body?.securityId, tags: req.body?.tags, body: req.body?.body ?? '' });
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message });
+    }
+  });
+  app.delete<{ Params: { id: string } }>('/api/notes/:id', async (req, reply) => {
+    if (!deps.notes) return reply.code(503).send({ error: '메모 저장소가 준비되지 않았어요' });
+    return deps.notes.remove(Number(req.params.id)) ? { ok: true } : reply.code(404).send({ error: '메모를 찾을 수 없어요' });
+  });
 
   app.get('/api/settings', async () => store.getSettings());
   app.put<{ Body: Partial<Settings> }>('/api/settings', async (req) => store.setSettings(req.body ?? {}));

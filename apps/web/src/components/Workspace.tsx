@@ -1,7 +1,7 @@
 // 화면 탭 하나의 패널 배치(dockview). 패널마다 1줄(번호·커맨드 라인·연동 그룹·떼어내기·최대화·닫기)과
 // 2줄(기능 코드·제목·신선도 배지·도구), 본문을 그려요(02 패널 구조).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DockviewReact,
   type DockviewApi,
@@ -32,6 +32,11 @@ import { Cf, Em, Ern, Hds, Mgmt, Own, Rels } from '../widgets/Dart';
 import { Firs, Ni, Nse, Top } from '../widgets/NewsViews';
 import { Bq, Etf, Memb, Mov, Watc } from '../widgets/MarketViews';
 import { Aqr, Hp, Qr, Vap } from '../widgets/TradeViews';
+import { Fave } from '../widgets/Fave';
+import { Note } from '../widgets/Note';
+import { describeCommand } from '../stores/commands';
+import { addFavorite, removeFavorite } from '../stores/favorites';
+import { appState } from '../stores/state';
 import { Tdef, Tech } from '../widgets/ChartTools';
 import { Gc } from '../widgets/Gc';
 import { Last } from '../widgets/Last';
@@ -44,7 +49,7 @@ import { PriceChart } from '../widgets/PriceChart';
 import { Wei } from '../widgets/Wei';
 import { TitleBar } from '../widgets/common';
 import type { Execution } from '@bt/command';
-import { activePanelId, applyExecution, LINK_COLORS, nextPanelNumber, panels, removePanel, upsertPanel, type LinkColor, type PanelState } from '../stores/panels';
+import { activePanelId, applyExecution, LINK_COLORS, nextPanelNumber, panelCanonical, panels, removePanel, upsertPanel, type LinkColor, type PanelState } from '../stores/panels';
 import { preparePopoutDocument, releasePopoutDocument } from '../popout';
 import { useStore } from '../stores/store';
 import { CommandLine } from './CommandLine';
@@ -71,6 +76,7 @@ function PanelView(props: IDockviewPanelProps<{ panelId: string }>) {
   return (
     <div
       ref={bodyRef}
+      data-panel-id={id}
       className={`panel ${bodyFocus ? 'body-focus' : ''}`}
       tabIndex={-1}
       onFocus={(e) => {
@@ -188,6 +194,10 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Watc panel={p} />;
     case 'BQ':
       return <Bq panel={p} />;
+    case 'FAVE':
+      return <Fave panel={p} />;
+    case 'NOTE':
+      return <Note panel={p} />;
     case 'HP':
       return <Hp panel={p} />;
     case 'QR':
@@ -288,6 +298,7 @@ function HeaderActions(props: IDockviewHeaderActionsProps) {
   const inPopout = props.group.api.location.type === 'popout';
   return (
     <div className="pactions">
+      <FaveStar p={p} />
       <button
         className="link-sq"
         style={p.link ? { background: LINK_COLORS[p.link].color, borderColor: LINK_COLORS[p.link].color } : undefined}
@@ -323,6 +334,28 @@ function HeaderActions(props: IDockviewHeaderActionsProps) {
         </svg>
       </button>
     </div>
+  );
+}
+
+/** 패널 머리글의 ☆: 이 패널 화면(표준형 명령)을 FAVE 즐겨찾기에 넣고 빼요(v0.5) */
+function FaveStar({ p }: { p: PanelState }) {
+  const raw = p.fn && p.fn !== 'FAVE' ? panelCanonical(p, FUNCTIONS.find((f) => f.code === p.fn)) : '';
+  // 다시 열 수 있는 명령일 때만(종목이 필요한 기능인데 종목이 없으면 별을 숨겨요)
+  const cmd = useMemo(() => (raw && describeCommand(raw).ok ? raw : ''), [raw]);
+  const on = useStore(appState, (s) => !!cmd && (s.favorites ?? []).some((f) => f.command === cmd));
+  if (!cmd) return null;
+  return (
+    <button
+      className={`fave-star ${on ? 'on' : ''}`}
+      aria-label={on ? '즐겨찾기에서 빼기' : '즐겨찾기에 넣기'}
+      title={on ? `즐겨찾기에서 빼기: ${cmd}` : `즐겨찾기에 넣기: ${cmd} (FAVE⏎로 모아 봐요)`}
+      onClick={() => {
+        if (on) removeFavorite(cmd);
+        else addFavorite(cmd, describeCommand(cmd).label);
+      }}
+    >
+      {on ? '★' : '☆'}
+    </button>
   );
 }
 

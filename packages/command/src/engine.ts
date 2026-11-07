@@ -1712,6 +1712,7 @@ export function labelFor(plan: EnterPlan, index?: SearchIndex): string {
           return e.args?.[0] && inst ? `⏎ 실행: 별칭 ${e.args[0]} → ${labelSecurity(inst)} 만들기` : '⏎ 실행: 별칭 목록(설정 → 커맨드 라인)';
         }
         if (e.cmd === 'launchpad') return '⏎ 실행: 워크스페이스 메뉴 열기 (BLP)';
+        if (e.cmd === 'grab') return '⏎ 실행: 이 패널을 이미지로 복사 (GRAB)';
         return e.cmd === 'settings' ? '⏎ 실행: 설정 창 열기' : e.cmd === 'syntax' ? '⏎ 실행: 문법 요약' : '⏎ 실행: 도움말';
       }
       if (e.kind === 'asset-list') return `⏎ 목록: ${ASSET_LABEL[e.asset!]} 종목`;

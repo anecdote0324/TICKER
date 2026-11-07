@@ -1,10 +1,9 @@
 // LAST 최근 화면(05 §15, v0.2): 최근에 실행한 명령(화면) 목록. 줄을 누르면 이 패널에서 다시 열어요(블룸버그 LAST처럼).
 
-import { labelFor, type EngineContext } from '@bt/command';
 import { useNow } from '../hooks/useNow';
-import { engine, index, supports } from '../stores/instruments';
-import { applyExecution, type PanelState } from '../stores/panels';
-import { appState, usageScore } from '../stores/state';
+import { describeCommand as describe, openCommand } from '../stores/commands';
+import type { PanelState } from '../stores/panels';
+import { appState } from '../stores/state';
 import { useStore } from '../stores/store';
 import { TitleBar } from './common';
 
@@ -18,15 +17,6 @@ function when(at: number, now: number): string {
   return same ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
 }
 
-const ctx = (): EngineContext => ({ panel: {}, assist: 'expert', hanEng: false, tabAutofill: false, supports, usage: usageScore });
-
-/** 기록의 표준형을 다시 해석해서 무엇이 열리는지(⏎ 라벨) 보여 줘요 */
-function describe(cmd: string): { label: string; ok: boolean } {
-  const a = engine.analyze(cmd, cmd.length, ctx());
-  if (a.plan.kind !== 'execute') return { label: '지금은 열 수 없어요', ok: false };
-  return { label: labelFor(a.plan, index).replace(/^⏎ 실행: /, ''), ok: true };
-}
-
 export function Last({ panel }: { panel: PanelState }) {
   const history = useStore(appState, (s) => s.history);
   const now = useNow(30_000);
@@ -36,10 +26,7 @@ export function Last({ panel }: { panel: PanelState }) {
     seen.add(h.cmd);
     return true;
   }).slice(0, MAX);
-  const open = (cmd: string) => {
-    const a = engine.analyze(cmd, cmd.length, ctx());
-    if (a.plan.kind === 'execute') applyExecution(panel.id, a.plan.exec);
-  };
+  const open = (cmd: string) => openCommand(panel.id, cmd);
   return (
     <>
       <TitleBar fn="LAST" name="최근 화면" sub={`${rows.length}개`} />

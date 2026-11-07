@@ -67,7 +67,7 @@ export const RESERVED_ASSET_WORDS: Record<string, string> = {
   PFD: '계획 없음',
 };
 
-export type CommandWord = 'help' | 'syntax' | 'settings' | 'alias' | 'launchpad';
+export type CommandWord = 'help' | 'syntax' | 'settings' | 'alias' | 'launchpad' | 'grab';
 
 export const COMMAND_WORDS: Record<string, { cmd: CommandWord; nameKo: string; summary: string }> = {
   '?': { cmd: 'syntax', nameKo: '문법 요약', summary: '명령어 문법 안내' },
@@ -78,6 +78,8 @@ export const COMMAND_WORDS: Record<string, { cmd: CommandWord; nameKo: string; s
   ALIAS: { cmd: 'alias', nameKo: '별칭', summary: '종목 별칭 만들기 (ALIAS 별칭 종목)' },
   BLP: { cmd: 'launchpad', nameKo: '런치패드', summary: '워크스페이스(이름 붙인 화면 배치) 메뉴 열기' },
   별칭: { cmd: 'alias', nameKo: '별칭', summary: '종목 별칭 만들기 (별칭 이름 종목)' },
+  GRAB: { cmd: 'grab', nameKo: '화면 캡처', summary: '이 패널을 이미지로 클립보드에 복사(파일 저장은 알림에서)' },
+  캡처: { cmd: 'grab', nameKo: '화면 캡처', summary: '이 패널을 이미지로 클립보드에 복사(파일 저장은 알림에서)' },
 };
 
 /** 사용자 별칭의 키: 영문·숫자는 대문자, 한글은 공백 없이 */

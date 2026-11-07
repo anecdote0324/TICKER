@@ -12,4 +12,7 @@ contextBridge.exposeInMainWorld('btBridge', {
   setZoom: (factor: number) => ipcRenderer.send('bt:zoom', factor),
   // 이름이 name인 떼어낸 창(빈 이름은 메인 창)을 전체 화면으로 바꾸거나 되돌려요. 바뀐 뒤 전체 화면인지 돌려줘요
   toggleFullScreen: (name: string) => ipcRenderer.invoke('bt:fullscreen', name) as Promise<boolean>,
+  // GRAB(v0.5): 이름이 name인 창(빈 이름은 메인 창)의 rect(CSS 픽셀) 부분을 찍어 클립보드에 넣어요. 마지막으로 찍은 그림을 파일로 저장할 수도 있어요
+  capture: (name: string, rect: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke('bt:capture', name, rect) as Promise<{ ok: boolean; message?: string }>,
+  saveCapture: (fileName: string) => ipcRenderer.invoke('bt:save-capture', fileName) as Promise<{ ok: boolean; path?: string; message?: string }>,
 });

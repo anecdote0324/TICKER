@@ -5,7 +5,7 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { app, BrowserWindow, ipcMain, Menu, safeStorage, screen, shell, type MenuItemConstructorOptions, type Rectangle } from 'electron';
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, safeStorage, screen, shell, type MenuItemConstructorOptions, type Rectangle } from 'electron';
 import { startServer, type RunningServer, type SecretBox } from '@bt/server';
 
 // 데이터 폴더 이름을 개발판과 배포판에서 같게(Windows %APPDATA%\TICKER, Mac ~/Library/Application Support/TICKER)
@@ -270,6 +270,36 @@ ipcMain.handle('bt:fullscreen', (event, name: unknown) => {
   if (!target || target.isDestroyed()) return false;
   target.setFullScreen(!target.isFullScreen());
   return target.isFullScreen();
+});
+
+// GRAB 화면 캡처(v0.5): 부른 창에서 패널 영역만 찍어요. 화면이 준 rect는 CSS 픽셀이라 확대 배율을 곱해요
+let lastCapture: Electron.NativeImage | undefined;
+ipcMain.handle('bt:capture', async (event, name: unknown, rect: unknown) => {
+  if (!server || !(event.senderFrame?.url ?? '').startsWith(server.url)) return { ok: false, message: '허용하지 않는 화면이에요' };
+  const r = rect as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null;
+  const nums = [r?.x, r?.y, r?.width, r?.height].map(Number);
+  if (nums.some((v) => !Number.isFinite(v)) || nums[2] < 1 || nums[3] < 1) return { ok: false, message: '찍을 영역이 없어요' };
+  // 떼어낸 창은 preload가 없어서 메인 창이 그 창의 이름으로 대신 불러요
+  const target = (typeof name === 'string' && name && childWindows.get(name)) || BrowserWindow.fromWebContents(event.sender);
+  if (!target || target.isDestroyed()) return { ok: false, message: '창을 찾을 수 없어요' };
+  const z = target.webContents.getZoomFactor();
+  const img = await target.webContents.capturePage({ x: Math.round(nums[0] * z), y: Math.round(nums[1] * z), width: Math.round(nums[2] * z), height: Math.round(nums[3] * z) });
+  if (img.isEmpty()) return { ok: false, message: '화면을 찍지 못했어요' };
+  lastCapture = img;
+  // Electron 45의 클립보드는 W3C 모양(ClipboardItem)이에요
+  await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(img.toPNG())], { type: 'image/png' }) })]);
+  return { ok: true };
+});
+ipcMain.handle('bt:save-capture', async (event, fileName: unknown) => {
+  if (!server || !(event.senderFrame?.url ?? '').startsWith(server.url)) return { ok: false, message: '허용하지 않는 화면이에요' };
+  if (!lastCapture) return { ok: false, message: '저장할 캡처가 없어요' };
+  const name = typeof fileName === 'string' && /^[A-Za-z0-9._-]{1,80}\.png$/.test(fileName) ? fileName : 'GRAB.png';
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const opts = { defaultPath: join(app.getPath('pictures'), name), filters: [{ name: 'PNG', extensions: ['png'] }] };
+  const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+  if (res.canceled || !res.filePath) return { ok: false };
+  writeFileSync(res.filePath, lastCapture.toPNG());
+  return { ok: true, path: res.filePath };
 });
 
 ipcMain.on('bt:open-external', (_e, url: unknown) => {
