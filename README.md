@@ -8,7 +8,7 @@
 
 ## 설치하고 처음 열기
 
-[Releases](https://github.com/anecdote0324/BloombergTerminal/releases)에서 가장 위 버전의 **Assets**를 열어 내 컴퓨터에 맞는 파일을 받아요. 정식 버전이 아직 없으면 저장소 첫 화면에는 `tag`로만 보이니, Releases 화면에서 `Pre-release` 표시가 붙은 버전을 찾아요. `Source code`는 실행 파일이 아니에요.
+[Releases](https://github.com/anecdote0324/TICKER/releases)에서 가장 위 버전의 **Assets**를 열어 내 컴퓨터에 맞는 파일을 받아요. 정식 버전이 아직 없으면 저장소 첫 화면에는 `tag`로만 보이니, Releases 화면에서 `Pre-release` 표시가 붙은 버전을 찾아요. `Source code`는 실행 파일이 아니에요.
 
 | 컴퓨터 | 받을 파일 |
 |---|---|

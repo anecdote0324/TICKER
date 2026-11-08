@@ -27,7 +27,7 @@ TICKER는 블룸버그 터미널을 닮은 개인용 데스크톱 시세 터미�
 
 ### 1.1 설치 파일 받기
 
-GitHub 저장소의 [Releases](https://github.com/anecdote0324/BloombergTerminal/releases)에서 받을 버전의 **Assets**를 열어 내 컴퓨터에 맞는 파일을 받아요.
+GitHub 저장소의 [Releases](https://github.com/anecdote0324/TICKER/releases)에서 받을 버전의 **Assets**를 열어 내 컴퓨터에 맞는 파일을 받아요.
 
 | 컴퓨터 | 받을 파일 | 설명 |
 |---|---|---|
