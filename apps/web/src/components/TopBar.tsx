@@ -117,7 +117,7 @@ export function TopBar(props: {
       </button>
       {props.workspaceMenu}
       <div className="clocks">
-        <span className="label">
+        <span className="label clock-date">
           {seoul.year}.{pad(seoul.month)}.{pad(seoul.day)} ({DAYS[seoul.weekday]})
         </span>
         {(['KRX', 'TSE', 'LSE', 'US'] as const).map((k, i) => {
