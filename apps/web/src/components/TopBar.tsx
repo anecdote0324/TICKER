@@ -1,7 +1,7 @@
 // 맨 위 줄: 로고, 화면 탭(Market Pulse, +), 날짜, 서울·도쿄·런던·뉴욕 시계와 장 상태(02).
 // 화면 탭은 새 창으로 떼어낼 수 있어요. 떼어낸 탭을 누르면 그 창을 앞으로 가져와요.
 
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { EXCHANGES, SESSION_LABEL, sessionState, zonedParts } from '@bt/shared';
 import { useNow } from '../hooks/useNow';
 
@@ -26,6 +26,69 @@ export interface Screen {
 const iconStyle = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.3 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
+
+/** 화면 탭 이름이 가장 짧아졌을 때의 너비(styles.css .stab-name min-width와 같아요) */
+const TAB_NAME_MIN = 40;
+
+/**
+ * 맨 위 줄이 좁을 때 무엇부터 줄일지(사용자 결정): 화면 탭 이름을 가장 먼저 줄이고(CSS flex-shrink),
+ * 탭을 다 줄여도 모자라면 날짜를 숨기고, 그래도 모자라면 뒤쪽 시계(뉴욕→런던→도쿄)를 숨겨요(CSS 줄넘김).
+ * 날짜를 숨길지는 '탭을 가장 짧게 줄였을 때 시계 칸에 남는 자리'로 정해요
+ */
+function useHideDate(tabCount: number) {
+  const ref = useRef<HTMLElement>(null);
+  const widths = useRef(new Map<number, number>());
+  const [hide, setHide] = useState<'none' | 'date' | 'all'>('none');
+  useLayoutEffect(() => {
+    const header = ref.current;
+    if (!header) return;
+    const check = () => {
+      const kids = [...header.children] as HTMLElement[];
+      const tabs = header.querySelector<HTMLElement>('.screen-tabs');
+      const clocks = header.querySelector<HTMLElement>('.clocks');
+      if (!tabs || !clocks) return;
+      // 시계 칸 각 항목의 너비(숨긴 날짜는 지난번에 잰 값)
+      [...clocks.children].forEach((c, i) => {
+        const w = (c as HTMLElement).offsetWidth;
+        if (w > 0) widths.current.set(i, w);
+      });
+      const items = clocks.children.length;
+      let need = 0;
+      for (let i = 0; i < items; i++) need += widths.current.get(i) ?? 0;
+      need += 16 * Math.max(0, items - 1);
+      // 탭을 가장 짧게 줄였을 때의 탭 칸 너비
+      // (CSS의 min-content는 줄인 이름이 아니라 전체 이름 너비라서, 탭과 탭 칸의 가장 짧은 너비를 여기서 정해 줘요)
+      let tabsMin = 0;
+      for (const t of [...tabs.children] as HTMLElement[]) {
+        const name = t.querySelector<HTMLElement>('.stab-name');
+        // 이름 말고 다른 것(떼어내기·닫기 단추)은 줄지 않아서 그 너비 그대로 + 이름은 40px(더 짧은 이름이면 그 너비)
+        let min = name ? Math.min(name.scrollWidth, TAB_NAME_MIN) : 0;
+        for (const c of [...t.children] as HTMLElement[]) {
+          if (c === name) continue;
+          const st = getComputedStyle(c);
+          min += c.offsetWidth + (parseFloat(st.marginLeft) || 0) + (parseFloat(st.marginRight) || 0);
+        }
+        if (!name) min = t.offsetWidth;
+        if (name && t.style.minWidth !== `${min}px`) t.style.minWidth = `${min}px`;
+        tabsMin += min;
+      }
+      if (tabs.style.minWidth !== `${tabsMin}px`) tabs.style.minWidth = `${tabsMin}px`;
+      const cs = getComputedStyle(header);
+      const gap = parseFloat(cs.columnGap) || 0;
+      let others = 0;
+      for (const k of kids) if (k !== tabs && k !== clocks) others += k.offsetWidth;
+      const avail = header.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - gap * (kids.length - 1) - others - tabsMin;
+      // 서울 시계 하나도 다 들어가지 않으면 반쯤 잘린 시계 대신 시계 칸을 비워요
+      const seoulW = widths.current.get(1) ?? 0;
+      setHide(avail >= need ? 'none' : avail >= seoulW ? 'date' : 'all');
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, [tabCount]);
+  return { ref, hide };
+}
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 export function TopBar(props: {
@@ -46,8 +109,9 @@ export function TopBar(props: {
   const now = useNow(1000);
   const [editing, setEditing] = useState<string | null>(null);
   const seoul = zonedParts(now, 'Asia/Seoul');
+  const fit = useHideDate(props.screens.length);
   return (
-    <header className="topbar">
+    <header className="topbar" ref={fit.ref}>
       <div className="logo">
         <i />
         <b>TICKER</b>
@@ -116,7 +180,7 @@ export function TopBar(props: {
         패널 추가
       </button>
       {props.workspaceMenu}
-      <div className="clocks">
+      <div className={`clocks ${fit.hide === 'date' ? 'no-date' : fit.hide === 'all' ? 'no-date no-clocks' : ''}`}>
         <span className="label clock-date">
           {seoul.year}.{pad(seoul.month)}.{pad(seoul.day)} ({DAYS[seoul.weekday]})
         </span>
