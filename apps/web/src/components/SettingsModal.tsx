@@ -32,6 +32,7 @@ import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
 import { appState, removeAlias, updateState } from '../stores/state';
 import { useStore } from '../stores/store';
 import { showToast, ui } from '../stores/ui';
+import { openPatchNotes } from './PatchNotes';
 import { checkUpdate, refreshUpdateState, updateState as appUpdate, wantPrerelease } from '../stores/update';
 
 const SECTIONS = [
@@ -1191,6 +1192,19 @@ function About() {
       <div className="field">
         <label>앱 버전</label>
         <span className="mono">{window.btBridge?.version ?? info?.version ?? '—'}</span>
+      </div>
+      <div className="field">
+        <label>패치노트</label>
+        <button
+          className="btn"
+          onClick={() => {
+            ui.set((s) => ({ ...s, settings: false }));
+            openPatchNotes(true);
+          }}
+        >
+          패치노트 보기
+        </button>
+        <span className="label">버전마다 새로 생긴 기능·바뀐 것·고친 것</span>
       </div>
       <UpdateSection />
       <p className="note">나 혼자 쓰는 개인용 터미널이에요. 시세를 다른 사람에게 보여주거나 재배포하지 않아요.</p>

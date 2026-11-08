@@ -10,7 +10,9 @@ name: Release
 # - 릴리스를 초안으로 먼저 만들고, 빌드마다 설치 파일을 그 초안에 바로 올려요. Actions의 중간 저장(artifact)은 비공개 저장소의
 #   무료 저장 공간(500MB)을 한 번에 약 380MB씩 써서, 하루에 두 번째 릴리스부터 "Artifact storage quota has been hit"으로
 #   실패했어요(v0.1.0-beta.10). 릴리스에 붙인 파일은 그 공간을 쓰지 않아요.
-# 개인용이라 코드 서명은 하지 않고, 자동 업데이트도 넣지 않아요.
+# - 패치노트: patchnote/next.md를 patchnote/<태그>.md로 바꿔 이 브랜치에 커밋하고 릴리스 설명으로 써요(patchnote/README.md).
+#   앱은 그 파일을 화면에 넣어 두고, 업데이트한 뒤 처음 켤 때 패치노트 창으로 보여 줘요.
+# 개인용이라 코드 서명은 하지 않아요. 앱 업데이트는 앱이 이 저장소의 릴리스를 직접 확인해요(apps/desktop/src/update.ts).
 on:
   push:
     tags: ['v*']
@@ -64,31 +66,69 @@ jobs:
           BUMP: ${{ inputs.kind }}
         run: node scripts/release-version.mjs "$TAG"
 
+  # 패치노트(patchnote/README.md): next.md를 patchnote/<태그>.md로 바꿔 이 브랜치에 커밋해요(브랜치에서 Run workflow로 올릴 때만).
+  # 빌드는 그 커밋으로 해서 앱 안에 이번 패치노트가 들어가요
+  patchnote:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.note.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 패치노트 확정
+        id: note
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -f patchnote/next.md ] && [ "$REF_TYPE" = "branch" ]; then
+            day=$(TZ=Asia/Seoul date +%Y-%m-%d)
+            { echo "# $TAG ($day)"; echo; cat patchnote/next.md; } > "patchnote/$TAG.md"
+            git rm -q patchnote/next.md
+            git add "patchnote/$TAG.md"
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "패치노트 $TAG"
+            git push origin "HEAD:$REF_NAME"
+            echo "patchnote/$TAG.md를 만들었어요"
+          else
+            echo "patchnote/next.md가 없어서 지금 커밋 그대로 올려요"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   # 릴리스 초안을 먼저 만들어요. 같은 번호의 초안이 남아 있으면(지난 실행이 중간에 실패) 그 초안을 다시 써요
   draft:
-    needs: version
+    needs: [version, patchnote]
     if: needs.version.outputs.publish == 'true'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.version.outputs.tag }}
+      SHA: ${{ needs.patchnote.outputs.sha }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.patchnote.outputs.sha }}
       - name: 릴리스 초안 만들기
         run: |
+          # 릴리스 설명은 패치노트(없으면 GitHub의 자동 변경 목록)
+          note="patchnote/$TAG.md"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "이미 있는 $TAG 릴리스(초안)에 올려요"
             # 공개할 때 태그가 이 커밋에 생기게 대상을 지금 커밋으로 옮겨요(지난 실행이 고치기 전 커밋으로 만든 초안일 수 있어요)
-            gh release edit "$TAG" --target "$GITHUB_SHA"
+            if [ -f "$note" ]; then gh release edit "$TAG" --target "$SHA" --notes-file "$note"; else gh release edit "$TAG" --target "$SHA"; fi
+          elif [ -f "$note" ]; then
+            gh release create "$TAG" --draft --title "$TAG" --target "$SHA" --notes-file "$note" ${{ needs.version.outputs.prerelease == 'true' && '--prerelease' || '' }}
           else
             # 태그가 없으면(직접 실행) 공개할 때 이 커밋에 만들어요. 지난 릴리스와의 변경 비교 링크를 붙여요
-            gh release create "$TAG" --draft --title "$TAG" --target "$GITHUB_SHA" --generate-notes ${{ needs.version.outputs.prerelease == 'true' && '--prerelease' || '' }}
+            gh release create "$TAG" --draft --title "$TAG" --target "$SHA" --generate-notes ${{ needs.version.outputs.prerelease == 'true' && '--prerelease' || '' }}
           fi
 
   build:
-    needs: [version, draft]
-    # 설치 파일만 만들 때는 초안 작업을 건너뛰어요
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.draft.result != 'failure' }}
+    needs: [version, patchnote, draft]
+    # 설치 파일만 만들 때는 패치노트·초안 작업을 건너뛰어요
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.patchnote.result != 'failure' && needs.draft.result != 'failure' }}
     strategy:
       fail-fast: false
       matrix:
@@ -97,6 +137,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 패치노트를 커밋했으면 그 커밋으로(앱 안에 이번 패치노트가 들어가요)
+          ref: ${{ needs.patchnote.outputs.sha || github.sha }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

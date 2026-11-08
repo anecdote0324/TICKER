@@ -20,5 +20,6 @@
 
 # 릴리스
 
+- 패치노트(사용자 결정): 앱이 바뀌는 작업을 마칠 때마다 같은 커밋에서 `patchnote/next.md`에 사용자 눈높이로 새 기능·바뀐 것·고친 것·알아 둘 것을 덧붙여요. 쓰는 법은 [`patchnote/README.md`](patchnote/README.md). Release가 `next.md`를 `patchnote/<태그>.md`로 바꿔 커밋하고 릴리스 설명으로 써요. 앱은 업데이트 뒤 처음 켤 때 패치노트 창으로 보여 줘요. 문서만 바뀐 작업은 적지 않아요.
 - Release 실행(Actions → Release → Run workflow)은 사용자가 직접 눌러요(사용자 결정). 앱이 바뀌는 작업을 마치면, 새 미리 보기를 낼 만한지와 고를 종류(미리 보기·정식·다음 단계)를 알려 줘요. 문서만 바뀐 작업이면 알리지 않아요.
 - 사용자가 시킬 때만 Claude가 직접 Release를 실행해요.

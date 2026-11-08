@@ -58,6 +58,8 @@ export interface Settings {
     autoCheck: boolean;
     prerelease?: boolean;
     skipped?: string;
+    /** 패치노트 창을 마지막으로 본 앱 버전 */
+    seen?: string;
   };
 }
 

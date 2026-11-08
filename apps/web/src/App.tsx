@@ -12,6 +12,7 @@ import { addPanel, dockApis, Workspace, type ScreenLayout } from './components/W
 import { WorkspaceMenu } from './components/WorkspaceMenu';
 import { AlertWatcher } from './components/AlertWatcher';
 import { useUpdateWatcher } from './stores/update';
+import { PatchNotesModal, usePatchNotePopup } from './components/PatchNotes';
 import { buildWorkspaceFile, mergeWatchlists, mergeWorkspaces, parseWorkspaceFile, workspaceFileName } from './workspaceFile';
 import { attachGlobalKeys } from './keys';
 import { focusRegistry } from './components/focus';
@@ -54,6 +55,8 @@ const DEFAULT_WORKSPACE: SavedWorkspace = {
 export function App() {
   // 앱 업데이트 자동 확인(데스크톱)
   useUpdateWatcher();
+  // 업데이트한 뒤 처음 켤 때 패치노트 창
+  usePatchNotePopup();
   const saved = useRef<SavedWorkspace | null>(null);
   if (saved.current === null) {
     saved.current = loadSaved() ?? DEFAULT_WORKSPACE;
@@ -380,6 +383,7 @@ export function App() {
       <AlertWatcher />
       {!overlayHost && u.palette && <Palette />}
       {u.settings && <SettingsModal />}
+      <PatchNotesModal />
       {!overlayHost && <HelpOverlay />}
       <ToastView />
     </div>

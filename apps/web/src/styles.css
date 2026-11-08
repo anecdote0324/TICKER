@@ -2951,3 +2951,71 @@ button {
   padding: 0;
   font: inherit;
 }
+
+/* ── 패치노트 창 ── */
+.pn-modal {
+  width: 640px;
+  height: auto;
+  max-height: 80vh;
+}
+.pn-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 16px;
+}
+.pn-ver + .pn-ver {
+  border-top: 1px solid #222;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.pn-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 14px;
+  color: var(--amber);
+}
+.pn-now {
+  font-size: 10.5px;
+  border: 1px solid var(--amber);
+  padding: 0 5px;
+}
+.pn-note h4 {
+  margin: 10px 0 4px;
+  font-size: 12.5px;
+  color: var(--value-hi);
+}
+.pn-note h5 {
+  margin: 8px 0 3px;
+  font-size: 12px;
+  color: var(--label);
+}
+.pn-note p {
+  margin: 4px 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.pn-li {
+  position: relative;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--value);
+}
+.pn-dot {
+  position: absolute;
+  margin-left: -12px;
+  color: var(--label);
+}
+.pn-note code {
+  font-family: var(--mono);
+  background: #1a1a1a;
+  padding: 0 3px;
+}
+.pn-foot {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid #222;
+}

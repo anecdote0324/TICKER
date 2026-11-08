@@ -40,6 +40,7 @@
 - 예탁원 정보: 날짜 칸 모양(YYYYMMDD인지), 청약기간 모양, 시장 전체로 물을 때 한 쪽에 몇 줄이 오는지, 의무예치의 `depo_date`가 예치일인지 해제일인지
 - DART(MGMT·RELS·HDS·ERN): 임원 보수 칸(`se`·`nmpr`·`mendng_totamt`·`jan_avrg_mendng_am`)의 실제 이름, `elestock`의 증감 칸(`sp_stock_lmp_irds_cnt`)이 부호를 주는지, 타법인 출자의 합계 줄 이름, 잠정실적 공시가 `pblntf_ty=I`로 걸러지는지(공정공시 분류)
 - ETF·MEMB: ETF 구성종목시세 output2의 구성비중(`etf_cnfg_issu_rlim`)이 %인지, 현금·선물 줄 코드 모양, ETF 현재가의 순자산 총액(`etf_ntas_ttam`) 단위(억 원으로 읽어요), NAV 비교추이(일)의 기간
+- 패치노트: 다음 Release에서 `patchnote` 작업이 `next.md`를 `<태그>.md`로 바꿔 브랜치에 푸시하는지(GITHUB_TOKEN으로 푸시가 되는지, 브랜치 보호가 막지 않는지), 그 커밋으로 빌드되고 릴리스 설명에 들어가는지
 - 앱 업데이트: 저장소를 공개한 뒤 실제로 확인할 것. 릴리스 API가 파일마다 `digest`(sha256)를 주는지, Windows 설치형에서 설치 프로그램 실행 → 앱 닫힘 → 설치 끝 → 다시 켜기가 매끄러운지(실행 중 앱 감지 창이 뜨는지), 휴대용이 새 파일을 옆 폴더에 쓸 수 있는지, Mac dmg에 격리 표시가 붙지 않는지, 미리 보기·정식 고르기
 - GRAB: Electron 45의 클립보드(`clipboard.write`와 `ClipboardItem`의 `image/png`)가 Windows·Mac에서 그림으로 붙여넣어지는지, 확대 배율·고해상도 화면에서 찍는 영역이 정확한지, 떼어낸 창의 패널도 맞게 찍히는지
 - QR: 국내 체결의 `cntg_vol`이 부호를 주는지(매수·매도 구분이 있으면 추정 대신 써요), 한 번에 오는 건수(30건으로 봐요), NXT·통합 체결이 오는지. 해외 체결추이 첫 쪽 건수와 `khms`가 정말 한국 시각인지, 미국 장 밖(프리·애프터)에 무엇이 오는지. 2초 조회 두 개(BQ·QR)를 함께 열어도 초당 한도 안인지
