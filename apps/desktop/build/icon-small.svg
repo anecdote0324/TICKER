@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- 작은 크기(16·24·32px)용 A안: 그림자 없이. 칸 수를 줄인 트리맵 판 + 왼쪽 아래 T 타일(작은 크기라 조금 크게) -->
+  <!-- 작은 크기(16·24·32px)용 A안: 그림자 없이. 네 칸 트리맵 판 + 왼쪽 아래 T 타일(작은 크기라 조금 크게) -->
   <defs>
     
     <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3d414a"/><stop offset="1" stop-color="#111317"/></linearGradient>
@@ -9,19 +9,15 @@
   <!-- 뒤 판: 크기가 제각각인 칸(트리맵) -->
   <g>
     <g clip-path="url(#board)">
-      <rect x="300" y="40" width="300" height="520" fill="#ffb444"/>
-      <rect x="600" y="40" width="404" height="360" fill="#ffd27a"/>
-      <rect x="600" y="400" width="220" height="300" fill="#f7921f"/>
-      <rect x="820" y="400" width="184" height="300" fill="#ffc35a"/>
-      <rect x="300" y="560" width="300" height="424" fill="#ee7d14"/>
-      <rect x="600" y="700" width="404" height="284" fill="#ffa733"/>
+      <rect x="300" y="40" width="320" height="520" fill="#ffb444"/>
+    <rect x="620" y="40" width="384" height="420" fill="#ffd27a"/>
+    <rect x="300" y="560" width="320" height="424" fill="#ee7d14"/>
+    <rect x="620" y="460" width="384" height="524" fill="#f9961f"/>
       <g fill="none" stroke="#6b2a00" stroke-opacity="0.35" stroke-width="22">
-        <rect x="300" y="40" width="300" height="520"/>
-        <rect x="600" y="40" width="404" height="360"/>
-        <rect x="600" y="400" width="220" height="300"/>
-        <rect x="820" y="400" width="184" height="300"/>
-        <rect x="300" y="560" width="300" height="424"/>
-        <rect x="600" y="700" width="404" height="284"/>
+        <rect x="300" y="40" width="320" height="520"/>
+        <rect x="620" y="40" width="384" height="420"/>
+        <rect x="300" y="560" width="320" height="424"/>
+        <rect x="620" y="460" width="384" height="524"/>
       </g>
     </g>
     

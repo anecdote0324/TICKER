@@ -5,14 +5,9 @@
     <linearGradient id="c1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd98f"/><stop offset="1" stop-color="#ffbf55"/></linearGradient>
     <linearGradient id="c2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9f2e"/><stop offset="1" stop-color="#f58a1f"/></linearGradient>
     <linearGradient id="c3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffcf73"/><stop offset="1" stop-color="#ffb444"/></linearGradient>
-    <linearGradient id="c4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ee7d14"/><stop offset="1" stop-color="#dc6a0a"/></linearGradient>
-    <linearGradient id="c5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f28a1c"/><stop offset="1" stop-color="#e0700e"/></linearGradient>
-    <linearGradient id="c6" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb13b"/><stop offset="1" stop-color="#f99a26"/></linearGradient>
-    <linearGradient id="c7" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe2a3"/><stop offset="1" stop-color="#ffc96b"/></linearGradient>
-    <linearGradient id="c8" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7921f"/><stop offset="1" stop-color="#e8790f"/></linearGradient>
-    <linearGradient id="c9" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffbf55"/><stop offset="1" stop-color="#ffa733"/></linearGradient>
-    <linearGradient id="c10" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e5730f"/><stop offset="1" stop-color="#d4620a"/></linearGradient>
-    <linearGradient id="c11" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffcc6b"/><stop offset="1" stop-color="#ffb444"/></linearGradient>
+    <linearGradient id="c4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f28a1c"/><stop offset="1" stop-color="#e0700e"/></linearGradient>
+    <linearGradient id="c5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb13b"/><stop offset="1" stop-color="#f99a26"/></linearGradient>
+    <linearGradient id="c6" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ee7d14"/><stop offset="1" stop-color="#dc6a0a"/></linearGradient>
     <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3d414a"/><stop offset="1" stop-color="#111317"/></linearGradient>
     <filter id="sh" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000" flood-opacity="0.38"/></filter>
     <filter id="sh2" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#7a2e00" flood-opacity="0.3"/></filter>
@@ -22,31 +17,21 @@
   <!-- 뒤 판: 크기가 제각각인 칸(트리맵) -->
   <g filter="url(#sh2)">
     <g clip-path="url(#board)">
-      <rect x="290" y="100" width="270" height="510" fill="url(#c0)"/>
-      <rect x="560" y="100" width="390" height="320" fill="url(#c1)"/>
-      <rect x="560" y="420" width="200" height="280" fill="url(#c2)"/>
-      <rect x="760" y="420" width="190" height="140" fill="url(#c3)"/>
-      <rect x="760" y="560" width="190" height="140" fill="url(#c4)"/>
-      <rect x="290" y="610" width="270" height="314" fill="url(#c5)"/>
-      <rect x="560" y="700" width="140" height="224" fill="url(#c6)"/>
-      <rect x="700" y="700" width="130" height="120" fill="url(#c7)"/>
-      <rect x="830" y="700" width="120" height="120" fill="url(#c8)"/>
-      <rect x="700" y="820" width="90" height="104" fill="url(#c9)"/>
-      <rect x="790" y="820" width="80" height="104" fill="url(#c10)"/>
-      <rect x="870" y="820" width="80" height="104" fill="url(#c11)"/>
+      <rect x="290" y="100" width="290" height="500" fill="url(#c0)"/>
+      <rect x="580" y="100" width="370" height="330" fill="url(#c1)"/>
+      <rect x="580" y="430" width="210" height="270" fill="url(#c2)"/>
+      <rect x="790" y="430" width="160" height="270" fill="url(#c3)"/>
+      <rect x="290" y="600" width="290" height="324" fill="url(#c4)"/>
+      <rect x="580" y="700" width="190" height="224" fill="url(#c5)"/>
+      <rect x="770" y="700" width="180" height="224" fill="url(#c6)"/>
       <g fill="none" stroke="#6b2a00" stroke-opacity="0.35" stroke-width="8">
-        <rect x="290" y="100" width="270" height="510"/>
-        <rect x="560" y="100" width="390" height="320"/>
-        <rect x="560" y="420" width="200" height="280"/>
-        <rect x="760" y="420" width="190" height="140"/>
-        <rect x="760" y="560" width="190" height="140"/>
-        <rect x="290" y="610" width="270" height="314"/>
-        <rect x="560" y="700" width="140" height="224"/>
-        <rect x="700" y="700" width="130" height="120"/>
-        <rect x="830" y="700" width="120" height="120"/>
-        <rect x="700" y="820" width="90" height="104"/>
-        <rect x="790" y="820" width="80" height="104"/>
-        <rect x="870" y="820" width="80" height="104"/>
+        <rect x="290" y="100" width="290" height="500"/>
+        <rect x="580" y="100" width="370" height="330"/>
+        <rect x="580" y="430" width="210" height="270"/>
+        <rect x="790" y="430" width="160" height="270"/>
+        <rect x="290" y="600" width="290" height="324"/>
+        <rect x="580" y="700" width="190" height="224"/>
+        <rect x="770" y="700" width="180" height="224"/>
       </g>
     </g>
     <rect x="290" y="100" width="660" height="824" rx="84" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="4"/>
