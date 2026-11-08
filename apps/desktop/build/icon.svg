@@ -1,26 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- TICKER 앱 아이콘(사용자 결정 A안): 주황 패널 세 장(시세 줄) 위에 어두운 T 타일을 겹친 입체 층 구조 -->
+  <!-- TICKER 앱 아이콘(사용자 결정 A안, 엑셀 아이콘처럼 십자로 나눈 판): 주황 판을 네 칸으로 나누고 그 위에 어두운 T 타일을 겹친 입체 층 구조 -->
   <defs>
-    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ffb13b"/></linearGradient>
-    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb13b"/><stop offset="1" stop-color="#f58a1f"/></linearGradient>
-    <linearGradient id="p3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f58a1f"/><stop offset="1" stop-color="#d9620b"/></linearGradient>
+    <linearGradient id="q1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffcf73"/><stop offset="1" stop-color="#ffb13b"/></linearGradient>
+    <linearGradient id="q2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe2a3"/><stop offset="1" stop-color="#ffc35a"/></linearGradient>
+    <linearGradient id="q3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7921f"/><stop offset="1" stop-color="#e5730f"/></linearGradient>
+    <linearGradient id="q4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffa733"/><stop offset="1" stop-color="#f5861a"/></linearGradient>
     <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b3f48"/><stop offset="1" stop-color="#121418"/></linearGradient>
     <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="1" stop-color="#fff" stop-opacity="0.03"/></linearGradient>
     <filter id="sh" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity="0.35"/></filter>
     <filter id="sh2" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#7a2e00" flood-opacity="0.35"/></filter>
+    <clipPath id="board"><rect x="300" y="150" width="620" height="724" rx="70"/></clipPath>
   </defs>
+  <!-- 뒤 판: 십자로 나눈 네 칸 -->
   <g filter="url(#sh2)">
-    <rect x="300" y="150" width="620" height="240" rx="70" fill="url(#p1)"/>
-    <rect x="300" y="392" width="620" height="240" rx="0" fill="url(#p2)"/>
-    <path d="M300 634 H920 V804 Q920 874 850 874 H370 Q300 874 300 804 Z" fill="url(#p3)"/>
+    <g clip-path="url(#board)">
+      <rect x="300" y="150" width="310" height="362" fill="url(#q1)"/>
+      <rect x="610" y="150" width="310" height="362" fill="url(#q2)"/>
+      <rect x="300" y="512" width="310" height="362" fill="url(#q3)"/>
+      <rect x="610" y="512" width="310" height="362" fill="url(#q4)"/>
+      <g stroke="#fff" stroke-opacity="0.45" stroke-width="10">
+        <line x1="610" y1="150" x2="610" y2="874"/>
+        <line x1="300" y1="512" x2="920" y2="512"/>
+      </g>
+    </g>
     <rect x="300" y="150" width="620" height="724" rx="70" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="4"/>
   </g>
-  <!-- 패널 위 시세 줄 -->
-  <g stroke="#fff" stroke-opacity="0.75" stroke-width="22" stroke-linecap="round">
-    <line x1="640" y1="270" x2="840" y2="270"/>
-    <line x1="640" y1="512" x2="800" y2="512"/>
-    <line x1="640" y1="754" x2="860" y2="754"/>
-  </g>
+  <!-- 앞 타일과 T -->
   <g filter="url(#sh)">
     <rect x="104" y="262" width="500" height="500" rx="90" fill="url(#front)"/>
     <rect x="107" y="265" width="494" height="494" rx="87" fill="none" stroke="url(#rim)" stroke-width="6"/>

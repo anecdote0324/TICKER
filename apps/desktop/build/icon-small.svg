@@ -1,10 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- 작은 크기(16·24·32px)용 A안: 시세 줄·그림자를 빼고 T 타일을 크게. 뒤 패널은 주황 판 하나 -->
+  <!-- 작은 크기(16·24·32px)용 A안: 그림자를 빼고 T 타일을 크게. 뒤 판은 십자로 나눈 네 칸 -->
   <defs>
-    <linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffc45c"/><stop offset="1" stop-color="#e8700f"/></linearGradient>
+    <clipPath id="board"><rect x="330" y="60" width="664" height="904" rx="120"/></clipPath>
     <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f434c"/><stop offset="1" stop-color="#101216"/></linearGradient>
   </defs>
-  <rect x="330" y="60" width="664" height="904" rx="120" fill="url(#p)"/>
+  <g clip-path="url(#board)">
+    <rect x="330" y="60" width="332" height="452" fill="#ffbf55"/>
+    <rect x="662" y="60" width="332" height="452" fill="#ffd27a"/>
+    <rect x="330" y="512" width="332" height="452" fill="#ee7d14"/>
+    <rect x="662" y="512" width="332" height="452" fill="#f9961f"/>
+    <g stroke="#fff" stroke-opacity="0.55" stroke-width="28">
+      <line x1="662" y1="60" x2="662" y2="964"/>
+      <line x1="330" y1="512" x2="994" y2="512"/>
+    </g>
+  </g>
   <rect x="30" y="200" width="640" height="640" rx="130" fill="url(#front)"/>
   <path d="M150 330 H550 V440 H410 V730 H290 V440 H150 Z" fill="#ffffff"/>
 </svg>
