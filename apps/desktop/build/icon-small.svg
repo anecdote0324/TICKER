@@ -1,22 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- 작은 크기(16·24·32px)용 A안: 그림자 없이. 여섯 칸 판 + 왼쪽 열 아래 두 칸 가운데의 T 타일(작은 크기라 조금 크게) -->
+  <!-- 작은 크기(16·24·32px)용 A안: 그림자 없이. 칸 수를 줄인 트리맵 판 + 왼쪽 아래 T 타일(작은 크기라 조금 크게) -->
   <defs>
+    
+    <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3d414a"/><stop offset="1" stop-color="#111317"/></linearGradient>
+    
     <clipPath id="board"><rect x="300" y="40" width="704" height="944" rx="120"/></clipPath>
-    <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f434c"/><stop offset="1" stop-color="#101216"/></linearGradient>
   </defs>
-  <g clip-path="url(#board)">
-    <rect x="300" y="40.0" width="352" height="314.7" fill="#ffc35a"/>
-    <rect x="652" y="40.0" width="352" height="314.7" fill="#ffd98f"/>
-    <rect x="300" y="354.7" width="352" height="314.7" fill="#ffa733"/>
-    <rect x="652" y="354.7" width="352" height="314.7" fill="#ffc35a"/>
-    <rect x="300" y="669.3" width="352" height="314.7" fill="#ee7d14"/>
-    <rect x="652" y="669.3" width="352" height="314.7" fill="#f9961f"/>
-    <g stroke="#fff" stroke-opacity="0.55" stroke-width="26">
-      <line x1="652" y1="40" x2="652" y2="984"/>
-      <line x1="300" y1="354.7" x2="1004" y2="354.7"/>
-      <line x1="300" y1="669.3" x2="1004" y2="669.3"/>
+  <!-- 뒤 판: 크기가 제각각인 칸(트리맵) -->
+  <g>
+    <g clip-path="url(#board)">
+      <rect x="300" y="40" width="300" height="520" fill="#ffb444"/>
+      <rect x="600" y="40" width="404" height="360" fill="#ffd27a"/>
+      <rect x="600" y="400" width="220" height="300" fill="#f7921f"/>
+      <rect x="820" y="400" width="184" height="300" fill="#ffc35a"/>
+      <rect x="300" y="560" width="300" height="424" fill="#ee7d14"/>
+      <rect x="600" y="700" width="404" height="284" fill="#ffa733"/>
+      <g fill="none" stroke="#6b2a00" stroke-opacity="0.35" stroke-width="22">
+        <rect x="300" y="40" width="300" height="520"/>
+        <rect x="600" y="40" width="404" height="360"/>
+        <rect x="600" y="400" width="220" height="300"/>
+        <rect x="820" y="400" width="184" height="300"/>
+        <rect x="300" y="560" width="300" height="424"/>
+        <rect x="600" y="700" width="404" height="284"/>
+      </g>
     </g>
+    
   </g>
-  <rect x="20" y="379" width="580" height="580" rx="110" fill="url(#front)"/>
-  <path d="M140 499 H480 V591 H356 V839 H264 V591 H140 Z" fill="#ffffff"/>
+  <!-- 앞 타일과 T -->
+  <g>
+    <rect x="20" y="364" width="580" height="580" rx="110" fill="url(#front)"/>
+    
+  </g>
+  <path d="M140 484 H480 V576 H356 V824 H264 V576 H140 Z" fill="#ffffff"/>
 </svg>

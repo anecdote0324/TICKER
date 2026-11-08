@@ -1,4 +1,4 @@
-// TICKER 아이콘 만들기(여섯 칸 주황 판 + T 타일 입체형 A안, 사용자 결정): icon.svg·icon-small.svg → icon.png(1024, Mac) · icon.ico(Windows) · 화면 favicon.png
+// TICKER 아이콘 만들기(트리맵 주황 판 + T 타일 입체형 A안, 사용자 결정): icon.svg·icon-small.svg → icon.png(1024, Mac) · icon.ico(Windows) · 화면 favicon.png
 // 작은 크기(16·24·32px)는 캔들을 굵게 한 icon-small.svg로 그려요. Playwright(Chromium)가 있는 곳에서 이 폴더에서 실행해요: node make-icons.cjs
 const { chromium } = require('playwright');
 const fs = require('fs');
