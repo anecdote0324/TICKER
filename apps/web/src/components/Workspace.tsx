@@ -33,7 +33,6 @@ import { Firs, Ni, Nse, Top } from '../widgets/NewsViews';
 import { Bq, Etf, Memb, Mov, Watc } from '../widgets/MarketViews';
 import { Aqr, Hp, Qr, Vap } from '../widgets/TradeViews';
 import { Fave } from '../widgets/Fave';
-import { TestScreen } from '../widgets/TestScreen';
 import { Note } from '../widgets/Note';
 import { describeCommand } from '../stores/commands';
 import { addFavorite, removeFavorite } from '../stores/favorites';
@@ -197,9 +196,6 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Bq panel={p} />;
     case 'FAVE':
       return <Fave panel={p} />;
-    case 'TEST':
-    case 'TEST22':
-      return <TestScreen panel={p} />;
     case 'NOTE':
       return <Note panel={p} />;
     case 'HP':

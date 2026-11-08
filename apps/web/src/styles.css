@@ -3019,16 +3019,3 @@ button {
   padding: 8px 12px;
   border-top: 1px solid #222;
 }
-
-/* ── TEST 업데이트 시험 ── */
-.test-ok {
-  color: var(--amber);
-  font-size: 13px;
-  padding: 6px 0 10px;
-}
-.test-table td:first-child {
-  color: var(--label);
-}
-.test-table td:last-child {
-  text-align: left;
-}

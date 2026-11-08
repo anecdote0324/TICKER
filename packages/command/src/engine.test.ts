@@ -562,15 +562,6 @@ describe('BLP 런치패드(v0.2)', () => {
   });
 });
 
-describe('TEST 업데이트 시험(v0.5)', () => {
-  it('TEST⏎은 업데이트 시험 화면', () => {
-    expect(run('TEST').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'TEST' } });
-  });
-  it('TEST22⏎은 두 번째 업데이트 시험 화면', () => {
-    expect(run('TEST22').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'TEST22' } });
-  });
-});
-
 describe('FAVE·NOTE(v0.5)', () => {
   it('FAVE⏎은 즐겨찾기, NOTE는 종목 없이도·종목 뒤에도', () => {
     expect(run('FAVE').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'FAVE' } });
