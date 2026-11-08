@@ -1,35 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- TICKER 앱 아이콘(사용자 결정 A안, 엑셀 아이콘 구성): 십자로 네 칸 나눈 주황 판이 아이콘 대부분을 차지하고,
-       그보다 작은 어두운 T 타일이 왼쪽 아래에 겹쳐요. T는 굵은 산세리프(오피스 아이콘 글자 모양)로 그렸어요 -->
+  <!-- TICKER 앱 아이콘(사용자 결정 A안, 엑셀 아이콘 구성): 2열 × 3줄 여섯 칸으로 나눈 주황 판이 아이콘 대부분을 차지하고,
+       작은 어두운 T 타일이 왼쪽 열 아래 두 칸의 가운데에 겹쳐요. T는 굵은 산세리프(오피스 아이콘 글자 모양)로 그렸어요 -->
   <defs>
-    <linearGradient id="q1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffcf73"/><stop offset="1" stop-color="#ffb13b"/></linearGradient>
-    <linearGradient id="q2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe2a3"/><stop offset="1" stop-color="#ffc35a"/></linearGradient>
-    <linearGradient id="q3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7921f"/><stop offset="1" stop-color="#e5730f"/></linearGradient>
-    <linearGradient id="q4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffa733"/><stop offset="1" stop-color="#f5861a"/></linearGradient>
+    <linearGradient id="c00" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ffbf55"/></linearGradient>
+    <linearGradient id="c01" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe9b8"/><stop offset="1" stop-color="#ffd27a"/></linearGradient>
+    <linearGradient id="c10" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb13b"/><stop offset="1" stop-color="#f99a26"/></linearGradient>
+    <linearGradient id="c11" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffcc6b"/><stop offset="1" stop-color="#ffb444"/></linearGradient>
+    <linearGradient id="c20" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ef7d14"/><stop offset="1" stop-color="#dc6a0a"/></linearGradient>
+    <linearGradient id="c21" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fa9a26"/><stop offset="1" stop-color="#ef8517"/></linearGradient>
     <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3d414a"/><stop offset="1" stop-color="#111317"/></linearGradient>
     <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="1" stop-color="#fff" stop-opacity="0.03"/></linearGradient>
     <filter id="sh" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000" flood-opacity="0.38"/></filter>
     <filter id="sh2" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#7a2e00" flood-opacity="0.3"/></filter>
     <clipPath id="board"><rect x="290" y="100" width="660" height="824" rx="84"/></clipPath>
   </defs>
-  <!-- 뒤 판: 십자로 나눈 네 칸 -->
+  <!-- 뒤 판: 여섯 칸 -->
   <g filter="url(#sh2)">
     <g clip-path="url(#board)">
-      <rect x="290" y="100" width="330" height="412" fill="url(#q1)"/>
-      <rect x="620" y="100" width="330" height="412" fill="url(#q2)"/>
-      <rect x="290" y="512" width="330" height="412" fill="url(#q3)"/>
-      <rect x="620" y="512" width="330" height="412" fill="url(#q4)"/>
+      <rect x="290" y="100.0" width="330" height="274.7" fill="url(#c00)"/>
+      <rect x="620" y="100.0" width="330" height="274.7" fill="url(#c01)"/>
+      <rect x="290" y="374.7" width="330" height="274.7" fill="url(#c10)"/>
+      <rect x="620" y="374.7" width="330" height="274.7" fill="url(#c11)"/>
+      <rect x="290" y="649.3" width="330" height="274.7" fill="url(#c20)"/>
+      <rect x="620" y="649.3" width="330" height="274.7" fill="url(#c21)"/>
       <g stroke="#fff" stroke-opacity="0.45" stroke-width="10">
         <line x1="620" y1="100" x2="620" y2="924"/>
-        <line x1="290" y1="512" x2="950" y2="512"/>
+        <line x1="290" y1="374.7" x2="950" y2="374.7"/>
+        <line x1="290" y1="649.3" x2="950" y2="649.3"/>
       </g>
     </g>
     <rect x="290" y="100" width="660" height="824" rx="84" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="4"/>
   </g>
-  <!-- 앞 타일(왼쪽 아래, 작게)과 T -->
+  <!-- 앞 타일과 T -->
   <g filter="url(#sh)">
-    <rect x="74" y="436" width="420" height="420" rx="78" fill="url(#front)"/>
-    <rect x="77" y="439" width="414" height="414" rx="75" fill="none" stroke="url(#rim)" stroke-width="6"/>
+    <rect x="90" y="439" width="420" height="420" rx="78" fill="url(#front)"/>
+    <rect x="93" y="442" width="414" height="414" rx="75" fill="none" stroke="url(#rim)" stroke-width="6"/>
   </g>
-  <path d="M170 540 H398 V594 H312 V760 H256 V594 H170 Z" fill="#ffffff"/>
+  <path d="M186 539 H414 V595 H328 V759 H272 V595 H186 Z" fill="#ffffff"/>
 </svg>
