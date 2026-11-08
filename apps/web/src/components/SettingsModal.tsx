@@ -33,7 +33,7 @@ import { appState, removeAlias, updateState } from '../stores/state';
 import { useStore } from '../stores/store';
 import { showToast, ui } from '../stores/ui';
 import { openPatchNotes } from './PatchNotes';
-import { checkUpdate, refreshUpdateState, updateState as appUpdate, wantPrerelease } from '../stores/update';
+import { checkUpdate, installUpdate, refreshUpdateState, updateNow, updateState as appUpdate, wantPrerelease } from '../stores/update';
 
 const SECTIONS = [
   ['general', '일반'],
@@ -1095,14 +1095,22 @@ function UpdateSection() {
   };
   const install = async () => {
     setBusy(true);
-    const r = await bridge.install();
+    const r = await installUpdate();
     setBusy(false);
     if (!r.ok) setMsg({ ok: false, text: r.message ?? '설치를 시작하지 못했어요' });
-    else setMsg({ ok: true, text: r.message ?? '설치 프로그램을 열었어요. 앱은 곧 닫혀요' });
+    else setMsg({ ok: true, text: r.message ?? '설치하고 다시 켜요. 앱은 곧 닫혀요' });
+  };
+  // 단추 한 번에 받기 → 설치하고 다시 시작(앱이 알아서 설치할 수 있을 때)
+  const oneClick = async () => {
+    setBusy(true);
+    setMsg(null);
+    const r = await updateNow();
+    setBusy(false);
+    if (!r.ok) setMsg({ ok: false, text: r.message ?? '업데이트하지 못했어요' });
   };
   const info = st?.info;
   const pct = info && st?.received !== undefined && info.asset.size ? Math.min(100, (st.received / info.asset.size) * 100) : 0;
-  const installLabel = st?.target === 'mac-arm64' ? 'dmg 열기' : st?.target === 'win-portable' ? '새 버전 실행(이 창은 닫혀요)' : '설치하기(앱이 닫혀요)';
+  const installLabel = st?.autoInstall ? (st.target === 'win-portable' ? '새 버전 실행(이 창은 닫혀요)' : '다시 시작해서 업데이트') : '설치 파일 열기';
   return (
     <>
       <h3>업데이트</h3>
@@ -1139,9 +1147,15 @@ function UpdateSection() {
           </div>
           {st.phase === 'available' && (
             <div className="update-actions">
-              <button className="btn primary" disabled={busy || st.devBuild} onClick={() => void bridge.download().then((s) => s && appUpdate.set(s))}>
-                받기
-              </button>
+              {st.autoInstall ? (
+                <button className="btn primary" disabled={busy || st.devBuild} onClick={() => void oneClick()}>
+                  업데이트하고 다시 시작
+                </button>
+              ) : (
+                <button className="btn primary" disabled={busy || st.devBuild} onClick={() => void bridge.download().then((s) => s && appUpdate.set(s))}>
+                  받기
+                </button>
+              )}
               <button className="btn" onClick={() => void updateSettings({ updates: { skipped: info.version } }).then(() => setMsg({ ok: true, text: `v${info.version}은 알림을 띄우지 않아요(여기서는 계속 받을 수 있어요)` }))}>
                 이 버전 건너뛰기
               </button>
@@ -1171,10 +1185,13 @@ function UpdateSection() {
       {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p>}
       <p className="note">
         {st?.target === 'mac-arm64'
-          ? 'Mac은 서명하지 않은 앱이라 자동으로 바꿔 끼우지 못해요. 받은 dmg를 열면 TICKER를 끄고 새 TICKER를 응용 프로그램 폴더로 끌어 덮어써요. 앱이 받은 파일이라 "손상되었기 때문에" 경고는 뜨지 않아요.'
+          ? st.autoInstall || !st.info
+            ? '받은 뒤 앱을 닫고 응용 프로그램 폴더의 TICKER를 새 버전으로 바꿔 끼운 다음 다시 켜요. 처음 켤 때 키체인 허용을 한 번 더 물을 수 있어요.'
+            : '응용 프로그램 폴더 밖(dmg 안 등)에서 켰거나 예전 릴리스라 자동으로 바꿔 끼우지 못해요. 받은 설치 파일을 열면 TICKER를 끄고 응용 프로그램 폴더로 끌어 덮어써요.'
           : st?.target === 'win-portable'
             ? '휴대용은 새 휴대용 파일을 지금 파일 옆에 받아 실행해요. 예전 파일은 지워도 돼요.'
-            : '설치 프로그램을 받아 실행하고 앱을 닫아요. 설치 마지막 화면에서 TICKER 실행을 고르면 다시 켜져요. 설정·키·화면 배치는 그대로예요.'}{' '}
+            : '받은 뒤 앱을 닫고 창 없이 설치한 다음 다시 켜요. 설정·키·화면 배치는 그대로예요.'}{' '}
+        자동 확인이 켜져 있으면 새 버전을 뒤에서 받아 두고, 다 받으면 다시 시작해서 업데이트할지 알림으로 물어요.{' '}
         새 버전은 이 앱의 GitHub 저장소 릴리스에서만 받고, GitHub가 알려 준 파일 지문과 맞는지 확인해요.
       </p>
     </>

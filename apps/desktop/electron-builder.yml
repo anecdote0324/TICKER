@@ -34,6 +34,9 @@ mac:
   target:
     - target: dmg
       arch: [arm64]
+    # 앱 안 업데이트용: 앱이 이 zip을 받아 풀고 TICKER.app을 바꿔 끼워요(apps/desktop/src/update.ts)
+    - target: zip
+      arch: [arm64]
   category: public.app-category.finance
   # 개인용이라 코드 서명은 하지 않아요(01 설치 파일과 서명)
   identity: null

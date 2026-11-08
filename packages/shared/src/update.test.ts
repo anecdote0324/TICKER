@@ -44,6 +44,11 @@ describe('pickUpdate', () => {
   it('이미 최신이면 없어요', () => {
     expect(pickUpdate(list, '0.5.0-beta.2', 'win-setup', true)).toBeUndefined();
   });
+  it('Mac은 zip을 먼저, 없으면 dmg', () => {
+    const r = rel('v0.6.0-beta.1', true, ['TICKER-0.6.0-beta.1-arm64.dmg', 'TICKER-0.6.0-beta.1-arm64-mac.zip']);
+    expect(assetFor(r, 'mac-arm64')?.name).toBe('TICKER-0.6.0-beta.1-arm64-mac.zip');
+    expect(assetFor(list[1], 'mac-arm64')?.name).toBe('TICKER-0.5.0-beta.1-arm64.dmg');
+  });
   it('파일 고르기와 주소 확인', () => {
     expect(assetFor(list[0], 'win-setup')?.name).toContain('Setup');
     expect(isReleaseAssetUrl('https://github.com/anecdote0324/TICKER/releases/download/v1/a.exe')).toBe(true);

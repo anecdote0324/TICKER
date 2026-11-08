@@ -31,9 +31,56 @@ export async function checkUpdate(manual: boolean): Promise<UpdateState | null> 
   const s = (await u.check(wantPrerelease(cur))) ?? null;
   updateState.set(s);
   if (!manual && s?.phase === 'available' && s.info && s.info.version !== settings.get().updates?.skipped) {
-    showToast(`새 버전 v${s.info.version}이 있어요(지금 v${s.current})`, { label: '업데이트', run: () => openSettings('about') }, 15_000);
+    if (s.autoInstall && !s.devBuild) {
+      // 보통 프로그램처럼 뒤에서 받아 두고, 다 받으면 다시 시작해서 업데이트할지 물어요
+      void downloadInBackground();
+    } else {
+      showToast(`새 버전 v${s.info.version}이 있어요(지금 v${s.current})`, { label: '업데이트', run: () => openSettings('about') }, 15_000);
+    }
   }
   return s;
+}
+
+/** 받기가 끝날 때까지 0.5초마다 상태를 물어요 */
+async function waitDownloaded(): Promise<UpdateState | null> {
+  for (;;) {
+    const s = await refreshUpdateState();
+    if (!s || s.phase !== 'downloading') return s;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+async function downloadInBackground() {
+  const u = window.btBridge?.update;
+  if (!u) return;
+  updateState.set((await u.download()) ?? null);
+  const s = await waitDownloaded();
+  if (s?.phase === 'ready' && s.info) {
+    showToast(`v${s.info.version} 업데이트를 받았어요. 다시 시작하면 설치돼요`, { label: '다시 시작해서 업데이트', run: () => void installUpdate() }, 60_000);
+  }
+}
+
+/** 설치 시작(받은 뒤). 앱이 알아서 설치하고 다시 켜면 곧 닫혀요 */
+export async function installUpdate(): Promise<{ ok: boolean; message?: string }> {
+  const u = window.btBridge?.update;
+  if (!u) return { ok: false, message: '데스크톱 앱에서만 돼요' };
+  const r = await u.install();
+  if (r.ok && r.quit) showToast('업데이트를 설치하고 다시 켜요…', undefined, 30_000);
+  else if (r.message) showToast(r.message, undefined, 15_000);
+  return r;
+}
+
+/** 단추 한 번: 받기 → (다 받으면) 설치하고 다시 시작 */
+export async function updateNow(): Promise<{ ok: boolean; message?: string }> {
+  const u = window.btBridge?.update;
+  if (!u) return { ok: false, message: '데스크톱 앱에서만 돼요' };
+  let s = updateState.get();
+  if (s?.phase === 'available') {
+    updateState.set((await u.download()) ?? null);
+    s = await waitDownloaded();
+  } else if (s?.phase === 'downloading') s = await waitDownloaded();
+  if (s?.phase !== 'ready') return { ok: false, message: s?.message ?? '업데이트를 받지 못했어요' };
+  return installUpdate();
 }
 
 /** 앱 전체에서 한 번: 자동 확인 */

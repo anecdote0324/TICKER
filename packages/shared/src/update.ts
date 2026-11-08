@@ -71,10 +71,11 @@ export function isPrerelease(v: string): boolean {
 
 /** 릴리스의 파일 중 이 컴퓨터에 맞는 설치 파일(이름은 electron-builder가 만든 모양) */
 export function assetFor(release: GithubRelease, target: UpdateTarget): ReleaseAsset | undefined {
-  const test: Record<UpdateTarget, (n: string) => boolean> = {
+  // Mac은 앱이 스스로 바꿔 끼울 수 있는 zip을 먼저, 없으면(예전 릴리스) dmg
+  if (target === 'mac-arm64') return release.assets.find((a) => /arm64(-mac)?\.zip$/i.test(a.name)) ?? release.assets.find((a) => /arm64\.dmg$/i.test(a.name));
+  const test: Record<Exclude<UpdateTarget, 'mac-arm64'>, (n: string) => boolean> = {
     'win-setup': (n) => /setup.*\.exe$/i.test(n),
     'win-portable': (n) => /\.exe$/i.test(n) && !/setup/i.test(n) && !/uninstall/i.test(n),
-    'mac-arm64': (n) => /arm64\.dmg$/i.test(n),
   };
   return release.assets.find((a) => test[target](a.name));
 }
@@ -127,4 +128,6 @@ export interface UpdateState {
   checkedAt?: number;
   /** 개발판(설치 파일로 깐 앱이 아님): 확인만 하고 받지 않아요 */
   devBuild?: boolean;
+  /** 받은 뒤 앱이 알아서 설치하고 다시 켤 수 있는지(Windows 설치형, Mac zip + 응용 프로그램 폴더에 깐 앱) */
+  autoInstall?: boolean;
 }
