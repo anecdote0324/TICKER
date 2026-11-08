@@ -172,9 +172,10 @@ button {
 .screen-tabs .stab-name {
   padding: 0 4px 0 12px;
   max-width: 180px;
-  min-width: 40px;
+  /* 이름은 아예 안 보일 때까지 줄어요(탭에 마우스를 올리면 이름이 떠요). 누를 자리는 남아요 */
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 .screen-tabs .stab-x {
   width: 20px;
@@ -3063,7 +3064,54 @@ button {
   border-top: 1px solid #222;
 }
 
-/* 화면 탭을 다 줄여도 시계 자리가 모자라면 날짜를 먼저 숨겨요(TopBar.tsx useHideDate) */
+/* 탭 이름을 다 줄여도 자리가 모자라면 탭의 떼어내기·닫기 단추를 숨겨요(오른쪽 클릭 메뉴로 대신, TopBar.tsx useTopFit) */
+.screen-tabs.bare .stab-x {
+  display: none;
+}
+.screen-tabs.bare .stab-name {
+  padding: 0 4px;
+}
+/* 화면 탭 오른쪽 클릭 메뉴 */
+.stab-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 170px;
+  background: #121212;
+  border: 1px solid #333;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+.stab-menu-title {
+  padding: 4px 12px 6px;
+  color: var(--label);
+  font-size: 11px;
+  border-bottom: 1px solid #222;
+  margin-bottom: 4px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stab-menu button {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--value);
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.stab-menu button:hover:not(:disabled) {
+  background: var(--select);
+  color: var(--value-hi);
+}
+.stab-menu button:disabled {
+  color: #555;
+  cursor: default;
+}
+/* 화면 탭을 다 줄여도 시계 자리가 모자라면 날짜를 먼저 숨겨요(TopBar.tsx useTopFit) */
 .clocks.no-date > .clock-date {
   display: none;
 }
