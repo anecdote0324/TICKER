@@ -64,14 +64,18 @@ function useTopFit(tabCount: number) {
       for (let i = 0; i < items; i++) all += widths.current.get(i) ?? 0;
       const noDate = all - (widths.current.get(0) ?? 0) - 16;
       const seoulW = widths.current.get(1) ?? 0;
-      // 탭: 단추가 있을 때와 없을 때의 가장 좁은 너비
+      // 탭: 단추가 있을 때와 없을 때의 가장 좁은 너비(탭 테두리와 탭 사이 틈 포함)
+      const box = (t: HTMLElement) => {
+        const st = getComputedStyle(t);
+        return { border: (parseFloat(st.borderLeftWidth) || 0) + (parseFloat(st.borderRightWidth) || 0), margin: (parseFloat(st.marginLeft) || 0) + (parseFloat(st.marginRight) || 0) };
+      };
       let withIcons = 0;
       let bare = 0;
       for (const t of [...tabs.children] as HTMLElement[]) {
         const name = t.querySelector<HTMLElement>('.stab-name');
         if (!name) {
-          withIcons += t.offsetWidth;
-          bare += t.offsetWidth;
+          withIcons += t.offsetWidth + box(t).margin;
+          bare += t.offsetWidth + box(t).margin;
           continue;
         }
         let icons = 0;
@@ -82,33 +86,51 @@ function useTopFit(tabCount: number) {
           if (w > 0) iconW.current = Math.max(iconW.current, w);
           icons++;
         }
-        const min = TAB_NAME_MIN + icons * iconW.current;
-        withIcons += min;
-        bare += TAB_BARE_MIN;
+        const b = box(t);
+        withIcons += TAB_NAME_MIN + icons * iconW.current + b.border + b.margin;
+        bare += TAB_BARE_MIN + b.border + b.margin;
       }
       const cs = getComputedStyle(header);
       const gap = parseFloat(cs.columnGap) || 0;
       let others = 0;
       for (const k of kids) if (k !== tabs && k !== clocks) others += k.offsetWidth;
       const room = header.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - gap * (kids.length - 1) - others;
+      // 서울부터 몇 개의 시계가 들어가는지
+      const fitCount = (space: number) => {
+        let n = 0;
+        let used = 0;
+        for (let i = 1; i < items; i++) {
+          const w = (widths.current.get(i) ?? 0) + (used ? 16 : 0);
+          if (used + w > space) break;
+          used += w;
+          n++;
+        }
+        return n;
+      };
       let next: TopFit;
       if (room - withIcons >= all) next = { clocks: 'none', bareTabs: false };
-      else if (room - withIcons >= noDate) next = { clocks: 'date', bareTabs: false };
-      else if (room - bare >= seoulW) next = { clocks: 'date', bareTabs: true };
-      else next = { clocks: 'all', bareTabs: true };
+      else {
+        // 단추를 숨겨야 시계가 더 들어갈 때만 숨겨요(어차피 숨길 시계라면 단추는 남겨요)
+        const kIcons = fitCount(room - withIcons);
+        const kBare = fitCount(room - bare);
+        const bareTabs = kBare > kIcons;
+        const k = bareTabs ? kBare : kIcons;
+        next = { clocks: k === 0 ? 'all' : 'date', bareTabs };
+      }
       // 탭마다·탭 칸의 가장 좁은 너비
       const nameMin = next.bareTabs ? TAB_BARE_MIN : TAB_NAME_MIN;
       let tabsMin = 0;
       for (const t of [...tabs.children] as HTMLElement[]) {
         const name = t.querySelector<HTMLElement>('.stab-name');
         if (!name) {
-          tabsMin += t.offsetWidth;
+          tabsMin += t.offsetWidth + box(t).margin;
           continue;
         }
         const icons = next.bareTabs ? 0 : [...t.children].filter((c) => c !== name).length;
-        const min = nameMin + icons * iconW.current;
+        const b = box(t);
+        const min = nameMin + icons * iconW.current + b.border;
         if (t.style.minWidth !== `${min}px`) t.style.minWidth = `${min}px`;
-        tabsMin += min;
+        tabsMin += min + b.margin;
       }
       if (tabs.style.minWidth !== `${tabsMin}px`) tabs.style.minWidth = `${tabsMin}px`;
       // 시계 칸은 들어갈 수 있는 시계만큼은 줄지 않게 해요(그래야 탭이 먼저 줄어요). 날짜를 숨겼으면 서울부터 셉니다
@@ -123,6 +145,9 @@ function useTopFit(tabCount: number) {
       }
       const clocksMin = next.clocks === 'all' || keep === 0 ? 0 : Math.ceil(used);
       if (clocks.style.minWidth !== `${clocksMin}px`) clocks.style.minWidth = `${clocksMin}px`;
+      // 보이는 시계만큼만 차지해요(숨긴 시계 자리가 비어 남지 않게). 남는 자리는 탭과 패널 추가 단추 사이로 가요
+      const clocksMax = `${clocksMin}px`;
+      if (clocks.style.maxWidth !== clocksMax) clocks.style.maxWidth = clocksMax;
       setFit((f) => (f.clocks === next.clocks && f.bareTabs === next.bareTabs ? f : next));
     };
     check();
@@ -307,7 +332,7 @@ export function TopBar(props: {
           </button>
         </div>
       )}
-      <button className="btn" style={{ height: 20, padding: '0 8px', fontSize: 11 }} onClick={props.onAddPanel} title="활성 패널 옆에 새 패널">
+      <button className="btn add-panel" style={{ height: 20, padding: '0 8px', fontSize: 11 }} onClick={props.onAddPanel} title="활성 패널 옆에 새 패널">
         패널 추가
       </button>
       {props.workspaceMenu}
