@@ -53,6 +53,12 @@ export interface Settings {
     /** 짧은 소리 */
     sound: boolean;
   };
+  /** 앱 업데이트(데스크톱): 켤 때·6시간마다 새 버전 확인, 미리 보기 버전도 받을지(없으면 지금 버전이 미리 보기일 때만), 건너뛴 버전 */
+  updates?: {
+    autoCheck: boolean;
+    prerelease?: boolean;
+    skipped?: string;
+  };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -71,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   data: { fxIntervalSec: 60 },
   keys: {},
   alerts: { system: true, sound: true },
+  updates: { autoCheck: true },
 };
 
 /** 비밀 정보 입력 상태. 값 자체는 화면으로 돌려보내지 않아요 */

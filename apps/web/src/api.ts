@@ -1,5 +1,7 @@
 // 내장 서버와 통신. 토큰은 Electron이 preload로 넘겨 주거나(배포판), 개발 중에는 주소의 #token= 으로 받아요.
 
+import type { UpdateState } from '@bt/shared';
+
 declare global {
   interface Window {
     btBridge?: {
@@ -14,6 +16,14 @@ declare global {
       /** GRAB(v0.5): 이 창의 영역(CSS 픽셀)을 찍어 클립보드에. 마지막 캡처를 파일로 저장 */
       capture?(name: string, rect: { x: number; y: number; width: number; height: number }): Promise<{ ok: boolean; message?: string }>;
       saveCapture?(fileName: string): Promise<{ ok: boolean; path?: string; message?: string }>;
+      /** 앱 업데이트(데스크톱) */
+      update?: {
+        state(): Promise<UpdateState | undefined>;
+        check(prerelease: boolean): Promise<UpdateState | undefined>;
+        download(): Promise<UpdateState | undefined>;
+        install(): Promise<{ ok: boolean; quit?: boolean; message?: string }>;
+        reveal(): Promise<void>;
+      };
     };
   }
 }

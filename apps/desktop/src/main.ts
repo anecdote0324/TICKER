@@ -7,6 +7,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, safeStorage, screen, shell, type MenuItemConstructorOptions, type Rectangle } from 'electron';
 import { startServer, type RunningServer, type SecretBox } from '@bt/server';
+import { Updater } from './update';
 
 // 데이터 폴더 이름을 개발판과 배포판에서 같게(Windows %APPDATA%\TICKER, Mac ~/Library/Application Support/TICKER)
 app.setName('TICKER');
@@ -300,6 +301,22 @@ ipcMain.handle('bt:save-capture', async (event, fileName: unknown) => {
   if (res.canceled || !res.filePath) return { ok: false };
   writeFileSync(res.filePath, lastCapture.toPNG());
   return { ok: true, path: res.filePath };
+});
+
+// 앱 업데이트: 공개 저장소의 릴리스에서 새 버전 확인·받기·설치 시작(update.ts)
+let updater: Updater | undefined;
+const getUpdater = () => (updater ??= new Updater((msg) => server?.log.info(msg) ?? console.log(msg)));
+const fromApp = (event: Electron.IpcMainInvokeEvent) => !!server && (event.senderFrame?.url ?? '').startsWith(server.url);
+ipcMain.handle('bt:update-state', (event) => (fromApp(event) ? getUpdater().get() : undefined));
+ipcMain.handle('bt:update-check', (event, prerelease: unknown) => (fromApp(event) ? getUpdater().check(prerelease === true) : undefined));
+ipcMain.handle('bt:update-download', (event) => (fromApp(event) ? getUpdater().download() : undefined));
+ipcMain.handle('bt:update-reveal', (event) => (fromApp(event) ? getUpdater().reveal() : undefined));
+ipcMain.handle('bt:update-install', async (event) => {
+  if (!fromApp(event)) return { ok: false, message: '허용하지 않는 화면이에요' };
+  const r = await getUpdater().install();
+  // 설치 프로그램이 실행된 뒤 앱을 닫아요(저장할 것은 before-quit에서 저장)
+  if (r.quit) setTimeout(() => app.quit(), 800);
+  return r;
 });
 
 ipcMain.on('bt:open-external', (_e, url: unknown) => {

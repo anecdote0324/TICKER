@@ -11,6 +11,7 @@ import { ScreenWindow, ScreenWindowBar } from './components/ScreenWindow';
 import { addPanel, dockApis, Workspace, type ScreenLayout } from './components/Workspace';
 import { WorkspaceMenu } from './components/WorkspaceMenu';
 import { AlertWatcher } from './components/AlertWatcher';
+import { useUpdateWatcher } from './stores/update';
 import { buildWorkspaceFile, mergeWatchlists, mergeWorkspaces, parseWorkspaceFile, workspaceFileName } from './workspaceFile';
 import { attachGlobalKeys } from './keys';
 import { focusRegistry } from './components/focus';
@@ -51,6 +52,8 @@ const DEFAULT_WORKSPACE: SavedWorkspace = {
 };
 
 export function App() {
+  // 앱 업데이트 자동 확인(데스크톱)
+  useUpdateWatcher();
   const saved = useRef<SavedWorkspace | null>(null);
   if (saved.current === null) {
     saved.current = loadSaved() ?? DEFAULT_WORKSPACE;

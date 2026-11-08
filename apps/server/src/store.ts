@@ -106,7 +106,7 @@ export class Store {
   }
 
   async setSettings(patch: Partial<Settings>): Promise<Settings> {
-    this.settings = mergeSettings({ ...this.settings, ...patch, general: { ...this.settings.general, ...patch.general }, display: { ...this.settings.display, ...patch.display }, commandLine: { ...this.settings.commandLine, ...patch.commandLine }, data: { ...this.settings.data, ...patch.data }, keys: patch.keys ?? this.settings.keys, alerts: { ...DEFAULT_SETTINGS.alerts!, ...this.settings.alerts, ...patch.alerts } });
+    this.settings = mergeSettings({ ...this.settings, ...patch, general: { ...this.settings.general, ...patch.general }, display: { ...this.settings.display, ...patch.display }, commandLine: { ...this.settings.commandLine, ...patch.commandLine }, data: { ...this.settings.data, ...patch.data }, keys: patch.keys ?? this.settings.keys, alerts: { ...DEFAULT_SETTINGS.alerts!, ...this.settings.alerts, ...patch.alerts }, updates: { ...DEFAULT_SETTINGS.updates!, ...this.settings.updates, ...patch.updates } });
     await this.writeJson('settings.json', { ...this.settings, schema: SETTINGS_SCHEMA });
     return this.settings;
   }
@@ -149,5 +149,6 @@ function mergeSettings(s: Partial<Settings>): Settings {
     data: { ...d.data, ...s.data },
     keys: { ...d.keys, ...s.keys },
     alerts: { ...d.alerts!, ...s.alerts },
+    updates: { ...d.updates!, ...s.updates },
   };
 }

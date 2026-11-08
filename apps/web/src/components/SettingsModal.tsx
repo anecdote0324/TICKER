@@ -32,6 +32,7 @@ import { FUNCTION_SLOT_COST, kisSlots } from '../stores/slots';
 import { appState, removeAlias, updateState } from '../stores/state';
 import { useStore } from '../stores/store';
 import { showToast, ui } from '../stores/ui';
+import { checkUpdate, refreshUpdateState, updateState as appUpdate, wantPrerelease } from '../stores/update';
 
 const SECTIONS = [
   ['general', '일반'],
@@ -1058,6 +1059,127 @@ function Diagnostics() {
   );
 }
 
+const mb = (n: number | undefined) => (n === undefined ? '—' : `${(n / 1048576).toFixed(1)}MB`);
+
+/** 앱 업데이트(데스크톱): 공개 GitHub 저장소의 릴리스에서 새 버전을 받아 설치를 시작해요 */
+function UpdateSection() {
+  const st = useStore(appUpdate);
+  const prefs = useStore(settings, (s) => s.updates ?? { autoCheck: true });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const bridge = window.btBridge?.update;
+  useEffect(() => {
+    if (bridge) void refreshUpdateState();
+  }, [bridge]);
+  // 받는 동안은 0.5초마다 진행 상황을 물어요
+  useEffect(() => {
+    if (st?.phase !== 'downloading') return;
+    const t = window.setInterval(() => void refreshUpdateState(), 500);
+    return () => window.clearInterval(t);
+  }, [st?.phase]);
+  if (!bridge) {
+    return (
+      <>
+        <h3>업데이트</h3>
+        <p className="note">업데이트는 데스크톱 앱에서 돼요(브라우저로 연 개발용 화면에서는 안 돼요).</p>
+      </>
+    );
+  }
+  const pre = wantPrerelease(st?.current);
+  const check = async () => {
+    setBusy(true);
+    setMsg(null);
+    await checkUpdate(true);
+    setBusy(false);
+  };
+  const install = async () => {
+    setBusy(true);
+    const r = await bridge.install();
+    setBusy(false);
+    if (!r.ok) setMsg({ ok: false, text: r.message ?? '설치를 시작하지 못했어요' });
+    else setMsg({ ok: true, text: r.message ?? '설치 프로그램을 열었어요. 앱은 곧 닫혀요' });
+  };
+  const info = st?.info;
+  const pct = info && st?.received !== undefined && info.asset.size ? Math.min(100, (st.received / info.asset.size) * 100) : 0;
+  const installLabel = st?.target === 'mac-arm64' ? 'dmg 열기' : st?.target === 'win-portable' ? '새 버전 실행(이 창은 닫혀요)' : '설치하기(앱이 닫혀요)';
+  return (
+    <>
+      <h3>업데이트</h3>
+      <div className="field">
+        <label>새 버전 확인</label>
+        <button className="btn" disabled={busy || st?.phase === 'checking' || st?.phase === 'downloading' || st?.phase === 'unsupported'} onClick={() => void check()}>
+          {st?.phase === 'checking' ? '확인하는 중…' : '지금 확인'}
+        </button>
+        {st?.checkedAt && <span className="label">{`마지막 확인 ${new Date(st.checkedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`}</span>}
+      </div>
+      <div className="field">
+        <label>자동 확인</label>
+        <Toggle on={prefs.autoCheck} onChange={(v) => void updateSettings({ updates: { autoCheck: v } })} label="켤 때와 6시간마다 확인" />
+        <span className="label">켤 때와 6시간마다 확인하고, 새 버전이 있으면 알려 줘요</span>
+      </div>
+      <div className="field">
+        <label>미리 보기 버전</label>
+        <Toggle on={pre} onChange={(v) => void updateSettings({ updates: { prerelease: v } })} label="미리 보기 버전도 받기" />
+        <span className="label">{pre ? '시험 중인 미리 보기(Pre-release)도 받아요' : '정식 버전만 받아요'}</span>
+      </div>
+      {st?.phase === 'none' && <p className="okmsg">{`지금 버전 v${st.current}이 가장 새 버전이에요${pre ? '' : '(정식 기준)'}`}</p>}
+      {(st?.phase === 'error' || st?.phase === 'unsupported') && <p className="err">{st.message}</p>}
+      {info && (st?.phase === 'available' || st?.phase === 'downloading' || st?.phase === 'ready') && (
+        <div className="update-box">
+          <div>
+            <b>{`새 버전 v${info.version}`}</b>
+            {info.prerelease && <span className="label"> 미리 보기</span>}
+            {info.publishedAt && <span className="label">{` · ${info.publishedAt.slice(0, 10)}`}</span>}
+            <span className="label">{` · ${info.asset.name} ${mb(info.asset.size)}`}</span>
+            {' '}
+            <button className="linkish" onClick={() => window.btBridge?.openExternal(info.pageUrl)}>
+              바뀐 내용 보기
+            </button>
+          </div>
+          {st.phase === 'available' && (
+            <div className="update-actions">
+              <button className="btn primary" disabled={busy || st.devBuild} onClick={() => void bridge.download().then((s) => s && appUpdate.set(s))}>
+                받기
+              </button>
+              <button className="btn" onClick={() => void updateSettings({ updates: { skipped: info.version } }).then(() => setMsg({ ok: true, text: `v${info.version}은 알림을 띄우지 않아요(여기서는 계속 받을 수 있어요)` }))}>
+                이 버전 건너뛰기
+              </button>
+              {st.devBuild && <span className="label">개발판이라 받지 않아요</span>}
+              {st.message && <span className="err">{st.message}</span>}
+            </div>
+          )}
+          {st.phase === 'downloading' && (
+            <div className="update-progress" aria-label="받는 중">
+              <span style={{ width: `${pct}%` }} />
+              <em>{`받는 중 ${pct.toFixed(0)}% (${mb(st.received)} / ${mb(info.asset.size)})`}</em>
+            </div>
+          )}
+          {st.phase === 'ready' && (
+            <div className="update-actions">
+              <button className="btn primary" disabled={busy} onClick={() => void install()}>
+                {installLabel}
+              </button>
+              <button className="btn" onClick={() => void bridge.reveal()}>
+                받은 파일 보기
+              </button>
+              <span className="label">{info.asset.sha256 ? '파일 지문(SHA-256) 확인됨' : '크기 확인됨'}</span>
+            </div>
+          )}
+        </div>
+      )}
+      {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p>}
+      <p className="note">
+        {st?.target === 'mac-arm64'
+          ? 'Mac은 서명하지 않은 앱이라 자동으로 바꿔 끼우지 못해요. 받은 dmg를 열면 TICKER를 끄고 새 TICKER를 응용 프로그램 폴더로 끌어 덮어써요. 앱이 받은 파일이라 "손상되었기 때문에" 경고는 뜨지 않아요.'
+          : st?.target === 'win-portable'
+            ? '휴대용은 새 휴대용 파일을 지금 파일 옆에 받아 실행해요. 예전 파일은 지워도 돼요.'
+            : '설치 프로그램을 받아 실행하고 앱을 닫아요. 설치 마지막 화면에서 TICKER 실행을 고르면 다시 켜져요. 설정·키·화면 배치는 그대로예요.'}{' '}
+        새 버전은 이 앱의 GitHub 저장소 릴리스에서만 받고, GitHub가 알려 준 파일 지문과 맞는지 확인해요.
+      </p>
+    </>
+  );
+}
+
 function About() {
   const [info, setInfo] = useState<{ version: string } | null>(null);
   useEffect(() => {
@@ -1070,6 +1192,7 @@ function About() {
         <label>앱 버전</label>
         <span className="mono">{window.btBridge?.version ?? info?.version ?? '—'}</span>
       </div>
+      <UpdateSection />
       <p className="note">나 혼자 쓰는 개인용 터미널이에요. 시세를 다른 사람에게 보여주거나 재배포하지 않아요.</p>
       <h3>데이터 출처</h3>
       <p className="note">
