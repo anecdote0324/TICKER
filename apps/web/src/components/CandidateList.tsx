@@ -1,5 +1,6 @@
 // 후보 목록과 설명 창(05 §4.5, §4.6)
 
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Analysis, Range, Row } from '@bt/command';
 import { ASSET_LABEL, FUNCTIONS, MARKET_LABEL, versionLabel, type AssistLevel, type Instrument } from '@bt/shared';
@@ -61,9 +62,18 @@ export function CandidateList(p: Props) {
   const rows = a.rows;
   const win = p.doc.defaultView!;
   const below = win.innerHeight - p.anchor.bottom;
-  const up = below < 260 && p.anchor.top > below;
+  // 아래 자리가 목록(최대 400px)보다 좁고 위가 더 넓으면 위로 열어요
+  const need = Math.min(400, rows.length * 24 + 30);
+  const up = below < Math.max(260, need) && p.anchor.top > below;
   const left = Math.max(4, Math.min(p.anchor.left, win.innerWidth - 380));
-  const style: React.CSSProperties = up ? { left, bottom: win.innerHeight - p.anchor.top + 2 } : { left, top: p.anchor.bottom + 2 };
+  // 목록이 창 밖으로 나가지 않게 남은 높이까지만 쓰고, 넘치면 목록 안에서 스크롤해요(F1 기능 목록처럼 긴 목록)
+  const room = Math.max(120, (up ? p.anchor.top : win.innerHeight - p.anchor.bottom) - 10);
+  const style: React.CSSProperties = up ? { left, bottom: win.innerHeight - p.anchor.top + 2, maxHeight: room } : { left, top: p.anchor.bottom + 2, maxHeight: room };
+  const listRef = useRef<HTMLDivElement>(null);
+  // 키보드로 고른 줄이 늘 보이게
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(`#ac-${p.highlight}`)?.scrollIntoView({ block: 'nearest' });
+  }, [p.highlight, rows]);
   const showDescPane = p.showDesc === 'card' || p.showDesc === 'syntax' || (p.showDesc === 'auto' && assist === 'beginner' && win.innerWidth - left - 720 > 280);
   const hl = rows[p.highlight];
   const full = assist === 'beginner' || assist === 'standard';
@@ -71,7 +81,7 @@ export function CandidateList(p: Props) {
 
   return createPortal(
     <div className="ac" style={style} onMouseDown={(e) => e.preventDefault()}>
-      <div className="ac-list" role="listbox" id="ac-list">
+      <div className="ac-list" role="listbox" id="ac-list" ref={listRef} style={{ maxHeight: room }}>
         {rows.map((row, i) =>
           row.kind === 'header' ? (
             <div key={row.id} className="ac-row hdr">

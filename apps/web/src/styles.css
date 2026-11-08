@@ -791,12 +791,15 @@ button {
   position: fixed;
   z-index: 900;
   display: flex;
+  align-items: flex-start;
   gap: 2px;
   font-size: 12px;
 }
 .ac-list {
   min-width: 360px;
   max-width: 720px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: #121212;
   border: 1px solid #333;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
@@ -939,6 +942,9 @@ button {
 }
 .ac-desc {
   width: 280px;
+  /* 목록과 같은 높이 한도(.ac의 max-height) */
+  max-height: inherit;
+  overflow-y: auto;
   background: #121212;
   border: 1px solid #333;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
