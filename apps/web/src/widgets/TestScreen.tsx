@@ -20,16 +20,18 @@ const PHASE: Record<string, string> = {
   unsupported: '이 컴퓨터는 업데이트 파일이 없어요',
 };
 
-export function TestScreen({ panel: _panel }: { panel: PanelState }) {
+export function TestScreen({ panel }: { panel: PanelState }) {
+  // TEST22는 자동 설치(v0.5.0-beta.3부터) 시험용 두 번째 화면이에요
+  const second = panel.fn === 'TEST22';
   const st = useStore(updateState);
   const seen = useStore(settings, (s) => s.updates?.seen);
   const version = window.btBridge?.version;
   const latestNote = PATCH_NOTES[0];
   return (
     <>
-      <TitleBar fn="TEST" name="업데이트 시험" />
+      <TitleBar fn={second ? 'TEST22' : 'TEST'} name={second ? '업데이트 시험 2' : '업데이트 시험'} />
       <div className="pbody flow">
-        <div className="test-ok">이 화면이 보이면 TEST 기능이 들어간 버전으로 업데이트된 거예요.</div>
+        <div className="test-ok">{second ? '이 화면이 보이면 TEST22가 들어간 버전으로 자동 업데이트된 거예요.' : '이 화면이 보이면 TEST 기능이 들어간 버전으로 업데이트된 거예요.'}</div>
         <table className="flow-table test-table">
           <tbody>
             <tr>

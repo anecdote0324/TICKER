@@ -566,6 +566,9 @@ describe('TEST 업데이트 시험(v0.5)', () => {
   it('TEST⏎은 업데이트 시험 화면', () => {
     expect(run('TEST').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'TEST' } });
   });
+  it('TEST22⏎은 두 번째 업데이트 시험 화면', () => {
+    expect(run('TEST22').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'TEST22' } });
+  });
 });
 
 describe('FAVE·NOTE(v0.5)', () => {

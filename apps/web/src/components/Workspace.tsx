@@ -198,6 +198,7 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
     case 'FAVE':
       return <Fave panel={p} />;
     case 'TEST':
+    case 'TEST22':
       return <TestScreen panel={p} />;
     case 'NOTE':
       return <Note panel={p} />;
