@@ -33,19 +33,29 @@ const TAB_NAME_MIN = 16;
 /** 단추를 숨긴 탭의 가장 좁은 너비 */
 const TAB_BARE_MIN = 24;
 
-type TopFit = { clocks: 'none' | 'date' | 'all'; bareTabs: boolean };
+/** 시계 순서(화면)와 남기는 순서(사용자 결정: 서울·뉴욕이 1순위, 그다음 도쿄, 런던) */
+const CLOCK_ORDER = ['KRX', 'TSE', 'LSE', 'US'] as const;
+type ClockKey = (typeof CLOCK_ORDER)[number];
+const CLOCK_KEEP: ClockKey[] = ['KRX', 'US', 'TSE', 'LSE'];
+/** 시계 사이 간격: 보통·좁게 */
+const CLOCK_GAP = 12;
+const CLOCK_GAP_TIGHT = 8;
+
+type TopFit = { date: boolean; compact: boolean; shown: ClockKey[]; bareTabs: boolean };
 
 /**
  * 맨 위 줄이 좁을 때 무엇부터 줄일지(사용자 결정):
- * ① 화면 탭 이름(이름이 아예 안 보일 때까지, CSS flex-shrink) ② 날짜 ③ 탭의 떼어내기·닫기 단추(오른쪽 클릭 메뉴로 대신)
- * ④ 뒤쪽 시계(뉴욕→런던→도쿄, CSS 줄넘김) ⑤ 서울 시계도 다 안 들어가면 시계 칸을 비워요.
+ * ① 화면 탭 이름(이름이 아예 안 보일 때까지, CSS flex-shrink) ② 날짜 ③ 시계를 좁게(간격을 줄이고 서울 초를 빼요)
+ * ④ 탭의 떼어내기·닫기 단추(오른쪽 클릭 메뉴로 대신, 시계가 하나라도 더 들어갈 때만) ⑤ 시계를 런던→도쿄→뉴욕→서울 순서로 숨겨요.
+ * 시계 칸은 보이는 시계 너비만큼만 차지해서 패널 추가·워크스페이스 메뉴와 시계 사이에 빈자리가 남지 않아요.
  * 탭과 탭 칸의 가장 좁은 너비는 여기서 정해요(CSS min-content는 줄인 이름이 아니라 전체 이름 너비라서)
  */
 function useTopFit(tabCount: number) {
   const ref = useRef<HTMLElement>(null);
-  const widths = useRef(new Map<number, number>());
+  /** 시계마다 잰 너비(숨긴 것은 지난번 값), 날짜 너비, 서울 초 너비 */
+  const widths = useRef(new Map<string, number>());
   const iconW = useRef(0);
-  const [fit, setFit] = useState<TopFit>({ clocks: 'none', bareTabs: false });
+  const [fit, setFit] = useState<TopFit>({ date: true, compact: false, shown: [...CLOCK_ORDER], bareTabs: false });
   useLayoutEffect(() => {
     const header = ref.current;
     if (!header) return;
@@ -54,16 +64,37 @@ function useTopFit(tabCount: number) {
       const tabs = header.querySelector<HTMLElement>('.screen-tabs');
       const clocks = header.querySelector<HTMLElement>('.clocks');
       if (!tabs || !clocks) return;
-      // 시계 칸 각 항목의 너비(숨긴 것은 지난번에 잰 값)
-      [...clocks.children].forEach((c, i) => {
-        const w = (c as HTMLElement).offsetWidth;
-        if (w > 0) widths.current.set(i, w);
-      });
-      const items = clocks.children.length;
-      let all = 16 * Math.max(0, items - 1);
-      for (let i = 0; i < items; i++) all += widths.current.get(i) ?? 0;
-      const noDate = all - (widths.current.get(0) ?? 0) - 16;
-      const seoulW = widths.current.get(1) ?? 0;
+      // 보이는 것만 다시 재요(소수점까지)
+      for (const c of [...clocks.children] as HTMLElement[]) {
+        const key = c.dataset.clock;
+        const sec = c.querySelector<HTMLElement>('.clock-sec');
+        const sw = sec?.getBoundingClientRect().width ?? 0;
+        if (sw > 0) widths.current.set('sec', sw);
+        let w = c.getBoundingClientRect().width;
+        // 서울은 초를 뺀(좁게) 모양이면 초 너비를 더해 늘 '초 포함' 너비로 기억해요
+        if (sec?.hidden && w > 0) w += widths.current.get('sec') ?? 0;
+        if (key && w > 0) widths.current.set(key, w);
+      }
+      const W = (k: string) => widths.current.get(k) ?? 0;
+      /** 이 모양의 시계 칸 너비 */
+      const need = (date: boolean, compact: boolean, shown: ClockKey[]) => {
+        if (!shown.length) return 0;
+        const gap = compact ? CLOCK_GAP_TIGHT : CLOCK_GAP;
+        let w = shown.reduce((a, k) => a + W(k), 0) + gap * (shown.length - 1);
+        if (compact && shown.includes('KRX')) w -= W('sec');
+        if (date) w += W('date') + gap;
+        // 글꼴 반올림 여유
+        return Math.ceil(w + 2);
+      };
+      // 나은 것부터: 날짜+4개 → 4개 → 좁게 4개 → 좁게 3개(런던 빼고) → 2개 → 서울만 → 없음
+      const options: Array<Omit<TopFit, 'bareTabs'>> = [
+        { date: true, compact: false, shown: [...CLOCK_ORDER] },
+        { date: false, compact: false, shown: [...CLOCK_ORDER] },
+      ];
+      for (let n = CLOCK_KEEP.length; n >= 0; n--) {
+        const keep = new Set(CLOCK_KEEP.slice(0, n));
+        options.push({ date: false, compact: true, shown: CLOCK_ORDER.filter((k) => keep.has(k)) });
+      }
       // 탭: 단추가 있을 때와 없을 때의 가장 좁은 너비(탭 테두리와 탭 사이 틈 포함)
       const box = (t: HTMLElement) => {
         const st = getComputedStyle(t);
@@ -93,30 +124,17 @@ function useTopFit(tabCount: number) {
       const cs = getComputedStyle(header);
       const gap = parseFloat(cs.columnGap) || 0;
       let others = 0;
-      for (const k of kids) if (k !== tabs && k !== clocks) others += k.offsetWidth;
+      for (const k of kids) if (k !== tabs && k !== clocks) others += k.getBoundingClientRect().width;
       const room = header.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - gap * (kids.length - 1) - others;
-      // 서울부터 몇 개의 시계가 들어가는지
-      const fitCount = (space: number) => {
-        let n = 0;
-        let used = 0;
-        for (let i = 1; i < items; i++) {
-          const w = (widths.current.get(i) ?? 0) + (used ? 16 : 0);
-          if (used + w > space) break;
-          used += w;
-          n++;
-        }
-        return n;
+      const best = (space: number) => {
+        const i = options.findIndex((o) => need(o.date, o.compact, o.shown) <= space);
+        return i < 0 ? options.length - 1 : i;
       };
-      let next: TopFit;
-      if (room - withIcons >= all) next = { clocks: 'none', bareTabs: false };
-      else {
-        // 단추를 숨겨야 시계가 더 들어갈 때만 숨겨요(어차피 숨길 시계라면 단추는 남겨요)
-        const kIcons = fitCount(room - withIcons);
-        const kBare = fitCount(room - bare);
-        const bareTabs = kBare > kIcons;
-        const k = bareTabs ? kBare : kIcons;
-        next = { clocks: k === 0 ? 'all' : 'date', bareTabs };
-      }
+      const iIcons = best(room - withIcons);
+      const iBare = best(room - bare);
+      // 단추를 숨겨야 시계가 하나라도 더 들어갈 때만 숨겨요
+      const bareTabs = options[iBare].shown.length > options[iIcons].shown.length;
+      const next: TopFit = { ...options[bareTabs ? iBare : iIcons], bareTabs };
       // 탭마다·탭 칸의 가장 좁은 너비
       const nameMin = next.bareTabs ? TAB_BARE_MIN : TAB_NAME_MIN;
       let tabsMin = 0;
@@ -133,22 +151,10 @@ function useTopFit(tabCount: number) {
         tabsMin += min + b.margin;
       }
       if (tabs.style.minWidth !== `${tabsMin}px`) tabs.style.minWidth = `${tabsMin}px`;
-      // 시계 칸은 들어갈 수 있는 시계만큼은 줄지 않게 해요(그래야 탭이 먼저 줄어요). 날짜를 숨겼으면 서울부터 셉니다
-      const avail = room - tabsMin;
-      let keep = 0;
-      let used = 0;
-      for (let i = next.clocks === 'none' ? 0 : 1; i < items; i++) {
-        const w = (widths.current.get(i) ?? 0) + (used ? 16 : 0);
-        if (used + w > avail) break;
-        used += w;
-        keep++;
-      }
-      const clocksMin = next.clocks === 'all' || keep === 0 ? 0 : Math.ceil(used);
-      if (clocks.style.minWidth !== `${clocksMin}px`) clocks.style.minWidth = `${clocksMin}px`;
-      // 보이는 시계만큼만 차지해요(숨긴 시계 자리가 비어 남지 않게). 남는 자리는 탭과 패널 추가 단추 사이로 가요
-      const clocksMax = `${clocksMin}px`;
-      if (clocks.style.maxWidth !== clocksMax) clocks.style.maxWidth = clocksMax;
-      setFit((f) => (f.clocks === next.clocks && f.bareTabs === next.bareTabs ? f : next));
+      // 시계 칸은 보이는 시계 너비 그대로(줄지도 늘지도 않게). 남는 자리는 탭과 패널 추가 단추 사이로 가요
+      const cw = `${need(next.date, next.compact, next.shown)}px`;
+      if (clocks.style.width !== cw) clocks.style.width = cw;
+      setFit((f) => (f.date === next.date && f.compact === next.compact && f.bareTabs === next.bareTabs && f.shown.join() === next.shown.join() ? f : next));
     };
     check();
     const ro = new ResizeObserver(check);
@@ -336,11 +342,11 @@ export function TopBar(props: {
         패널 추가
       </button>
       {props.workspaceMenu}
-      <div className={`clocks ${fit.clocks === 'date' ? 'no-date' : fit.clocks === 'all' ? 'no-date no-clocks' : ''}`}>
-        <span className="label clock-date">
+      <div className={`clocks ${fit.compact ? 'tight' : ''}`}>
+        <span className="label clock-date" data-clock="date" hidden={!fit.date}>
           {seoul.year}.{pad(seoul.month)}.{pad(seoul.day)} ({DAYS[seoul.weekday]})
         </span>
-        {(['KRX', 'TSE', 'LSE', 'US'] as const).map((k, i) => {
+        {CLOCK_ORDER.map((k) => {
           const ex = EXCHANGES[k];
           const p = zonedParts(now, ex.timeZone);
           const s = sessionState(ex, now);
@@ -348,11 +354,11 @@ export function TopBar(props: {
           const hol = exchangeHoliday(ex, now);
           const holiday = hol && hol !== '주말' ? hol : undefined;
           return (
-            <span key={k} title={holiday ? `${ex.label} 휴장: ${holiday}` : undefined}>
+            <span key={k} data-clock={k} hidden={!fit.shown.includes(k)} title={holiday ? `${ex.label} 휴장: ${holiday}` : undefined}>
               <span className="label">{ex.city} </span>
               <span style={{ color: 'var(--value-hi)' }}>
                 {pad(p.hour)}:{pad(p.minute)}
-                {i === 0 ? `:${pad(p.second)}` : ''}
+                {k === 'KRX' && <span className="clock-sec" hidden={fit.compact}>{`:${pad(p.second)}`}</span>}
               </span>{' '}
               <span className={s === 'open' ? 'open' : 'label'}>{holiday ? '휴장' : SESSION_LABEL[s]}</span>
             </span>
