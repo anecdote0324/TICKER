@@ -45,8 +45,8 @@ type TopFit = { date: boolean; compact: boolean; shown: ClockKey[]; bareTabs: bo
 
 /**
  * 맨 위 줄이 좁을 때 무엇부터 줄일지(사용자 결정):
- * ① 화면 탭 이름(이름이 아예 안 보일 때까지, CSS flex-shrink) ② 날짜 ③ 시계를 좁게(간격을 줄이고 서울 초를 빼요)
- * ④ 탭의 떼어내기·닫기 단추(오른쪽 클릭 메뉴로 대신, 시계가 하나라도 더 들어갈 때만) ⑤ 시계를 런던→도쿄→뉴욕→서울 순서로 숨겨요.
+ * ① 화면 탭 이름(이름이 아예 안 보일 때까지, CSS flex-shrink) ② 탭의 떼어내기·닫기 단추(오른쪽 클릭 메뉴로 대신) ③ 날짜
+ * ④ 시계를 좁게(간격을 줄이고 서울 초를 빼요) ⑤ 시계를 런던→도쿄→뉴욕→서울 순서로 숨겨요.
  * 시계 칸은 보이는 시계 너비만큼만 차지해서 패널 추가·워크스페이스 메뉴와 시계 사이에 빈자리가 남지 않아요.
  * 탭과 탭 칸의 가장 좁은 너비는 여기서 정해요(CSS min-content는 줄인 이름이 아니라 전체 이름 너비라서)
  */
@@ -130,11 +130,9 @@ function useTopFit(tabCount: number) {
         const i = options.findIndex((o) => need(o.date, o.compact, o.shown) <= space);
         return i < 0 ? options.length - 1 : i;
       };
-      const iIcons = best(room - withIcons);
-      const iBare = best(room - bare);
-      // 단추를 숨겨야 시계가 하나라도 더 들어갈 때만 숨겨요
-      const bareTabs = options[iBare].shown.length > options[iIcons].shown.length;
-      const next: TopFit = { ...options[bareTabs ? iBare : iIcons], bareTabs };
+      // 탭 이름을 다 줄여도 날짜와 시계가 다 들어가지 않으면 탭 단추부터 숨겨요(그다음 날짜, 좁게, 시계 순서)
+      const bareTabs = best(room - withIcons) > 0;
+      const next: TopFit = { ...options[best(room - (bareTabs ? bare : withIcons))], bareTabs };
       // 탭마다·탭 칸의 가장 좁은 너비
       const nameMin = next.bareTabs ? TAB_BARE_MIN : TAB_NAME_MIN;
       let tabsMin = 0;
