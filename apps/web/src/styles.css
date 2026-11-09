@@ -3438,3 +3438,87 @@ button {
   left: 0;
   background: var(--up);
 }
+
+/* ── v0.6 차트 그리기: 도구, 그림 목록, 고른 그림 막대 ── */
+.chart-draw-menu {
+  min-width: 220px;
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+}
+.chart-draw-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chart-draw-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+.chart-draw-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.chart-draw-item > .linkish {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+.chart-draw-item.on > .linkish {
+  color: var(--amber);
+}
+.chart-draw-item i,
+.chart-draw-color i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.chart-draw-del {
+  flex: none;
+}
+.chart-draw-bar {
+  position: absolute;
+  left: 50%;
+  top: 30px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(16, 16, 16, 0.95);
+  border: 1px solid #333;
+  padding: 2px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.chart-draw-bar button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--value);
+  padding: 1px 5px;
+  font: inherit;
+  cursor: pointer;
+}
+.chart-draw-bar button:hover {
+  border-color: #444;
+}
+.chart-draw-bar button.on {
+  color: var(--amber);
+  border-color: #444;
+}
+.chart-draw-color.on {
+  border-color: var(--value) !important;
+}

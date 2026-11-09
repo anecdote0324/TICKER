@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { evalCix, parseCix, splitCixRef, type CixFormula, type Instrument } from '@bt/shared';
 import { dirClass } from '../format';
 import { useQuotes } from '../stores/feed';
-import { engine, getInstrument, index, supports } from '../stores/instruments';
+import { engine, getInstrument, index, indexState, supports } from '../stores/instruments';
 import { setPanelSecurity, type PanelState } from '../stores/panels';
 import { appState, updateState, usageScore } from '../stores/state';
 import { useStore } from '../stores/store';
@@ -49,7 +49,9 @@ const fmt = (v: number | undefined) => (v === undefined ? '—' : Math.abs(v) >=
 
 export function Cix({ panel }: { panel: PanelState }) {
   const list = useStore(appState).cix ?? [];
-  const parsed = useMemo(() => parseAll(list), [list]);
+  // 종목 목록을 다 받은 뒤 다시 찾아요(켜자마자는 목록이 비어 있어요)
+  const indexCount = useStore(indexState).count;
+  const parsed = useMemo(() => parseAll(list), [list, indexCount]); // eslint-disable-line react-hooks/exhaustive-deps
   const ids = useMemo(() => [...new Set(parsed.flatMap((p) => [...p.insts.values()].filter((i): i is Instrument => !!i).map((i) => i.id)))], [parsed]);
   const quotes = useQuotes(ids);
   const [name, setName] = useState('');

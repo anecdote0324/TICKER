@@ -22,6 +22,7 @@ import {
   createChart,
   LineStyle,
   type IChartApi,
+  type Logical,
   type ISeriesApi,
   type SeriesType,
   type UTCTimestamp,
@@ -39,13 +40,36 @@ import { GIP_RANGES, GP_HOUR_DEFAULT, GP_RANGES, GIP_DEFAULT, GP_DEFAULT, RIGHT_
 import { TitleBar } from './common';
 import { IchimokuCloud } from './ichimokuCloud';
 import { activeIndicators, atr, bollinger, futureTimes, ichimoku, INDICATORS, MA_PERIOD, macd, obv, PANE_INDICATORS, prependBars, rsi, sma, stochastic, type IndicatorId } from './indicators';
-import { ChartDrawings } from './chartDrawings';
-import { CHART_STYLES, DEFAULT_CHART_PREFS, type ChartPoint, type ChartStyle, type DrawingKind } from './chartPrefs';
+import { ChartDrawings, moveHandle, type HitPart, type TimeMapper } from './chartDrawings';
+import { CHART_STYLES, DEFAULT_CHART_PREFS, type ChartPoint, type ChartStyle, type Drawing, type DrawingColor, type DrawingKind, extendsRight } from './chartPrefs';
 import { appState, updateState } from '../stores/state';
 
 // 십자선 동기화: 한 차트에 마우스를 올리면 다른 차트에도 같은 시점에 세로선(02)
 type CrossListener = (t: number | null, from: IChartApi) => void;
 const crossListeners = new Set<CrossListener>();
+
+
+/** 그리기 도구: 종류, 이름, 설명 */
+const DRAW_TOOLS: Array<[DrawingKind, string, string]> = [
+  ['trend', '추세선', '첫 점을 누르고 마우스를 움직이면 선이 따라 늘었다 줄었다 해요. 다시 누르면(또는 누른 채 끌다 놓으면) 끝나요'],
+  ['box', '박스', 'FVG·오더블럭처럼 가격 구간을 칠해요. 한 모서리를 누르고 맞은편 모서리에서 다시 누르거나 끌다 놓아요'],
+  ['hline', '수평선', '가격을 한 번 눌러요'],
+  ['fib', '피보나치', '시작(0%)을 누르고 끝(100%)까지 움직여 다시 눌러요'],
+];
+const DRAW_NAME: Record<DrawingKind, string> = { trend: '추세선', box: '박스', hline: '수평선', fib: '피보나치' };
+const DRAW_COLORS: Array<[DrawingColor, string]> = [
+  ['accent', '강조 색'],
+  ['up', '상승 색'],
+  ['down', '하락 색'],
+];
+
+/** 그림 목록의 짧은 설명(가격) */
+function drawingDesc(d: Drawing, inst: Instrument | undefined): string {
+  const f = (v: number) => fmtPrice(inst, v);
+  if (d.kind === 'hline' || !d.p2) return f(d.p1.p);
+  if (d.kind === 'box') return `${f(Math.min(d.p1.p, d.p2.p))}~${f(Math.max(d.p1.p, d.p2.p))}`;
+  return `${f(d.p1.p)} → ${f(d.p2.p)}`;
+}
 
 export function cssVar(name: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -307,7 +331,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const accentColor = cssVar('--accent') || '#FFA028';
     candleRef.current?.applyOptions({ upColor: up, downColor: down, wickUpColor: up, wickDownColor: down, priceLineColor: accentColor });
     barSRef.current?.applyOptions({ upColor: up, downColor: down, priceLineColor: accentColor });
-    drawRef.current?.setColor(accentColor);
+    drawRef.current?.setColors({ accent: accentColor, up, down });
     for (const x of indRef.current.get('ma20') ?? []) x.applyOptions({ color: accentColor });
     closeRef.current?.applyOptions({ priceLineColor: accentColor });
     const bars = barsRef.current;
@@ -581,12 +605,15 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     const cur = activeIndicators(panel.gpIndicators);
     patchPanel(panel.id, { gpIndicators: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
   };
-  // ── 그리기 도구(v0.5): 종목마다 앱 상태에 기억해요 ──
+  // ── 그리기 도구(v0.5, v0.6에서 트레이딩뷰처럼): 종목마다 앱 상태에 기억해요 ──
+  // 그리기: 첫 점을 누르고 마우스를 움직이면 그림이 따라 늘었다 줄었다 하고, 다시 누르면(또는 누른 채 끌다 놓으면) 끝나요.
+  // 고르기: 그림을 누르면 손잡이가 생기고, 손잡이를 끌면 점을, 몸통을 끌면 그림 전체를 옮겨요. Delete·Backspace나 휴지통으로 지워요.
   const [drawMenu, setDrawMenu] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawingKind | null>(null);
-  const [pendingPt, setPendingPt] = useState<ChartPoint | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const drawings = useMemo(() => (inst ? (prefs.drawings[inst.id] ?? []) : []), [prefs.drawings, inst?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const saveDrawings = (list: typeof drawings) => {
+  const saveDrawings = (list: Drawing[]) => {
     if (!inst) return;
     updateState('chart', (c) => {
       const cur = c ?? DEFAULT_CHART_PREFS;
@@ -598,69 +625,256 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   };
   const startDraw = (k: DrawingKind) => {
     setDrawMode((m) => (m === k ? null : k));
-    setPendingPt(null);
+    setSelectedId(null);
     setDrawMenu(false);
+  };
+  const patchDrawing = (id: string, patch: Partial<Drawing>) => saveDrawings(drawingsRef.current.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  const removeDrawing = (id: string) => {
+    saveDrawings(drawingsRef.current.filter((d) => d.id !== id));
+    setSelectedId((s) => (s === id ? null : s));
   };
   useEffect(() => {
     drawRef.current?.setItems(drawings);
   }, [drawings]);
-  // 빠른 두 번 클릭도 놓치지 않게 클릭 처리는 최신 값을 참조로 읽어요
-  const pendingRefPt = useRef<ChartPoint | null>(null);
+  useEffect(() => {
+    drawRef.current?.setSelected(selectedId);
+  }, [selectedId]);
+  // 이벤트 처리는 최신 값을 참조로 읽어요
   const drawingsRef = useRef(drawings);
   drawingsRef.current = drawings;
-  useEffect(() => {
-    pendingRefPt.current = pendingPt;
-    drawRef.current?.setPending(pendingPt);
-  }, [pendingPt]);
-  // 종목을 바꾸면 그리던 것은 취소
+  const drawModeRef = useRef(drawMode);
+  drawModeRef.current = drawMode;
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
+  // 종목을 바꾸면 그리던 것·고른 것은 취소
   useEffect(() => {
     setDrawMode(null);
-    setPendingPt(null);
+    setSelectedId(null);
+    setDrafting(false);
+    drawRef.current?.setDraft(null);
   }, [inst?.id]);
+  // 시각 ↔ 가로 좌표(봉이 없는 오른쪽 빈 곳은 봉 간격으로 늘려요)
+  const mapperRef = useRef<TimeMapper | null>(null);
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart || !drawMode) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setDrawMode(null);
-        setPendingPt(null);
-      }
+    if (!chart || !drawRef.current) return;
+    const step = () => {
+      const b = barsRef.current;
+      const n = b.length;
+      if (n < 2) return 86400;
+      const diffs = [];
+      for (let i = Math.max(1, n - 20); i < n; i++) diffs.push(b[i].t - b[i - 1].t);
+      diffs.sort((x, y) => x - y);
+      return diffs[Math.floor(diffs.length / 2)] || 86400;
     };
-    const win = boxRef.current?.ownerDocument.defaultView ?? window;
-    win.addEventListener('keydown', onKey);
-    const onClick = (param: { time?: unknown; point?: { x: number; y: number } }) => {
+    const logicalOf = (t: number): number | null => {
+      const b = barsRef.current;
+      const n = b.length;
+      if (!n) return null;
+      if (t >= b[n - 1].t) return n - 1 + (t - b[n - 1].t) / step();
+      if (t <= b[0].t) return (t - b[0].t) / step();
+      let lo = 0;
+      let hi = n - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (b[mid].t <= t) lo = mid;
+        else hi = mid;
+      }
+      return lo + (t - b[lo].t) / (b[hi].t - b[lo].t || 1);
+    };
+    const mapper: TimeMapper = {
+      toX: (t) => {
+        const l = logicalOf(t);
+        return l === null ? null : chart.timeScale().logicalToCoordinate(l as Logical);
+      },
+      fromX: (x) => {
+        const l = chart.timeScale().coordinateToLogical(x);
+        const b = barsRef.current;
+        const n = b.length;
+        if (l === null || !n) return null;
+        const i = Math.round(l);
+        if (i >= 0 && i < n) return b[i].t;
+        return i >= n ? b[n - 1].t + (i - (n - 1)) * step() : b[0].t + i * step();
+      },
+    };
+    mapperRef.current = mapper;
+    drawRef.current.setMapper(mapper);
+  }, [series, timeMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 마우스·펜·손가락으로 그리기와 고치기
+  useEffect(() => {
+    const el = boxRef.current;
+    const chart = chartRef.current;
+    if (!el || !chart || intraday) return;
+    const prim = () => drawRef.current;
+    const local = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const toPt = (x: number, y: number): ChartPoint | null => {
       const host = drawHostRef.current;
-      if (!param.point || param.time === undefined || !host) return;
-      const price = host.coordinateToPrice(param.point.y);
-      if (price === null) return;
-      const pt: ChartPoint = { t: param.time as number, p: price };
-      const id = `d${Date.now().toString(36)}`;
-      const cur = drawingsRef.current;
-      if (drawMode === 'hline') {
-        saveDrawings([...cur, { id, kind: 'hline', p1: pt }]);
-        setDrawMode(null);
-        return;
+      const t = mapperRef.current?.fromX(x) ?? null;
+      const price = host?.coordinateToPrice(y) ?? null;
+      return t === null || price === null ? null : { t, p: price };
+    };
+    // 그리는 중: 시작 자리(끌어서 놓기와 한 번 누르기를 가려요)
+    let draft: { d: Drawing; downX: number; downY: number; pressing: boolean } | null = null;
+    // 고친 중: 손잡이·몸통 끌기
+    let drag: { id: string; part: HitPart; start: ChartPoint; orig: Drawing; moved: boolean } | null = null;
+    // 이 누름은 차트가 받지 않게(끌어서 옮기기·확대 막기)
+    let swallow = false;
+    const lockChart = (on: boolean) => chart.applyOptions({ handleScroll: !on, handleScale: !on });
+    const finishDraft = (d: Drawing) => {
+      draft = null;
+      setDrafting(false);
+      prim()?.setDraft(null);
+      const ok = !d.p2 || d.p1.t !== d.p2.t || d.p1.p !== d.p2.p;
+      if (ok) {
+        saveDrawings([...drawingsRef.current, d]);
+        setSelectedId(d.id);
       }
-      const first = pendingRefPt.current;
-      if (!first) {
-        pendingRefPt.current = pt;
-        setPendingPt(pt);
-        return;
-      }
-      pendingRefPt.current = null;
-      saveDrawings([...cur, { id, kind: drawMode, p1: first, p2: pt }]);
-      setPendingPt(null);
       setDrawMode(null);
+      lockChart(false);
     };
-    chart.subscribeClick(onClick);
-    // 빨리 두 번 누르면 둘째 누름이 더블클릭으로만 와요
-    chart.subscribeDblClick(onClick);
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      const { x, y } = local(e);
+      // 가격 축(오른쪽)과 아래 창은 차트에 맡겨요
+      if (x > chart.timeScale().width()) return;
+      const mode = drawModeRef.current;
+      if (mode) {
+        const pt = toPt(x, y);
+        if (!pt) return;
+        swallow = true;
+        e.preventDefault();
+        e.stopPropagation();
+        if (mode === 'hline') {
+          finishDraft({ id: `d${Date.now().toString(36)}`, kind: 'hline', p1: pt });
+          return;
+        }
+        if (draft) {
+          // 한 번 누르고 움직이던 그림: 두 번째 누름에서 끝
+          finishDraft({ ...draft.d, p2: pt });
+          return;
+        }
+        const d: Drawing = { id: `d${Date.now().toString(36)}`, kind: mode, p1: pt, p2: pt, extend: false };
+        draft = { d, downX: x, downY: y, pressing: true };
+        setDrafting(true);
+        lockChart(true);
+        prim()?.setDraft(d);
+        return;
+      }
+      const hit = prim()?.hitAt(x, y);
+      if (!hit) {
+        if (selectedRef.current) setSelectedId(null);
+        return;
+      }
+      const orig = drawingsRef.current.find((d) => d.id === hit.id);
+      const pt = toPt(x, y);
+      if (!orig || !pt) return;
+      swallow = true;
+      e.preventDefault();
+      e.stopPropagation();
+      setSelectedId(hit.id);
+      prim()?.setSelected(hit.id);
+      drag = { id: hit.id, part: hit.part, start: pt, orig, moved: false };
+      lockChart(true);
+    };
+    const onMove = (e: PointerEvent) => {
+      const { x, y } = local(e);
+      if (draft) {
+        const pt = toPt(x, y);
+        if (!pt) return;
+        draft.d = { ...draft.d, p2: pt };
+        prim()?.setDraft(draft.d);
+        return;
+      }
+      if (drag) {
+        const pt = toPt(x, y);
+        if (!pt) return;
+        drag.moved = true;
+        const next = moveHandle(drag.orig, drag.part, pt, drag.start);
+        prim()?.setItems(drawingsRef.current.map((d) => (d.id === drag!.id ? next : d)));
+        return;
+      }
+      // 그림 위에 올리면 굵게, 손 모양
+      if (drawModeRef.current) {
+        el.style.cursor = 'crosshair';
+        return;
+      }
+      const hit = x <= chart.timeScale().width() ? prim()?.hitAt(x, y) : null;
+      prim()?.setHovered(hit?.id ?? null);
+      el.style.cursor = hit ? (hit.part === 'body' ? (hit.id === selectedRef.current ? 'move' : 'pointer') : 'grab') : '';
+    };
+    const onUp = (e: PointerEvent) => {
+      const { x, y } = local(e);
+      if (draft?.pressing) {
+        draft.pressing = false;
+        // 누른 채 끌다 놓았으면 그 자리에서 끝, 그냥 눌렀으면 마우스를 따라 움직이다 다음 누름에서 끝
+        if (Math.hypot(x - draft.downX, y - draft.downY) > 6) {
+          const pt = toPt(x, y);
+          finishDraft(pt ? { ...draft.d, p2: pt } : draft.d);
+        }
+      }
+      if (drag) {
+        const d = drag;
+        drag = null;
+        lockChart(false);
+        if (d.moved) {
+          const pt = toPt(x, y);
+          if (pt) saveDrawings(drawingsRef.current.map((it) => (it.id === d.id ? moveHandle(d.orig, d.part, pt, d.start) : it)));
+          else prim()?.setItems(drawingsRef.current);
+        }
+      }
+      setTimeout(() => (swallow = false), 0);
+    };
+    // 차트 라이브러리는 마우스 이벤트로 끌기를 시작해서, 우리가 받은 누름은 거기까지 가지 않게 막아요
+    const block = (e: Event) => {
+      if (swallow) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    };
+    const win = el.ownerDocument.defaultView ?? window;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'Escape') {
+        if (draft || drawModeRef.current) {
+          draft = null;
+          setDrafting(false);
+          prim()?.setDraft(null);
+          setDrawMode(null);
+          lockChart(false);
+        } else if (selectedRef.current) setSelectedId(null);
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedRef.current && !draft) {
+        e.preventDefault();
+        const id = selectedRef.current;
+        saveDrawings(drawingsRef.current.filter((d) => d.id !== id));
+        setSelectedId(null);
+      }
+    };
+    el.addEventListener('pointerdown', onDown, true);
+    el.addEventListener('mousedown', block, true);
+    el.addEventListener('touchstart', block, true);
+    el.addEventListener('dblclick', block, true);
+    win.addEventListener('pointermove', onMove);
+    win.addEventListener('pointerup', onUp);
+    win.addEventListener('keydown', onKey);
     return () => {
-      chart.unsubscribeClick(onClick);
-      chart.unsubscribeDblClick(onClick);
+      el.removeEventListener('pointerdown', onDown, true);
+      el.removeEventListener('mousedown', block, true);
+      el.removeEventListener('touchstart', block, true);
+      el.removeEventListener('dblclick', block, true);
+      win.removeEventListener('pointermove', onMove);
+      win.removeEventListener('pointerup', onUp);
       win.removeEventListener('keydown', onKey);
+      lockChart(false);
+      prim()?.setDraft(null);
     };
-  }, [drawMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [intraday, inst?.id, timeMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selected = drawings.find((d) => d.id === selectedId);
 
   const resetScale = () => {
     chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
@@ -747,7 +961,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
           <button className={menuOpen ? 'on' : ''} title={isG ? '표시 모드·보조지표·템플릿' : '표시 모드(캔들·바·선)와 보조지표'} aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
             {isG ? '지표·템플릿' : '지표'}
           </button>
-          <button className={drawMenu || drawMode ? 'on' : ''} title="그리기: 추세선·수평선·피보나치(종목마다 기억)" aria-expanded={drawMenu} onClick={() => setDrawMenu((o) => !o)}>
+          <button className={drawMenu || drawMode ? 'on' : ''} title="그리기: 추세선·박스·수평선·피보나치, 그린 그림 목록(종목마다 기억)" aria-expanded={drawMenu} onClick={() => setDrawMenu((o) => !o)}>
             그리기
           </button>
         </>
@@ -859,26 +1073,60 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
         )}
         {drawMenu && !intraday && (
           <div className="chart-menu chart-draw-menu" onMouseDown={(e) => e.stopPropagation()}>
-            {(
-              [
-                ['trend', '추세선', '두 점을 눌러요. 둘째 점 너머로 점선이 이어져요'],
-                ['hline', '수평선', '한 점을 눌러요'],
-                ['fib', '피보나치', '시작(0%)과 끝(100%) 두 점을 눌러요'],
-              ] as Array<[DrawingKind, string, string]>
-            ).map(([k, l, d]) => (
-              <button key={k} className={drawMode === k ? 'on' : ''} title={d} onClick={() => startDraw(k)}>
-                {l}
+            <div className="chart-draw-tools">
+              {DRAW_TOOLS.map(([k, l, d]) => (
+                <button key={k} className={drawMode === k ? 'on' : ''} title={d} onClick={() => startDraw(k)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {drawings.length > 0 && (
+              <div className="chart-draw-list">
+                <div className="label">{`그린 그림 ${drawings.length}개 · 눌러서 고르기`}</div>
+                {drawings.map((d, i) => (
+                  <div key={d.id} className={`chart-draw-item ${d.id === selectedId ? 'on' : ''}`} onMouseEnter={() => drawRef.current?.setHovered(d.id)} onMouseLeave={() => drawRef.current?.setHovered(null)}>
+                    <button className="linkish" onClick={() => setSelectedId(d.id)}>
+                      <i style={{ background: drawRef.current?.colorOf(d.color) }} />
+                      {`${DRAW_NAME[d.kind]} ${i + 1}`}
+                      <span className="label">{drawingDesc(d, inst)}</span>
+                    </button>
+                    <button className="chart-draw-del" title="이 그림 지우기" aria-label={`${DRAW_NAME[d.kind]} ${i + 1} 지우기`} onClick={() => removeDrawing(d.id)}>
+                      🗑
+                    </button>
+                  </div>
+                ))}
+                <button onClick={() => saveDrawings([])}>모두 지우기</button>
+              </div>
+            )}
+          </div>
+        )}
+        {drawMode && (
+          <div className="chart-draw-hint label">
+            {drawMode === 'hline' ? '수평선: 가격을 한 번 눌러요' : drafting ? `${DRAW_NAME[drawMode]}: 마우스를 움직여 맞추고 눌러서 끝내요` : `${DRAW_NAME[drawMode]}: ${drawMode === 'fib' ? '시작(0%)' : drawMode === 'box' ? '한 모서리' : '첫 점'}을 눌러요(누른 채 끌어도 돼요)`}
+            {' · Esc 취소'}
+          </div>
+        )}
+        {selected && !drawMode && (
+          <div className="chart-draw-bar" onMouseDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            <span className="label">{DRAW_NAME[selected.kind]}</span>
+            {DRAW_COLORS.map(([c, l]) => (
+              <button key={c} className={`chart-draw-color ${(selected.color ?? 'accent') === c ? 'on' : ''}`} title={l} aria-label={l} onClick={() => patchDrawing(selected.id, { color: c })}>
+                <i style={{ background: drawRef.current?.colorOf(c) }} />
               </button>
             ))}
-            <button disabled={!drawings.length} onClick={() => saveDrawings(drawings.slice(0, -1))}>
-              마지막 지우기
+            {(selected.kind === 'trend' || selected.kind === 'box') && (
+              <button className={extendsRight(selected) ? 'on' : ''} title="오른쪽 끝까지 늘리기" onClick={() => patchDrawing(selected.id, { extend: !extendsRight(selected) })}>
+                오른쪽 늘리기
+              </button>
+            )}
+            <button className="chart-draw-del" title="지우기(Delete)" onClick={() => removeDrawing(selected.id)}>
+              🗑 지우기
             </button>
-            <button disabled={!drawings.length} onClick={() => saveDrawings([])}>
-              모두 지우기
+            <button title="고르기 풀기(Esc)" onClick={() => setSelectedId(null)}>
+              ✕
             </button>
           </div>
         )}
-        {drawMode && <div className="chart-draw-hint label">{`${drawMode === 'hline' ? '수평선: 한 점을' : drawMode === 'trend' ? (pendingPt ? '추세선: 둘째 점을' : '추세선: 첫 점을') : pendingPt ? '피보나치: 끝(100%)을' : '피보나치: 시작(0%)을'} 눌러요 · Esc 취소`}</div>}
         {manualScale && (
           <button className="chart-auto" title="가격 축 자동 맞춤(가격 눈금 더블클릭과 같아요)" onClick={resetScale}>
             자동

@@ -9,7 +9,10 @@ export const CHART_STYLES: Array<{ code: ChartStyle; label: string; desc: string
   { code: 'line', label: '선', desc: '종가 선' },
 ];
 
-export type DrawingKind = 'trend' | 'hline' | 'fib';
+export type DrawingKind = 'trend' | 'hline' | 'fib' | 'box';
+
+/** 그림 색: 강조 색(기본)·상승 색·하락 색(등락 색 설정을 따라요) */
+export type DrawingColor = 'accent' | 'up' | 'down';
 
 export interface ChartPoint {
   /** 봉 시각(초) */
@@ -22,9 +25,15 @@ export interface Drawing {
   id: string;
   kind: DrawingKind;
   p1: ChartPoint;
-  /** 추세선·피보나치의 두 번째 점(수평선은 없어요) */
+  /** 추세선·피보나치·박스의 두 번째 점(수평선은 없어요) */
   p2?: ChartPoint;
+  color?: DrawingColor;
+  /** 오른쪽으로 늘리기(추세선·박스). 예전 추세선(값 없음)은 늘린 모양 그대로예요 */
+  extend?: boolean;
 }
+
+/** 추세선·박스를 오른쪽으로 늘려 그리는지 */
+export const extendsRight = (d: Drawing) => (d.kind === 'trend' ? d.extend !== false : d.kind === 'box' ? d.extend === true : false);
 
 export interface ChartTemplate {
   name: string;
