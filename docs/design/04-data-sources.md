@@ -10,7 +10,7 @@
 | 환율 | 한국투자증권 키가 있으면 KIS 환율 조회(10초 간격), 없거나 받지 못하면 ECB 기준환율(Frankfurter, 키 없음, 하루 한 번). 차트 봉도 키가 있으면 KIS, 없으면 ECB | 주기 조회(일별로 돌아감) | v0.1 |
 | 공시 | DART OpenAPI | REST | v0.2 |
 | 뉴스 | RSS 헤드라인 | 주기적 조회 | v0.2 |
-| 금리 커브·매크로·미국 재무제표 | 한국은행 ECOS, 미국 재무부 금리 XML, FRED, BLS·BEA 공표일정, SEC EDGAR (KOSIS는 v0.6) | REST·파일 | v0.3 |
+| 금리 커브·매크로·미국 재무제표 | 한국은행 ECOS, 미국 재무부 금리 XML, FRED, BLS·BEA 공표일정, SEC EDGAR (KOSIS·한국 발표 일정은 v0.6) | REST·파일 | v0.3 |
 | 수급·공매도·종목 심화 | KIS 확장 조회, FINRA, KRX Open API(ETF 일별) | REST | v0.4 |
 | 해외 금리·환율 고시 | ECB, 일본 재무성 CSV, 한국수출입은행, IMF·OECD·World Bank | REST·파일 | v0.6 |
 | 채권 | KIS 장내채권, 금융위원회 채권 데이터(공공데이터포털), KRX Open API | REST + WebSocket | v0.7 |
@@ -77,6 +77,11 @@
 | ECB 기준환율(Frankfurter, 키 없음), ECOS 주요국 통화의 대원화환율(731Y001: 0000001 원/달러, 0000002 원/엔 100엔당, 0000003 원/유로, 0000053 원/위안), FRED H.10(DEXKOUS·DEXJPUS·DEXUSEU·DEXUSUK·DEXCHUS·DEXUSAL) | FIXI·FXIP (v0.6) | 3시간 캐시. 출처마다 따로 받아 하나가 실패해도 나머지는 보여요 |
 | 단기 금리: FRED SOFR·EFFR·€STR(ECBESTRVOLWGTTRMDMNRT), ECOS 시장금리(817Y002: 010502000 CD91, 010101000 콜) | FRD·WCRS (v0.6) | 3시간 캐시. €STR은 FRED로 받아요(ECB 데이터 API도 되지만 FRED 키로 한 번에 받는 게 간단해요) |
 | 금리 묶음: ECOS 기준금리(722Y001/0101000), 817Y002의 콜(010101000)·KOFR(010901000)·CD91(010502000)·CP91(010503000)·통안 91일(010400000)·1년(010400001)·국고 3·10년(010200000·010210000)·회사채 AA- 3년(010300000)·BBB- 3년(010320000). FRED DFEDTARU·DFEDTARL·EFFR·SOFR·DTB3·DGS1·DGS2·DGS10·ICE BofA OAS(BAMLC0A0CM·BAMLC0A1CAAA·BAMLC0A4CBBB·BAMLH0A0HYM2)·€STR | BTMM·OIS·FICM·WIRP (v0.6, 만듦) | 400일, 3시간 캐시, 받지 못하면 `money-cache.json`. 시계열마다 따로 받아 하나가 실패해도 나머지는 보여요. 항목 코드는 ECOS `StatisticItemList`(sample 키)로 이름을 확인했어요(2026-11) |
+| 매크로 지표(ECOS): GDP 200Y102/Q/10111(실질, 계절조정, 전기비), 전산업생산 901Y033/M/A00, 소비자물가 901Y009/M/0, 근원 901Y010/M/QB(농산물·석유류 제외)·DB(식료품·에너지 제외), 생산자물가 404Y014/M/*AA, 실업률 901Y027/M/I61BC, 취업자 I61BA, 경상수지 301Y013/M/000000, 수출입 901Y118/M/T002·T004, 소비자심리 511Y002/M/FME, 1년 기대인플레 511Y003/M/FMB. FRED: CPIAUCSL·CPILFESL·PCEPI·PCEPILFE·PPIFIS·UNRATE·PAYEMS·ICSA·INDPRO·RSAFS·BOPGSTB·UMCSENT·MICH·T5YIE·T10YIE·T5YIFR·DFII10·A191RL1Q225SBEA·CP0000EZ19M086NEST(유로 HICP) | ECST·ECOD·IFMO·ECO 한국 값 (v0.6, 만듦) | 12년(일별은 3년), 6시간 캐시. ECOS 항목 코드는 `StatisticItemList`(sample 키)로 이름을 확인했어요(2026-11). 첫 발표 값은 FRED `series/observations?output_type=4&realtime_start=1776-07-04&realtime_end=9999-12-31`(ALFRED) |
+| 지표 찾기: FRED `series/search`(인기순 40개), ECOS `StatisticTableList`(검색 가능한 표 이름, 한 번 받아 둬요) | ECOF (v0.6, 만듦) | 키가 없는 쪽은 안내만 |
+| KOSIS 통계자료 `kosis.kr/openapi/Param/statisticsParameterData.do`(사용자가 KOSIS에서 만든 주소, 서버가 apiKey·format=json·jsonVD=Y를 넣어요). 응답은 JSON 배열(PRD_DE·PRD_SE·DT·ITM_NM·C1_NM·UNIT_NM), 오류는 `{err, errMsg}`(따옴표 없는 키). 키 확인은 `statisticsList.do` | ECST 내 통계 (v0.6, 만듦) | 다른 곳으로 요청하지 않게 `https://kosis.kr/openapi/` 주소만 받아요. 실제 키로 확인 전(07) |
+| 한국 발표 일정: 국가데이터처 보도계획 `mods.go.kr/newsPln.es?mid=a10305000000&act=list&oa_mm=<월>`(표: 보도일자 "11.03.( 화 )"·보도시간·보도자료명, 통계청이 국가데이터처로 바뀌어 kostat.go.kr은 mods.go.kr로 가요), 한국은행 월간통계 공표일정 `statsPublictSchdul/listCldr.do?menuNo=200775&date=YYYY-MM`(달력 칸마다 통계 이름, 시각 없음) | ECO (v0.6, 만듦) | 키 없음, 12시간 캐시, 이번 달과 다음 달. "2026년 …"으로 시작하는 통계 보도만 쓰고 행사·포상은 빼요 |
+| 세계은행 WDI `country/KR;US;…/indicator/<코드>?mrv=6`: NY.GDP.MKTP.KD.ZG·FP.CPI.TOTL.ZG·SL.UEM.TOTL.ZS·BN.CAB.XOKA.GD.ZS·GC.DOD.TOTL.GD.ZS·NY.GDP.PCAP.CD | ECMX (v0.6, 만듦) | 키 없음, 하루 캐시. 대만은 세계은행 자료가 없어요 |
 | BIS 중앙은행 정책금리 `stats.bis.org/api/v1/data/WS_CBPOL/D.US+XM+JP+KR+…?startPeriod=…&format=csv` | CENB (v0.6, 만듦) | 키 없음. 15개 나라를 한 번에, 3년. 나라마다 며칠~몇 주 늦게 올라와요(한국은 한 달 가까이). 미국은 목표 범위 가운데 |
 | 연준: FOMC 일정 `monetarypolicy/fomccalendars.htm`(연도별 `fomc-meeting` 블록, `*`는 SEP), 통화정책 보도자료 RSS `feeds/press_monetary.xml`, 성명 페이지 본문, 경제 전망 `fomcprojtabl<날짜>.htm`(표 1 중간값, 그림 2 점도표) | CENB·FOMC·DOTS (v0.6, 만듦) | 키 없음, 6시간 캐시. 성명 본문은 한 번 받으면 계속 써요 |
 | 한국은행: 통화정책방향 결정회의 목록 `crncyPolicyDrcMtg/listYear.do?mtgSe=A&menuNo=200755&pYear=<연도>`("01월 15일(목)" 모양), 보도자료 RSS `bbs/P0000559/news.rss?menuNo=200690`(통화정책방향 결정문은 description에 본문, 금통위 의사록) | CENB·FOMC (v0.6, 만듦) | 키 없음. 다음 해 일정은 발표 전이면 비어요 |
@@ -178,7 +183,7 @@
 | 한국은행 ECOS | 기준금리, 콜·CD·CP, 국고채 1~50년, 회사채 등급별 금리, 환율, 국내 거시지표. 화면에는 블룸버그 ECOS 기능과 헷갈리지 않게 "BOK ECOS"로 표시 | 무료, 한도 확인 필요 | 인증키 | v0.3 |
 | 미국 재무부 금리 XML | 미국 국채 1개월~30년 일별 금리, 실질금리 | 무료 | 없음 | v0.3 |
 | FRED | SOFR·EFFR, 크레딧 스프레드(ICE BofA, **최근 3년만** 제공), 물가, VIX(VIXCLS), 지표 발표일 | 무료, 분당 약 120건(확인 필요) | 키 | v0.3 |
-| KOSIS | 국내 통계(ECST, ECO 한국 지표) | 무료, 한도 확인 필요 | 키 | v0.6(v0.3에서 옮김) |
+| KOSIS | 국내 통계(ECST 내 통계, 사용자가 만든 OpenAPI 주소로) | 무료, 한도 확인 필요 | 키 | v0.6(v0.3에서 옮김, 만듦) |
 | BLS·BEA 공표일정 | 미국 지표 발표 시각(FRED는 날짜만 줘요) | 무료 | — | v0.3 |
 
 - v0.4 남은 일(만듦): SI 미국은 FINRA Query API `POST api.finra.org/data/group/otcMarket/name/consolidatedShortInterest`(키 없음, `symbolCode` EQUAL + `settlementDate` 날짜 범위. 정렬을 쓰려면 결제일을 EQUAL로 줘야 해서 정렬은 앱에서), 칸은 `currentShortPositionQuantity`·`previousShortPositionQuantity`·`changePercent`·`averageDailyVolumeQuantity`·`daysToCoverQuantity`, 12시간 캐시. FFLO는 KRX Open API `data-dbg.krx.co.kr/svc/apis/etp/etf_bydd_trd?basDd=YYYYMMDD`(머리글 `AUTH_KEY`, 응답 `OutBlock_1`의 `ISU_CD`·`LIST_SHRS`·`NAV`·`INVSTASST_NETASST_TOTAMT`, 값은 문자열). 날짜마다 모든 ETF가 와서 지난 날은 데이터 폴더(krx-etf.json, 90일)에 두고 다시 받지 않아요. DVD 미국은 한국투자증권 해외주식 기간별권리(CTRGT011R, 권리유형 전체에서 03 배당·75 특별배당, 조회구분 02 현지기준일, 상품유형 512·513·529). EVTS의 DART는 거래소공시(`pblntf_ty=I`)에서 제목에 기업설명회·(IR)·잠정실적이 든 것(종목 2년, 전체 7일)

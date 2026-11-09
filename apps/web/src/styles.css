@@ -3325,3 +3325,78 @@ button {
 .cb-list td:first-child {
   white-space: nowrap;
 }
+
+/* ── v0.6 매크로(ECOD·ECST·ECOF·ECMX·IFMO, ECO 예상 칸) ── */
+.macro-chart {
+  display: block;
+  width: 100%;
+  max-width: 820px;
+  height: auto;
+  margin: 4px 0 8px;
+}
+.flow-table tr.macro-group td {
+  color: var(--accent);
+  text-align: left;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.ecod-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px 16px;
+}
+.ecod-item {
+  display: block;
+  text-align: left;
+  padding: 2px 0;
+}
+.ecst-add {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+}
+.ecst-add input {
+  flex: 1 1 200px;
+  min-width: 0;
+  background: var(--header);
+  color: var(--value);
+  border: 1px solid var(--line);
+  font: inherit;
+  padding: 2px 6px;
+}
+.ecst-add input:first-child {
+  flex: 0 1 200px;
+}
+.ecst-help {
+  padding-top: 4px;
+}
+.ecof td:nth-child(2),
+.ecof td:nth-child(3) {
+  text-align: left;
+  white-space: normal;
+}
+.ecof-act {
+  white-space: nowrap;
+}
+.ecof-act .linkish + .linkish {
+  margin-left: 8px;
+}
+.ecmx-year {
+  font-size: 0.85em;
+}
+.eco-link {
+  cursor: pointer;
+  text-decoration: underline dotted var(--dim);
+}
+.eco-expect-btn {
+  min-width: 2em;
+  color: var(--chip);
+}
+.eco-expect {
+  width: 6em;
+  background: var(--header);
+  color: var(--value);
+  border: 1px solid var(--accent);
+  font: inherit;
+}

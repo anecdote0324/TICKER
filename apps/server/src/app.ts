@@ -27,6 +27,7 @@ import type { CalendarService } from './calendar';
 import type { FxService } from './fx';
 import type { MoneyService } from './money';
 import type { CentralBankService } from './centralbank';
+import type { MacroService } from './macro';
 import { STATE_NAMES, type StateName, type Store } from './store';
 import { withTimeout, type RecordingLogger } from './util';
 
@@ -64,6 +65,7 @@ export interface AppDeps {
   /** v0.6 금리 시계열·국가부채 */
   money?: MoneyService;
   centralBank?: CentralBankService;
+  macro?: MacroService;
 }
 
 /** 키를 암호화하거나 푸는 데 이보다 오래 걸리면 보안 저장소가 응답하지 않는 걸로 봐요 */
@@ -319,6 +321,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/api/money', async (_req, reply) => (deps.money ? deps.money.get() : reply.code(503).send({ error: '금리 서비스가 준비되지 않았어요' })));
   // ── v0.6 중앙은행(CENB·FOMC·DOTS·WIRP) ──
   app.get('/api/centralbank', async (_req, reply) => (deps.centralBank ? deps.centralBank.get() : reply.code(503).send({ error: '중앙은행 서비스가 준비되지 않았어요' })));
+  // ── v0.6 매크로(ECOD·ECST·ECOF·ECMX·IFMO) ──
+  const noMacro = (reply: { code(n: number): { send(b: unknown): unknown } }) => reply.code(503).send({ error: '매크로 서비스가 준비되지 않았어요' });
+  app.get<{ Querystring: { ids?: string } }>('/api/macro/series', async (req, reply) => (deps.macro ? deps.macro.series((req.query.ids ?? '').split(',').filter(Boolean)) : noMacro(reply)));
+  app.get<{ Querystring: { id?: string } }>('/api/macro/vintage', async (req, reply) => (deps.macro ? deps.macro.vintage(req.query.id ?? '') : noMacro(reply)));
+  app.get<{ Querystring: { q?: string } }>('/api/macro/search', async (req, reply) => (deps.macro ? deps.macro.search((req.query.q ?? '').slice(0, 100)) : noMacro(reply)));
+  app.get('/api/macro/matrix', async (_req, reply) => (deps.macro ? deps.macro.matrix() : noMacro(reply)));
+  app.get<{ Querystring: { url?: string } }>('/api/macro/kosis', async (req, reply) => (deps.macro ? deps.macro.kosis(req.query.url ?? '') : noMacro(reply)));
   app.get('/api/sovereign', async (_req, reply) => (deps.money ? deps.money.sovereign() : reply.code(503).send({ error: '금리 서비스가 준비되지 않았어요' })));
 
   // ── v0.5 NOTE 메모 ──

@@ -16,6 +16,7 @@ import { CalendarService } from './calendar';
 import { FxService } from './fx';
 import { MoneyService } from './money';
 import { CentralBankService } from './centralbank';
+import { MacroService } from './macro';
 import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
@@ -116,6 +117,9 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const money = new MoneyService(opts.dataDir, log, () => rates.ecosKeyValue);
   // v0.6 중앙은행: 정책금리(BIS)·회의 일정·성명·점도표(키 없음)
   const centralBank = new CentralBankService(opts.dataDir, log);
+  // v0.6 매크로: 시계열·지표 찾기·세계 경제 매트릭스·한국 발표 일정
+  const macro = new MacroService(log, () => rates.ecosKeyValue);
+  eco.setMacro(macro);
   // FRED 크레딧 스프레드는 최근 3년만 줘서 지금부터 쌓아요(03 v0.3)
   eco.startSpreadArchive(hub.history);
   const extraKeys: ExtraKeys = {
@@ -126,6 +130,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       apply: (k) => {
         rates.setEcosKey(k);
         money.clear();
+        macro.clear();
       },
       hint: tailHint,
     },
@@ -137,6 +142,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
         eco.setFredKey(k);
         fx.setFredKey(k);
         money.setFredKey(k);
+        macro.setFredKey(k);
       },
       hint: tailHint,
     },
@@ -154,6 +160,13 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       validate: (k) => (/^[0-9A-Za-z_-]{10,100}$/.test(k) ? undefined : 'KRX 인증키는 영문·숫자 10~100자예요'),
       test: (k) => market.testKrx(k),
       apply: (k) => market.setKrxKey(k),
+      hint: tailHint,
+    },
+    kosis: {
+      label: 'KOSIS 인증키',
+      validate: (k) => (/^[0-9A-Za-z+/=_-]{10,120}$/.test(k) ? undefined : 'KOSIS 인증키는 영문·숫자 10~120자예요'),
+      test: (k) => macro.testKosis(k),
+      apply: (k) => macro.setKosisKey(k),
       hint: tailHint,
     },
   };
@@ -241,6 +254,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     fx,
     money,
     centralBank,
+    macro,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();

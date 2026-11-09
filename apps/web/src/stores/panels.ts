@@ -78,6 +78,13 @@ export interface PanelState {
   oisRate?: string;
   /** v0.6 중앙은행: FOMC 탭(연준·한국은행) */
   cbTab?: 'FED' | 'BOK';
+  /** v0.6 매크로: ECOD 시계열·기간, ECO 나라, ECST 탭, ECOF 검색어, IFMO 탭 */
+  macroId?: string;
+  ecodYears?: number;
+  ecoCountry?: 'ALL' | 'US' | 'KR';
+  ecstTab?: 'KR' | 'US' | 'MY';
+  ecofQuery?: string;
+  ifmoTab?: 'CPI' | 'BEI';
   /** v0.6 외환: FXCA·FRD의 통화(앞 → 뒤), WCRS 기준 통화 */
   fxFrom?: string;
   fxTo?: string;

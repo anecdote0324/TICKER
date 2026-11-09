@@ -15,7 +15,9 @@ export interface EcoEvent {
   name: string;
   /** 원천의 이름 */
   sourceName: string;
-  source: 'BEA' | 'FRED';
+  source: 'BEA' | 'FRED' | 'MODS' | 'BOK';
+  /** ECOD로 열 시계열(v0.6) */
+  seriesId?: string;
   /** 가장 최근 값과 그 앞 값(문자열, 단위 포함). 발표 전이면 previous만 의미가 있어요 */
   latest?: string;
   previous?: string;

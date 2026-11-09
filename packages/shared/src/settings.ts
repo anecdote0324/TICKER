@@ -103,6 +103,7 @@ export interface CredentialStatus {
   sec?: ApiKeyStatus;
   /** KRX Open API 인증키(FFLO ETF 일별 상장 좌수, v0.4) */
   krx?: ApiKeyStatus;
+  kosis?: ApiKeyStatus;
 }
 
 export interface ApiKeyStatus {
@@ -113,7 +114,7 @@ export interface ApiKeyStatus {
 }
 
 /** 설정 → 데이터 연결에서 넣는 v0.3 키 */
-export type ExtraKeyName = 'ecos' | 'fred' | 'sec' | 'krx';
+export type ExtraKeyName = 'ecos' | 'fred' | 'sec' | 'krx' | 'kosis';
 
 /** 강조 색 후보: 등락·선택·자산군 칩 색과 겹치지 않는 색만(02) */
 /** 강조 색 후보: 블룸버그 앰버(기본), 예전 주황, 흰색, 청록 */

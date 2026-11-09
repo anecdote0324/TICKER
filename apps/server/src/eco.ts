@@ -5,7 +5,8 @@
 // - 한국: BOK ECOS 100대 통계지표(KeyStatisticList)의 최근 값. 한국 발표 일정은 아직 형식을 확인하지 못했어요(07)
 // - BLS 공표일정은 자동 요청을 403으로 막아서 쓰지 않아요(04)
 
-import { zonedToUtc, type EcoEvent, type EcoKeyStat, type EcoResponse } from '@bt/shared';
+import { BOK_USUAL_TIME, KR_RELEASE_SERIES, macroDef, periodLabel, zonedToUtc, type EcoEvent, type EcoKeyStat, type EcoResponse } from '@bt/shared';
+import type { MacroService } from './macro';
 import { fetchJson, type Logger } from './util';
 
 const NY = 'America/New_York';
@@ -97,6 +98,14 @@ export class EcoService {
     /** GC와 같은 ECOS 인증키 */
     private ecosKey: () => string | undefined,
   ) {}
+
+  private macro?: MacroService;
+
+  /** v0.6: 한국 발표 일정과 한국 지표 최근 값 */
+  setMacro(m: MacroService) {
+    this.macro = m;
+    this.cache = null;
+  }
 
   setFredKey(key: string | undefined) {
     this.fredKey = key;
@@ -214,11 +223,40 @@ export class EcoService {
           const s = indicatorOf(e.sourceName)?.series;
           const v = s ? values.get(s.id) : undefined;
           if (v) Object.assign(e, v);
+          if (s) e.seriesId = `FRED:${s.id}`;
         }
       } catch (e) {
         missing.push({ what: 'FRED 발표일', reason: (e as Error).message });
       }
     } else missing.push({ what: 'FRED', reason: 'FRED API 키를 넣으면 CPI·고용보고서 같은 발표일과 최근 값이 보여요(설정 → 데이터 연결)' });
+    // 한국 발표 일정(v0.6): 국가데이터처 보도계획(시각까지)과 한국은행 통계공표일정(날짜만, 주요 통계는 관례 시각)
+    if (this.macro) {
+      try {
+        const kr: EcoEvent[] = [];
+        for (const r of await this.macro.krReleases()) {
+          const usual = r.time ? undefined : BOK_USUAL_TIME.find((x) => x.match.test(r.title))?.time;
+          const at = zonedToUtc(r.date, r.time ?? usual ?? '12:00', 'Asia/Seoul');
+          if (at < from || at > to) continue;
+          const map = KR_RELEASE_SERIES.find((x) => x.match.test(r.title));
+          kr.push({ id: `${r.source}:${r.date}:${r.title}`, at, time: r.time ? 'exact' : usual ? 'usual' : 'none', country: 'KR', name: r.title, sourceName: r.title, source: r.source, seriesId: map?.id });
+        }
+        const ids = [...new Set(kr.map((e) => e.seriesId).filter((x): x is string => !!x))];
+        if (ids.length && this.ecosKey()) {
+          const ms = await this.macro.series(ids);
+          for (const e of kr) {
+            const s = ms.series.find((x) => x.id === e.seriesId);
+            const def = e.seriesId ? macroDef(e.seriesId) : undefined;
+            if (!s || !def || !s.obs.length) continue;
+            const fmt = (v: number | undefined) => (v === undefined ? undefined : `${v.toFixed(def.digits ?? 1)}${def.unit === '%' ? '%' : def.unit ? ` ${def.unit}` : ''}`);
+            const last = s.obs[s.obs.length - 1];
+            Object.assign(e, { latest: fmt(last.value), previous: fmt(s.obs[s.obs.length - 2]?.value), period: periodLabel(last.date, def.freq) });
+          }
+        }
+        events.push(...kr);
+      } catch (e) {
+        missing.push({ what: '한국 발표 일정', reason: (e as Error).message });
+      }
+    }
     events.sort((a, b) => a.at - b.at || a.name.localeCompare(b.name, 'ko'));
     // 한국 주요 지표(최근 값)
     const korea: EcoKeyStat[] = [];

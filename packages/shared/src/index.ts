@@ -30,3 +30,4 @@ export * from './fxcalc';
 export * from './fx';
 export * from './money';
 export * from './centralbank';
+export * from './macro';

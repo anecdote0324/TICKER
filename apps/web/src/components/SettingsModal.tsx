@@ -854,6 +854,14 @@ const EXTRA_KEYS: ExtraKeyUi[] = [
     minLength: 10,
     emptyLabel: '인증키 없음 · FFLO는 앱이 ETF 화면을 연 날의 상장 주수만 써요',
   },
+  {
+    name: 'kosis',
+    title: 'KOSIS (국가통계포털)',
+    note: 'ECST(경제 통계)에 KOSIS 통계를 더할 때 써요(v0.6). 인증키는 KOSIS 공유서비스(kosis.kr/openapi)에서 회원 가입 뒤 무료로 받아요. 저장할 때 통계 목록을 한 번 받아 확인해요.',
+    placeholder: '인증키',
+    minLength: 10,
+    emptyLabel: '인증키 없음 · ECST에는 ECOS·FRED 지표만 보여요',
+  },
 ];
 
 function ExtraKey({ def, cred, onChange, reload }: { def: ExtraKeyUi; cred: (CredentialStatus & { secretKind: string }) | null; onChange: (c: CredentialStatus & { secretKind: string }) => void; reload: () => void }) {

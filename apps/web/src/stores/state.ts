@@ -46,6 +46,18 @@ export interface AppState {
   favorites: Favorite[];
   /** CSDR 국가 신용등급(v0.6): 사용자가 고친 등급(나라 코드 → 등급) */
   ratings: Record<string, SovereignRating>;
+  /** ECO 예상 칸(v0.6): 발표 id → 사용자가 넣은 예상 */
+  ecoExpect: Record<string, string>;
+  /** ECST 내 통계(v0.6): ECOF에서 더한 FRED 시계열과 KOSIS 주소 */
+  macroCustom: MacroCustom[];
+}
+
+/** ECST 내 통계 한 줄 */
+export interface MacroCustom {
+  id: string;
+  name: string;
+  /** KOSIS OpenAPI 주소(인증키 없이). 없으면 id가 FRED:… */
+  kosisUrl?: string;
 }
 
 /** FAVE 즐겨찾기 한 줄: 커맨드 라인에 그대로 칠 수 있는 명령 */
@@ -80,11 +92,13 @@ const DEFAULT: AppState = {
   chart: DEFAULT_CHART_PREFS,
   favorites: [],
   ratings: {},
+  ecoExpect: {},
+  macroCustom: [],
 };
 
 export const appState = createStore<AppState>(DEFAULT);
 
-const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites', 'ratings'];
+const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites', 'ratings', 'ecoExpect', 'macroCustom'];
 
 export async function loadAppState() {
   const next: AppState = { ...DEFAULT };

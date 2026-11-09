@@ -579,6 +579,12 @@ describe('중앙은행(v0.6)', () => {
   });
 });
 
+describe('매크로(v0.6)', () => {
+  it('ECOD·ECST·ECOF·ECMX·IFMO와 ECO는 그대로', () => {
+    for (const fn of ['ECOD', 'ECST', 'ECOF', 'ECMX', 'IFMO', 'ECO']) expect(run(fn).plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn } });
+  });
+});
+
 describe('FAVE·NOTE(v0.5)', () => {
   it('FAVE⏎은 즐겨찾기, NOTE는 종목 없이도·종목 뒤에도', () => {
     expect(run('FAVE').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'FAVE' } });
