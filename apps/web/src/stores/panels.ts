@@ -72,6 +72,10 @@ export interface PanelState {
   bookMarket?: 'J' | 'NX' | 'UN';
   /** NOTE(v0.5): 종목이 있어도 모든 메모를 볼지 */
   noteAll?: boolean;
+  /** v0.6 금리: 고른 커브(CMX·FWCM), 탭(BTMM 나라, WB 국채·스프레드), OIS 금리 */
+  ratesCurve?: string;
+  ratesTab?: string;
+  oisRate?: string;
   /** v0.6 외환: FXCA·FRD의 통화(앞 → 뒤), WCRS 기준 통화 */
   fxFrom?: string;
   fxTo?: string;

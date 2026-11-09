@@ -3204,3 +3204,21 @@ button {
 .fxip-news {
   font-size: 12px;
 }
+
+/* ── v0.6 금리 ── */
+.spark {
+  display: block;
+}
+.ois-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 440px) 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.sovm-us {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 2px 0 10px;
+  flex-wrap: wrap;
+}

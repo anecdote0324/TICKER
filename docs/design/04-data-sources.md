@@ -75,7 +75,11 @@
 | ETF NAV, ETF 구성종목(PDF) | ETF, MEMB (v0.4) | 지수 구성종목·가중치의 근사로 써요 |
 | 수정주가 일봉 | GP, 백테스트 | 기간별 시세의 `fid_org_adj_prc`가 0이면 수정주가, 1이면 원주가 |
 | ECB 기준환율(Frankfurter, 키 없음), ECOS 주요국 통화의 대원화환율(731Y001: 0000001 원/달러, 0000002 원/엔 100엔당, 0000003 원/유로, 0000053 원/위안), FRED H.10(DEXKOUS·DEXJPUS·DEXUSEU·DEXUSUK·DEXCHUS·DEXUSAL) | FIXI·FXIP (v0.6) | 3시간 캐시. 출처마다 따로 받아 하나가 실패해도 나머지는 보여요 |
-| 단기 금리: FRED SOFR·EFFR·€STR(ECBESTRVOLWGTTRMDMNRT), ECOS 시장금리(817Y002: 010502000 CD91, 010101000 콜) | FRD·WCRS (v0.6) | 3시간 캐시. ECB 데이터 API(data-api.ecb.europa.eu)는 이 개발 환경에서 응답이 없어서 €STR은 FRED로 받아요 |
+| 단기 금리: FRED SOFR·EFFR·€STR(ECBESTRVOLWGTTRMDMNRT), ECOS 시장금리(817Y002: 010502000 CD91, 010101000 콜) | FRD·WCRS (v0.6) | 3시간 캐시. €STR은 FRED로 받아요(ECB 데이터 API도 되지만 FRED 키로 한 번에 받는 게 간단해요) |
+| 금리 묶음: ECOS 기준금리(722Y001/0101000), 817Y002의 콜(010101000)·CD91(010502000)·CP91(010503000)·국고 3·10년(010200000·010210000)·회사채 AA- 3년(010300000)·BBB- 3년(010320000). FRED DFEDTARU·DFEDTARL·EFFR·SOFR·DTB3·DGS2·DGS10·ICE BofA OAS(BAMLC0A0CM·BAMLC0A1CAAA·BAMLC0A4CBBB·BAMLH0A0HYM2)·€STR | BTMM·OIS·FICM (v0.6, 만듦) | 400일, 3시간 캐시, 받지 못하면 `money-cache.json`. 시계열마다 따로 받아 하나가 실패해도 나머지는 보여요 |
+| 일본 재무성 국채 금리 CSV: `.../interest_rate/historical/jgbcme_all.csv`(지난 달까지)와 `.../interest_rate/jgbcme.csv`(이번 달) | GC JP·WB·CMX·FWCM·HSA (v0.6, 만듦) | 첫 줄은 제목, 둘째 줄이 머리줄(Date,1Y,…,40Y), 날짜는 서기 `YYYY/M/D`, 빈 값은 `-`. 최근 400일만 써요 |
+| ECB 데이터 포털 수익률 곡선 `YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_3M+SR_1Y+…+SR_30Y?startPeriod=…&format=csvdata` | GC EU·WB 등 (v0.6, 만듦) | 유로 지역 AAA 국채로 추정한 현물 금리. 테너를 `+`로 묶어 한 번에 받고 `DATA_TYPE_FM`으로 나눠요. User-Agent가 없으면 504가 나서 앱 이름(`TICKER-app`)을 보내요. `lastNObservations`는 느려서 `startPeriod`를 써요 |
+| 세계은행 WDI `GC.DOD.TOTL.GD.ZS`(중앙정부 부채/GDP, `mrv=8`), 미국 재무부 FiscalData `v2/accounting/od/debt_to_penny`(api.fiscaldata.treasury.gov) | SOVM (v0.6, 만듦) | 키 없음, 24시간 캐시. 세계은행 값은 연 단위라 나라마다 몇 해 늦어요. IMF 데이터 API는 자동 요청이 막혀 쓰지 않아요 |
 | 국내휴장일조회(CTCA0903R, 공식 예제 `domestic_stock/chk_holiday`) | 공용 영업일 달력 (v0.6, 만듦) | 하루 한 번(KIS 권고). 기준일부터 날마다 영업일·거래일·개장일·결제일 여부(`bzdy_yn`·`tr_day_yn`·`opnd_yn`·`sttl_day_yn`). 다음 쪽은 `tr_cont` M·F와 응답의 `ctx_area_fk`·`ctx_area_nk`. 해외 `countries_holiday`(CTOS5011R)는 이름과 달리 해외결제일자조회예요 |
 | 시황·뉴스 제목 | TOP (v0.4) | |
 | 주식현재가 시세(FHKST01010100)의 PER·PBR·EPS·BPS·52주 최고·최저·상장주수·업종·외국인 소진율, 해외주식 현재가상세(HHDFS76200200)의 같은 칸과 원화 환산가 | DES (v0.2) | 시가총액은 현재가 × 상장주수로 계산해요. 패널이 열려 있는 동안 60초마다 |

@@ -4,12 +4,15 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { KTB_ITEMS, ustTenor, type CurveTenor, type CurvesResponse, type YieldCurve } from '@bt/shared';
+import { EUR_TENORS, JGB_TENORS, KTB_ITEMS, parseEcbCsv, parseJgbCsv, ustTenor, type CurveId, type CurveTenor, type CurvesResponse, type YieldCurve } from '@bt/shared';
 import { fetchJson, fetchText, type Logger } from './util';
 
 const TTL_MS = 30 * 60_000;
 const UST_URL = 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=';
 const ECOS_BASE = 'https://ecos.bok.or.kr/api';
+const JGB_ALL = 'https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/historical/jgbcme_all.csv';
+const JGB_NOW = 'https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/jgbcme.csv';
+const ECB_YC = 'https://data-api.ecb.europa.eu/service/data/YC/B.U2.EUR.4F.G_N_A.SV_C_YM.';
 /** 국고채를 받을 기간(1년 전 비교와 여유) */
 const KTB_DAYS = 400;
 
@@ -95,7 +98,7 @@ export class RatesService {
     const saved = await this.readCache();
     const curves: YieldCurve[] = [];
     const missing: CurvesResponse['missing'] = [];
-    const take = async (id: 'UST' | 'KTB', name: string, get: () => Promise<YieldCurve>) => {
+    const take = async (id: CurveId, name: string, get: () => Promise<YieldCurve>) => {
       try {
         curves.push(await get());
       } catch (e) {
@@ -110,6 +113,9 @@ export class RatesService {
     await take('UST', '미국채', () => this.ust());
     if (this.ecosKey) await take('KTB', '국고채', () => this.ktb(this.ecosKey!));
     else missing.push({ id: 'KTB', name: '국고채', reason: 'BOK ECOS 인증키를 넣으면 국고채 커브가 보여요(설정 → 데이터 연결)' });
+    // v0.6: 일본 국채(재무성 CSV, 키 없음)·유로 AAA 국채(ECB 데이터 포털, 키 없음)
+    await take('JGB', '일본 국채', () => this.jgb());
+    await take('EUR', '유로 AAA 국채', () => this.eur());
     const res = { curves, missing };
     void writeFile(this.cacheFile, JSON.stringify({ curves })).catch(() => undefined);
     return res;
@@ -140,6 +146,45 @@ export class RatesService {
       rows: rows.slice(-KTB_DAYS),
       // 재무부는 뉴욕 장 마감 뒤 그날 금리를 올려요
       fresh: { source: 'TREASURY', mode: 'daily', asOf: Date.parse(`${last}T21:00:00Z`), asOfDate: last, receivedAt: now },
+    };
+  }
+
+  /** 일본 국채: 재무성 전체 이력 CSV(지난달까지) + 이번 달 CSV. 서기 날짜예요 */
+  private async jgb(): Promise<YieldCurve> {
+    const [all, now] = await Promise.all([fetchText(JGB_ALL, { timeoutMs: 60_000 }), fetchText(JGB_NOW, { timeoutMs: 30_000 }).catch(() => '')]);
+    const byDate = new Map<string, Record<string, number>>();
+    for (const r of [...parseJgbCsv(all), ...parseJgbCsv(now)]) byDate.set(r.date, r.values);
+    const rows = [...byDate.entries()].map(([date, values]) => ({ date, values })).sort((a, b) => a.date.localeCompare(b.date)).slice(-KTB_DAYS);
+    if (!rows.length) throw new Error('재무성 국채 금리 CSV에 값이 없어요');
+    const last = rows[rows.length - 1].date;
+    return {
+      id: 'JGB',
+      name: '일본 국채',
+      tenors: JGB_TENORS.filter((t) => rows.some((r) => r.values[t.key] !== undefined)),
+      rows,
+      // 재무성은 도쿄 장 마감 뒤(한국 저녁) 그날 금리를 올려요
+      fresh: { source: 'MOF', mode: 'daily', asOf: Date.parse(`${last}T09:00:00Z`), asOfDate: last, receivedAt: Date.now() },
+    };
+  }
+
+  /** 유로 지역 AAA 국채 현물 금리(ECB YC): 테너마다 최근 400 관측 */
+  private async eur(): Promise<YieldCurve> {
+    const byDate = new Map<string, Record<string, number>>();
+    // 테너를 '+'로 묶어 한 번에, 시작일로 범위를 줘요(lastNObservations는 느려요)
+    const start = new Date(Date.now() - (KTB_DAYS + 200) * 86400_000).toISOString().slice(0, 10);
+    const text = await fetchText(`${ECB_YC}${EUR_TENORS.map((t) => t.key).join('+')}?startPeriod=${start}&format=csvdata`, { timeoutMs: 60_000, headers: { 'User-Agent': 'TICKER-app' } });
+    // (ECB 데이터 포털은 User-Agent가 없는 요청에 504로 답해요. 앱 이름을 붙여요)
+    for (const o of parseEcbCsv(text)) if (o.series) byDate.set(o.date, { ...(byDate.get(o.date) ?? {}), [o.series]: o.value });
+    const rows = [...byDate.entries()].map(([date, values]) => ({ date, values })).sort((a, b) => a.date.localeCompare(b.date));
+    if (!rows.length) throw new Error('ECB 수익률 곡선에 값이 없어요');
+    const last = rows[rows.length - 1].date;
+    return {
+      id: 'EUR',
+      name: '유로 AAA 국채',
+      tenors: EUR_TENORS.filter((t) => rows.some((r) => r.values[t.key] !== undefined)),
+      rows,
+      // ECB는 다음 영업일 정오(중부 유럽) 무렵 전날 곡선을 올려요
+      fresh: { source: 'ECBDATA', mode: 'daily', asOf: Date.parse(`${last}T17:00:00Z`), asOfDate: last, receivedAt: Date.now() },
     };
   }
 

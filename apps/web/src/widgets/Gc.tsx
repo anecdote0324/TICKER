@@ -1,5 +1,5 @@
 // GC 금리 커브(03 v0.3): 미국채(재무부)와 국고채(BOK ECOS) 커브, 비교 커브(1주·1개월·1년 전), 테너별 변동(bp), 스프레드.
-// 인자: GC(둘 다), GC US(미국채), GC KR(국고채). 가로축은 만기의 제곱근이라 짧은 만기도 보여요.
+// 인자: GC(전체), GC US(미국채), GC KR(국고채), GC JP(일본 국채, v0.6), GC EU(유로 AAA 국채, v0.6). 가로축은 만기의 제곱근이라 짧은 만기도 보여요.
 
 import { useMemo, useState } from 'react';
 import type { CurvesResponse, YieldCurve } from '@bt/shared';
@@ -9,7 +9,9 @@ import { TitleBar, usePoll } from './common';
 import { bp, curveAt, GC_COMPARE, spreads, tenorValue, xOfYears } from './gcCalc';
 
 const POLL_MS = 30 * 60_000;
-const COLOR: Record<string, string> = { UST: 'var(--accent)', KTB: '#4FC3F7' };
+const COLOR: Record<string, string> = { UST: 'var(--accent)', KTB: '#4FC3F7', JGB: '#E57373', EUR: '#81C784' };
+/** 인자 → 커브 */
+const ARG_CURVE: Record<string, string> = { US: 'UST', KR: 'KTB', JP: 'JGB', EU: 'EUR' };
 const W = 640;
 const H = 260;
 const PAD = { l: 44, r: 12, t: 12, b: 28 };
@@ -22,8 +24,8 @@ export function Gc({ panel }: { panel: PanelState }) {
   const days = GC_COMPARE[compare].days;
   const res = usePoll<CurvesResponse>('/api/curves', POLL_MS);
   const all = res?.data?.curves ?? [];
-  const curves = all.filter((c) => which === 'ALL' || (which === 'US' ? c.id === 'UST' : c.id === 'KTB'));
-  const missing = (res?.data?.missing ?? []).filter((m) => which === 'ALL' || (which === 'US' ? m.id === 'UST' : m.id === 'KTB'));
+  const curves = all.filter((c) => which === 'ALL' || c.id === ARG_CURVE[which]);
+  const missing = (res?.data?.missing ?? []).filter((m) => which === 'ALL' || m.id === ARG_CURVE[which]);
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null);
 
   const geo = useMemo(() => {
@@ -52,9 +54,9 @@ export function Gc({ panel }: { panel: PanelState }) {
 
   const tools = (
     <>
-      {(['ALL', 'US', 'KR'] as const).map((k) => (
+      {(['ALL', 'US', 'KR', 'JP', 'EU'] as const).map((k) => (
         <button key={k} className={which === k ? 'on' : ''} title={k === 'ALL' ? 'GC' : `GC ${k}`} onClick={() => patchPanel(panel.id, { args: [k] })}>
-          {k === 'ALL' ? '전체' : k === 'US' ? '미국채' : '국고채'}
+          {({ ALL: '전체', US: '미국', KR: '한국', JP: '일본', EU: '유로' } as const)[k]}
         </button>
       ))}
       <span style={{ width: 8 }} />

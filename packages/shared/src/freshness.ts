@@ -3,7 +3,7 @@
 
 import { formatBadgeDate, formatBadgeTime } from './time';
 
-export type SourceId = 'KIS' | 'BINANCE' | 'ECB' | 'DEMO' | 'RSS' | 'DART' | 'TREASURY' | 'ECOS' | 'FRED' | 'SEC' | 'BEA' | 'FINRA' | 'KRX';
+export type SourceId = 'KIS' | 'BINANCE' | 'ECB' | 'DEMO' | 'RSS' | 'DART' | 'TREASURY' | 'ECOS' | 'FRED' | 'SEC' | 'BEA' | 'FINRA' | 'KRX' | 'MOF' | 'ECBDATA' | 'WORLDBANK';
 
 export const SOURCE_LABEL: Record<SourceId, string> = {
   KIS: '한국투자증권',
@@ -20,6 +20,9 @@ export const SOURCE_LABEL: Record<SourceId, string> = {
   BEA: '미국 경제분석국(BEA)',
   FINRA: 'FINRA 공매도 잔고',
   KRX: 'KRX Open API',
+  MOF: '일본 재무성',
+  ECBDATA: 'ECB 데이터 포털',
+  WORLDBANK: '세계은행',
 };
 
 /**

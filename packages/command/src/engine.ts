@@ -1209,9 +1209,12 @@ export class CommandEngine {
         } else {
           rows.push(...this.closedRows(seg, ctx, after, sec));
         }
-        // 다 친 시장·자산군(AAPL US): 알아들었다는 줄을 보여 줘요('US'와 일치하는 것이 없다고 하지 않게)
-        if (rows.length === 0 && seg.slot === 'market' && seg.market) rows.push(recognizedRow('market', seg.text.toUpperCase(), MARKET_LABEL[seg.market], '시장'));
-        if (rows.length === 0 && seg.slot === 'asset' && seg.asset) rows.push(recognizedRow('asset', seg.asset, ASSET_LABEL[seg.asset], '자산군'));
+        // 다 친 시장·자산군(AAPL US): 알아들었다는 줄을 맨 위에 보여 줘요('US'와 일치하는 것이 없다고 하지 않게).
+        // 같은 글자로 시작하는 기능(US → USSW)이 있어도 다 친 시장이 먼저예요
+        // 고침 줄(틀린 자산군 등)이 있으면 그 줄이 먼저예요
+        const hasFix = rows.some((r) => r.kind === 'fix');
+        if (seg.slot === 'market' && seg.market && (!hasFix || rows.length === 0)) rows.unshift(recognizedRow('market', seg.text.toUpperCase(), MARKET_LABEL[seg.market], '시장'));
+        else if (seg.slot === 'asset' && seg.asset && rows.length === 0) rows.push(recognizedRow('asset', seg.asset, ASSET_LABEL[seg.asset], '자산군'));
         if (rows.length === 0) rows.push(noMatchRow(seg.text));
         break;
       }

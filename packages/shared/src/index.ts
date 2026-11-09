@@ -28,3 +28,4 @@ export * from './update';
 export * from './calendar';
 export * from './fxcalc';
 export * from './fx';
+export * from './money';

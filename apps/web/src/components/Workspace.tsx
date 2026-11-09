@@ -34,6 +34,7 @@ import { Bq, Etf, Memb, Mov, Watc } from '../widgets/MarketViews';
 import { Aqr, Hp, Qr, Vap } from '../widgets/TradeViews';
 import { Fave } from '../widgets/Fave';
 import { Fixi, Frd, Fxca, Fxip, Wcrs } from '../widgets/FxViews';
+import { Btmm, Cmx, Ficm, Fwcm, Hsa, Ois, Sovm, Wb } from '../widgets/RatesViews';
 import { Note } from '../widgets/Note';
 import { describeCommand } from '../stores/commands';
 import { addFavorite, removeFavorite } from '../stores/favorites';
@@ -197,6 +198,24 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Bq panel={p} />;
     case 'FAVE':
       return <Fave panel={p} />;
+    case 'BTMM':
+    case 'USSW':
+      return <Btmm panel={p} />;
+    case 'OIS':
+      return <Ois panel={p} />;
+    case 'WB':
+    case 'WBX':
+      return <Wb panel={p} />;
+    case 'SOVM':
+      return <Sovm panel={p} />;
+    case 'CMX':
+      return <Cmx panel={p} />;
+    case 'FWCM':
+      return <Fwcm panel={p} />;
+    case 'HSA':
+      return <Hsa panel={p} />;
+    case 'FICM':
+      return <Ficm panel={p} />;
     case 'FXIP':
       return <Fxip panel={p} />;
     case 'FXCA':
