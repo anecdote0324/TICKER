@@ -146,8 +146,8 @@ describe('UsMapService', () => {
     const svc = new UsMapService(dir, quiet);
     const r = await svc.holdings('NDX');
     expect(r.data?.holdings).toEqual([{ ticker: 'MSFT', name: 'Microsoft', weight: 6.3 }]);
-    await new Promise((res) => setTimeout(res, 20));
-    expect(JSON.parse(readFileSync(join(dir, 'etf-holdings-QQQ.json'), 'utf8')).asOf).toBe('2026-11-03');
+    // 파일은 뒤에서 써요. 느린 컴퓨터(Windows CI)에서는 20ms 안에 다 못 써서, 다 쓸 때까지 기다려요(최대 3초)
+    await vi.waitFor(() => expect(JSON.parse(readFileSync(join(dir, 'etf-holdings-QQQ.json'), 'utf8')).asOf).toBe('2026-11-03'), { timeout: 3000, interval: 20 });
   });
 
   it('업종 분류는 받는 동안 없음으로 두고, 받은 뒤에는 데이터 폴더에서도 읽어요', async () => {
