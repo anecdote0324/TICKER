@@ -13,6 +13,7 @@ import { History } from './history';
 import { NewsService } from './news';
 import { NoteStore } from './notes';
 import { CalendarService } from './calendar';
+import { FxService } from './fx';
 import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
@@ -107,6 +108,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     (index) => hub.sectorMap(index),
   );
   const eco = new EcoService(log, () => rates.ecosKeyValue);
+  // v0.6 외환: FIXI 고시환율·FRD 단기 금리(FRED 키·ECOS 인증키를 같이 써요)
+  const fx = new FxService(log, () => rates.ecosKeyValue);
   // FRED 크레딧 스프레드는 최근 3년만 줘서 지금부터 쌓아요(03 v0.3)
   eco.startSpreadArchive(hub.history);
   const extraKeys: ExtraKeys = {
@@ -121,7 +124,10 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       label: 'FRED API 키',
       validate: (k) => (/^[0-9a-z]{32}$/.test(k) ? undefined : 'FRED API 키는 영문 소문자·숫자 32자예요'),
       test: (k) => eco.testFred(k),
-      apply: (k) => eco.setFredKey(k),
+      apply: (k) => {
+        eco.setFredKey(k);
+        fx.setFredKey(k);
+      },
       hint: tailHint,
     },
     sec: {
@@ -222,6 +228,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     extraKeys,
     notes,
     calendar,
+    fx,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();

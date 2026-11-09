@@ -3136,3 +3136,71 @@ button {
 .clocks.no-clocks > span {
   visibility: hidden;
 }
+
+/* ── v0.6 외환 ── */
+.fx-calc .fx-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 3px 0 6px;
+}
+.fx-select,
+.fx-amount,
+.fx-calc input {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  color: var(--value);
+  font: 12px var(--mono);
+  padding: 3px 6px;
+}
+.fx-amount {
+  width: 140px;
+  text-align: right;
+}
+.fx-result {
+  padding: 10px 0;
+}
+.fx-big {
+  font: 600 22px var(--mono);
+  color: var(--value-hi);
+}
+.fx-spot {
+  font: 600 13px var(--mono);
+  color: var(--value-hi);
+}
+.fx-rate {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.fx-rate input {
+  width: 80px;
+  text-align: right;
+}
+.fx-warn {
+  color: #c98a3a;
+  padding: 2px 0 6px;
+}
+.fixi-src + .fixi-src {
+  margin-top: 10px;
+}
+.fixi-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 2px 0 4px;
+  flex-wrap: wrap;
+}
+.wcrs th.click {
+  cursor: pointer;
+}
+.fxip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  padding-bottom: 10px;
+}
+.fxip-news {
+  font-size: 12px;
+}

@@ -33,6 +33,7 @@ import { Firs, Ni, Nse, Top } from '../widgets/NewsViews';
 import { Bq, Etf, Memb, Mov, Watc } from '../widgets/MarketViews';
 import { Aqr, Hp, Qr, Vap } from '../widgets/TradeViews';
 import { Fave } from '../widgets/Fave';
+import { Fixi, Frd, Fxca, Fxip, Wcrs } from '../widgets/FxViews';
 import { Note } from '../widgets/Note';
 import { describeCommand } from '../stores/commands';
 import { addFavorite, removeFavorite } from '../stores/favorites';
@@ -196,6 +197,16 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Bq panel={p} />;
     case 'FAVE':
       return <Fave panel={p} />;
+    case 'FXIP':
+      return <Fxip panel={p} />;
+    case 'FXCA':
+      return <Fxca panel={p} />;
+    case 'FRD':
+      return <Frd panel={p} />;
+    case 'FIXI':
+      return <Fixi panel={p} />;
+    case 'WCRS':
+      return <Wcrs panel={p} />;
     case 'NOTE':
       return <Note panel={p} />;
     case 'HP':

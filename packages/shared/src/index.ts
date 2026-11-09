@@ -26,3 +26,5 @@ export * from './tape';
 export * from './notes';
 export * from './update';
 export * from './calendar';
+export * from './fxcalc';
+export * from './fx';

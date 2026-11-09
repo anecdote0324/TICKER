@@ -72,6 +72,10 @@ export interface PanelState {
   bookMarket?: 'J' | 'NX' | 'UN';
   /** NOTE(v0.5): 종목이 있어도 모든 메모를 볼지 */
   noteAll?: boolean;
+  /** v0.6 외환: FXCA·FRD의 통화(앞 → 뒤), WCRS 기준 통화 */
+  fxFrom?: string;
+  fxTo?: string;
+  fxBase?: string;
   /** v0.5: HP 봉 크기, VAP 기간 */
   hpInterval?: '1d' | '1w' | '1M';
   vapRange?: 'D' | '1M' | '3M' | '6M' | '1Y';
