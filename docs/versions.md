@@ -28,7 +28,7 @@
 | [v0.3](#v03-분석과-개인화) | 분석과 개인화 | FA ECO GC GRID MAP PORT ALRT | 만들 것은 모두 만듦, 실제 환경 확인 마침(미국 재무제표 막힘은 후순위로) |
 | [v0.4](#v04-종목-심화-a-공시수급실적) | 종목 심화 A: 공시·수급·실적 | DES 심화, 뉴스 검색, 수급(KINV), 실적(EE·ANR), ETF 등 29개 | 만들 것은 모두 만듦(미리 보기 v0.4.0-beta.3), 실제 환경 확인 남음 |
 | [v0.5](#v05-종목-심화-b-차트도구) | 종목 심화 B: 차트·도구 | G TECH QR HP 드로잉 등 10개 | 만들 것은 모두 만듦, 실제 환경 확인 남음 |
-| [v0.6](#v06-금리매크로지수선물) | 금리·매크로·지수선물 | BTMM WB FOMC WIRP* WEIF 등 26개 | 만드는 중 |
+| [v0.6](#v06-금리매크로지수선물) | 금리·매크로·지수선물 | BTMM WB FOMC WIRP* WEIF 등 26개 | 만듦(실제 키 확인 남음) |
 | [v0.7](#v07-채권) | 채권 | YAS SRCH FIPX BVAL* WBF KCB 등 19개 | 예정 |
 | [v0.8](#v08-포트폴리오리스크) | 포트폴리오·리스크 | PORT 탭들, BETA TRA MARS* 등 | 예정 |
 | [v0.9](#v09-스크리닝밸류에이션백테스트) | 스크리닝·밸류에이션·백테스트 | EQS RV WACC EQBT BTST 등 19개 | 예정 |
@@ -220,7 +220,7 @@
 
 ## v0.6 금리·매크로·지수선물
 
-상태: 만드는 중(11/9 시작). 공용 영업일·휴장일 달력(한국·미국·영국·일본, 한국은 한국투자증권 휴장일로 맞춤), 외환 묶음(FXIP·FXCA·FRD·FIXI·WCRS), 금리 묶음(BTMM·USSW·OIS·WB·WBX·SOVM·CMX·FWCM·HSA·FICM, GC 일본·유로), 중앙은행 묶음(CENB·FOMC·DOTS·WIRP 근사·CSDR 근사), 매크로 묶음(ECOD·ECST·ECOF·ECMX·IFMO, ECO 한국 일정·예상 칸, KOSIS 내 통계)을 만들었어요. 남은 일: 지수선물(WEIF)·CIX·채권 뉴스 필터.
+상태: 만들 것은 모두 만들었어요(11/9). 남은 일: 실제 키로 확인(ECOS·FRED 항목, KOSIS 주소, 한국투자증권 지수선물 코드·야간 시세, 07). 공용 영업일·휴장일 달력(한국·미국·영국·일본, 한국은 한국투자증권 휴장일로 맞춤), 외환 묶음(FXIP·FXCA·FRD·FIXI·WCRS), 금리 묶음(BTMM·USSW·OIS·WB·WBX·SOVM·CMX·FWCM·HSA·FICM, GC 일본·유로), 중앙은행 묶음(CENB·FOMC·DOTS·WIRP 근사·CSDR 근사), 매크로 묶음(ECOD·ECST·ECOF·ECMX·IFMO, ECO 한국 일정·예상 칸, KOSIS 내 통계), 지수선물(WEIF), CIX 수식 티커, 채권 뉴스 필터를 만들었어요.
 
 | 묶음 | 기능 |
 |---|---|
@@ -228,8 +228,8 @@
 | 중앙은행 | CENB 중앙은행(만듦), FOMC FOMC 결과(만듦, 금통위 탭), DOTS 점도표(만듦), WIRP* 정책금리 경로(만듦, 시장 금리 − 정책금리 근사), CSDR* 국가 신용등급(만듦, 고쳐 쓰는 표와 등급 뉴스) |
 | 매크로 | ECOD 지표 상세(만듦), ECST 경제 통계(만듦, KOSIS는 내 통계에 주소로), ECOF 지표 찾기(만듦), ECMX 세계 경제 매트릭스(만듦), IFMO 인플레이션 모니터(만듦), ECO 미국·한국 보기·한국 발표 일정·예상 칸(만듦) |
 | 외환 | FXIP FX 홈(만듦), FXCA 환산 계산기(만듦), FRD 선물환 계산기(만듦), FIXI 공식 고시환율(만듦), WCRS 통화 순위(만듦, PPP 빼고) |
-| 지수선물 | WEIF 세계 지수선물(KOSPI200 주간·야간) |
-| 도구 | CIX 수식 티커, 채권 뉴스 필터(TOP BON·N BON·STNI) |
+| 지수선물 | WEIF 세계 지수선물(만듦: KOSPI200 두 월물·미니·코스닥150·KRX300·VKOSPI, 조회 5초·호가 탭, 주간·야간 구분) |
+| 도구 | CIX 수식 티커(만듦), 채권 뉴스 필터(만듦: TOP BON·N BON·STNI) |
 
 새 데이터: BIS 정책금리(만듦), 연준·한국은행·ECB·일본은행 일정·성명(만듦), ECB, 일본 재무성 CSV, 수출입은행 환율, IMF·OECD·World Bank, Treasury FiscalData, KIS 국내선물옵션·휴장일, KOSIS(v0.3에서 옮김).
 

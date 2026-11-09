@@ -17,6 +17,7 @@ import { FxService } from './fx';
 import { MoneyService } from './money';
 import { CentralBankService } from './centralbank';
 import { MacroService } from './macro';
+import { FuturesService } from './futures';
 import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
@@ -120,6 +121,12 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   // v0.6 매크로: 시계열·지표 찾기·세계 경제 매트릭스·한국 발표 일정
   const macro = new MacroService(log, () => rates.ecosKeyValue);
   eco.setMacro(macro);
+  // v0.6 WEIF 지수선물(한국투자증권 조회, 이론가는 CD91)
+  const futures = new FuturesService(opts.dataDir, log, () => hub.kis, async () => {
+    const r = await money.get();
+    const obs = r.series.find((s) => s.id === 'KR_CD91')?.obs;
+    return obs?.[obs.length - 1]?.value;
+  });
   // FRED 크레딧 스프레드는 최근 3년만 줘서 지금부터 쌓아요(03 v0.3)
   eco.startSpreadArchive(hub.history);
   const extraKeys: ExtraKeys = {
@@ -255,6 +262,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     money,
     centralBank,
     macro,
+    futures,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();

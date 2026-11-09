@@ -29,14 +29,15 @@ export function Rows({ items, now, extra }: { items: NewsItem[]; now: number; ex
 
 export function Top({ panel }: { panel: PanelState }) {
   const hours = panel.topHours ?? 24;
-  const res = usePoll<TopNewsResponse>(`/api/news/top?hours=${hours}`, 5 * 60_000);
+  const bond = panel.args?.[0] === 'BON';
+  const res = usePoll<TopNewsResponse>(`/api/news/top?hours=${hours}${bond ? '&filter=BON' : ''}`, 5 * 60_000);
   const now = useNow(30_000);
   const items = res?.data?.items ?? [];
   return (
     <>
       <TitleBar
         fn="TOP"
-        name="주요 뉴스"
+        name={bond ? '주요 뉴스 · 채권' : '주요 뉴스'}
         sub={`최근 ${hours}시간`}
         fresh={res?.data?.fresh}
         tools={
@@ -46,6 +47,9 @@ export function Top({ panel }: { panel: PanelState }) {
                 {`${h}시간`}
               </button>
             ))}
+            <button className={bond ? 'on' : ''} onClick={() => patchPanel(panel.id, { args: bond ? undefined : ['BON'] })} title="TOP BON: 채권·금리 헤드라인만">
+              채권
+            </button>
           </>
         }
       />

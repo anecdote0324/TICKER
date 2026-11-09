@@ -3400,3 +3400,41 @@ button {
   border: 1px solid var(--accent);
   font: inherit;
 }
+
+/* ── v0.6 CIX 수식 티커 ── */
+.cix td.cix-f {
+  text-align: left;
+  white-space: normal;
+  font-family: var(--mono);
+}
+.cix-draft {
+  padding-top: 4px;
+}
+
+/* ── v0.6 WEIF 지수선물 ── */
+.weif-book {
+  max-width: 420px;
+  padding-top: 6px;
+}
+.weif-book-t td {
+  text-align: center;
+  width: 33%;
+}
+.weif-bar {
+  position: relative;
+}
+.weif-ask,
+.weif-bid {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  opacity: 0.35;
+}
+.weif-ask {
+  right: 0;
+  background: var(--down);
+}
+.weif-bid {
+  left: 0;
+  background: var(--up);
+}

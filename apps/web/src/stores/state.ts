@@ -50,6 +50,8 @@ export interface AppState {
   ecoExpect: Record<string, string>;
   /** ECST 내 통계(v0.6): ECOF에서 더한 FRED 시계열과 KOSIS 주소 */
   macroCustom: MacroCustom[];
+  /** CIX 수식 티커(v0.6) */
+  cix: Array<{ id: string; name: string; formula: string }>;
 }
 
 /** ECST 내 통계 한 줄 */
@@ -94,11 +96,12 @@ const DEFAULT: AppState = {
   ratings: {},
   ecoExpect: {},
   macroCustom: [],
+  cix: [],
 };
 
 export const appState = createStore<AppState>(DEFAULT);
 
-const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites', 'ratings', 'ecoExpect', 'macroCustom'];
+const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites', 'ratings', 'ecoExpect', 'macroCustom', 'cix'];
 
 export async function loadAppState() {
   const next: AppState = { ...DEFAULT };

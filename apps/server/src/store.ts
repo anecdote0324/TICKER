@@ -44,7 +44,7 @@ export async function fileSecretBox(dataDir: string): Promise<SecretBox> {
 }
 
 /** 화면이 읽고 쓸 수 있는 상태 이름 */
-export const STATE_NAMES = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites', 'ratings', 'ecoExpect', 'macroCustom'] as const;
+export const STATE_NAMES = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites', 'ratings', 'ecoExpect', 'macroCustom', 'cix'] as const;
 export type StateName = (typeof STATE_NAMES)[number];
 
 export class Store {

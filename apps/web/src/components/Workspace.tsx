@@ -37,6 +37,8 @@ import { Fixi, Frd, Fxca, Fxip, Wcrs } from '../widgets/FxViews';
 import { Btmm, Cmx, Ficm, Fwcm, Hsa, Ois, Sovm, Wb } from '../widgets/RatesViews';
 import { Cenb, Csdr, Dots, Fomc, Wirp } from '../widgets/CentralBankViews';
 import { Ecmx, Ecod, Ecof, Ecst, Ifmo } from '../widgets/MacroViews';
+import { Cix } from '../widgets/Cix';
+import { Weif } from '../widgets/Weif';
 import { Note } from '../widgets/Note';
 import { describeCommand } from '../stores/commands';
 import { addFavorite, removeFavorite } from '../stores/favorites';
@@ -238,6 +240,10 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Ecmx panel={p} />;
     case 'IFMO':
       return <Ifmo panel={p} />;
+    case 'CIX':
+      return <Cix panel={p} />;
+    case 'WEIF':
+      return <Weif panel={p} />;
     case 'FXIP':
       return <Fxip panel={p} />;
     case 'FXCA':

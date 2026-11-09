@@ -71,6 +71,9 @@ export const GC_CURVES: FunctionArgs['choices'] = [
   { code: 'EU', label: '유로 AAA 국채', aliases: ['EUR', '유로', '독일'] },
 ];
 
+/** 뉴스 채권 필터(v0.6): TOP BON·N BON */
+export const NEWS_FILTERS: FunctionArgs['choices'] = [{ code: 'BON', label: '채권', aliases: ['BOND', '채권'] }];
+
 /** v0.1에서 만든 기능. 다른 코드는 카탈로그에서 와요. */
 const BUILT: FunctionDef[] = [
   {
@@ -266,8 +269,9 @@ const BUILT: FunctionDef[] = [
     version: 'v0.2',
     implemented: true,
     speed: 'RSS 5분마다, DART 2분마다',
-    examples: ['N', '005930 N', 'AAPL US N'],
+    examples: ['N', '005930 N', 'AAPL US N', 'N BON'],
     similar: ['DES'],
+    args: { kind: 'curve', label: '필터', choices: NEWS_FILTERS, max: 1 },
   },
   {
     code: 'GC',
@@ -606,15 +610,16 @@ const BUILT: FunctionDef[] = [
     version: 'v0.4',
     implemented: true,
     speed: '5분마다',
-    examples: ['TOP'],
+    examples: ['TOP', 'TOP BON'],
     similar: ['N', 'FIRS'],
+    args: { kind: 'curve', label: '필터', choices: NEWS_FILTERS, max: 1 },
   },
   {
     code: 'NI',
     nameKo: '주제별 뉴스',
     nameEn: 'News by Topic',
     summary: '실적·금리·반도체 등 주제별 헤드라인',
-    detail: '실적, 금리·채권, 환율, 반도체, 2차전지, 바이오, 원자재, 코인, 부동산, M&A, 정책·관세, 공모·상장 주제의 최근 헤드라인이에요. 위 버튼으로 주제를 바꿔요. 채권 필터(TOP BON 등)는 v0.6.',
+    detail: '실적, 금리·채권, 환율, 반도체, 2차전지, 바이오, 원자재, 코인, 부동산, M&A, 정책·관세, 공모·상장 주제의 최근 헤드라인이에요. 위 버튼으로 주제를 바꿔요. STNI는 금리·채권 주제로 열어요.',
     security: 'none',
     assetClasses: [],
     keywords: ['주제', '주제별뉴스', '테마뉴스'],
@@ -623,6 +628,7 @@ const BUILT: FunctionDef[] = [
     speed: '5분마다',
     examples: ['NI'],
     similar: ['TOP', 'NSE'],
+    aliases: ['STNI'],
   },
   {
     code: 'NSE',
@@ -1052,6 +1058,36 @@ const BUILT: FunctionDef[] = [
     speed: '물가는 매달, BEI는 매일',
     examples: ['IFMO'],
     similar: ['ECST', 'ECOD'],
+  },
+  {
+    code: 'WEIF',
+    nameKo: '세계 지수선물',
+    nameEn: 'World Equity Index Futures',
+    summary: 'KOSPI200 주간·야간 선물, 베이시스·이론가·미결제',
+    detail: 'KOSPI200(최근 두 월물)·미니·코스닥150·KRX300·VKOSPI 선물의 현재가, 기초 지수, 베이시스, 이론가(한국투자증권·단순 보유비용), 거래량, 미결제약정, 고른 계약의 5호가. 주간과 KRX 야간 파생시장을 장 구분과 함께 보여 줘요. 미국 지수선물은 넣지 않아요(CME 유료 시세).',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['지수선물', '선물', '야간선물', 'KOSPI200선물', '베이시스'],
+    version: 'v0.6',
+    implemented: true,
+    speed: '5초마다(조회, 한국투자증권 키)',
+    examples: ['WEIF'],
+    similar: ['WEI', 'CIX'],
+  },
+  {
+    code: 'CIX',
+    nameKo: '수식 티커',
+    nameEn: 'Custom Index',
+    summary: '시세를 조합한 사용자 지수(스프레드·비율)',
+    detail: '대괄호 안에 종목을 적은 식(예: [005930] / [000660], [SPX] - [NDX] * 0.25)으로 나만의 지수를 만들어요. 지금 값, 전일 종가로 계산한 값, 등락을 시세와 같은 속도로 보여 줘요.',
+    security: 'none',
+    assetClasses: [],
+    keywords: ['수식티커', '사용자지수', '스프레드', '비율'],
+    version: 'v0.6',
+    implemented: true,
+    speed: '원래 시세와 같음',
+    examples: ['CIX'],
+    similar: ['HSA', 'COMP'],
   },
   {
     code: 'FXIP',

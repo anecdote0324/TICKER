@@ -86,5 +86,8 @@ export const NEWS_TOPICS: Array<{ code: string; label: string; pattern: string }
   { code: 'ratings', label: '신용등급', pattern: '신용등급|등급 강등|등급 상향|등급 전망|무디스|피치 ?레이팅스|Moody|Fitch|downgrade|credit rating|sovereign rating' },
 ];
 
+/** 채권 뉴스 필터(TOP BON·N BON, v0.6): 금리·채권 주제에 회사채·신용 낱말을 더해요 */
+export const BOND_PATTERN = '금리|국채|채권|국고채|회사채|연준|기준금리|금통위|FOMC|Fed|yield|bond|Treasur|credit|크레딧|신용스프레드';
+
 /** FIRS 속보: 제목에 이 말이 있으면 속보로 봐요 */
 export const BREAKING_PATTERN = '속보|\\[1보\\]|1보\\]|긴급|단독|breaking|urgent|just in|alert';

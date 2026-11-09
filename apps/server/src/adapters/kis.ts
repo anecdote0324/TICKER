@@ -75,6 +75,7 @@ interface KisResponse {
   output?: KisRow;
   output1?: KisRow | KisRow[];
   output2?: KisRow[];
+  output3?: KisRow | KisRow[];
 }
 
 /** 국내 주식 실시간 체결(H0STCNT0) 한 건의 칸 수(공식 예제 ccnl_krx는 47칸. 묶여 오면 전체 칸 수를 건수로 나눠 써요) */
@@ -1405,6 +1406,22 @@ export class KisAdapter implements Adapter {
   async orderbook(code: string, market: 'J' | 'NX' | 'UN'): Promise<{ book: KisRow; expected: KisRow }> {
     const r = await this.get('/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn', 'FHKST01010200', { FID_COND_MRKT_DIV_CODE: market, FID_INPUT_ISCD: code }, 0);
     return { book: asRows(r.output1)[0] ?? {}, expected: asRows(r.output2)[0] ?? {} };
+  }
+
+  /**
+   * WEIF 지수선물 시세(v0.6): 선물옵션 시세(FHMIF10000000, 공식 예제 domestic_futureoption/inquire_price). 시장 F(지수선물).
+   * output1: futs_prpr·futs_prdy_vrss·prdy_vrss_sign·futs_prdy_ctrt·acml_vol·hts_otst_stpl_qty·otst_stpl_qty_icdc·basis·mrkt_basis·hts_thpr·dprt·futs_last_tr_date·hts_rmnn_dynu…
+   * output3: 기초 지수(bstp_nmix_prpr·bstp_nmix_prdy_vrss·bstp_nmix_prdy_ctrt)
+   */
+  async futuresPrice(code: string): Promise<{ quote: KisRow; underlying: KisRow }> {
+    const r = await this.get('/uapi/domestic-futureoption/v1/quotations/inquire-price', 'FHMIF10000000', { FID_COND_MRKT_DIV_CODE: 'F', FID_INPUT_ISCD: code }, 1);
+    return { quote: asRows(r.output1)[0] ?? {}, underlying: asRows(r.output3)[0] ?? {} };
+  }
+
+  /** WEIF 호가 탭(v0.6): 선물옵션 시세호가(FHMIF10010000, 공식 예제 inquire_asking_price). output2에 매도·매수 5호가와 잔량 */
+  async futuresBook(code: string): Promise<KisRow> {
+    const r = await this.get('/uapi/domestic-futureoption/v1/quotations/inquire-asking-price', 'FHMIF10010000', { FID_COND_MRKT_DIV_CODE: 'F', FID_INPUT_ISCD: code }, 0);
+    return asRows(r.output2)[0] ?? {};
   }
 
   /**

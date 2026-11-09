@@ -85,6 +85,8 @@ export interface PanelState {
   ecstTab?: 'KR' | 'US' | 'MY';
   ecofQuery?: string;
   ifmoTab?: 'CPI' | 'BEI';
+  /** v0.6 WEIF: 호가를 볼 계약 */
+  weifCode?: string;
   /** v0.6 외환: FXCA·FRD의 통화(앞 → 뒤), WCRS 기준 통화 */
   fxFrom?: string;
   fxTo?: string;
@@ -158,6 +160,8 @@ export function applyExecution(panelId: string, exec: Execution) {
   // GPO(바)·GPC(캔들)로 열면 표시 모드를 바꿔요(v0.5)
   const viaStyle = exec.fn === 'GP' || exec.fn === 'G' ? styleForAlias(exec.via) : undefined;
   if (viaStyle) patchPanel(panelId, { gpStyle: viaStyle });
+  // STNI로 열면 NI를 금리·채권 주제로(v0.6)
+  if (exec.fn === 'NI' && exec.via === 'STNI') patchPanel(panelId, { niTopic: 'rates' });
   if (exec.instrumentId) {
     propagateSecurity({ ...p, fn: exec.fn }, exec.instrumentId);
     const inst = getInstrument(exec.instrumentId);

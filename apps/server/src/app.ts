@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { isUsMapIndex, type BarInterval, type ClientMessage, type FlowKind, type CredentialStatus, type InstrumentsResponse, type MapIndex, type MostKind, type SectorIndex, type ServerMessage, type Settings } from '@bt/shared';
+import { isUsMapIndex, type BarInterval, type ClientMessage, type FlowKind, type CredentialStatus, type InstrumentsResponse, type MapIndex, type MostKind, type SectorIndex, type ServerMessage, type Settings , BOND_PATTERN } from '@bt/shared';
 import { KisAdapter, type KisCredentials } from './adapters/kis';
 import type { Hub } from './hub';
 import type { NewsService } from './news';
@@ -28,6 +28,7 @@ import type { FxService } from './fx';
 import type { MoneyService } from './money';
 import type { CentralBankService } from './centralbank';
 import type { MacroService } from './macro';
+import type { FuturesService } from './futures';
 import { STATE_NAMES, type StateName, type Store } from './store';
 import { withTimeout, type RecordingLogger } from './util';
 
@@ -66,6 +67,7 @@ export interface AppDeps {
   money?: MoneyService;
   centralBank?: CentralBankService;
   macro?: MacroService;
+  futures?: FuturesService;
 }
 
 /** 키를 암호화하거나 푸는 데 이보다 오래 걸리면 보안 저장소가 응답하지 않는 걸로 봐요 */
@@ -328,6 +330,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get<{ Querystring: { q?: string } }>('/api/macro/search', async (req, reply) => (deps.macro ? deps.macro.search((req.query.q ?? '').slice(0, 100)) : noMacro(reply)));
   app.get('/api/macro/matrix', async (_req, reply) => (deps.macro ? deps.macro.matrix() : noMacro(reply)));
   app.get<{ Querystring: { url?: string } }>('/api/macro/kosis', async (req, reply) => (deps.macro ? deps.macro.kosis(req.query.url ?? '') : noMacro(reply)));
+  // ── v0.6 WEIF 지수선물 ──
+  app.get('/api/futures', async (_req, reply) => (deps.futures ? deps.futures.get() : reply.code(503).send({ error: '지수선물 서비스가 준비되지 않았어요' })));
+  app.get<{ Querystring: { code?: string } }>('/api/futures/book', async (req, reply) => (deps.futures ? deps.futures.book((req.query.code ?? '').toUpperCase()) : reply.code(503).send({ error: '지수선물 서비스가 준비되지 않았어요' })));
   app.get('/api/sovereign', async (_req, reply) => (deps.money ? deps.money.sovereign() : reply.code(503).send({ error: '금리 서비스가 준비되지 않았어요' })));
 
   // ── v0.5 NOTE 메모 ──
@@ -531,10 +536,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const at = deps.news!.lastNewsAt;
     return { source: 'RSS' as const, mode: 'poll' as const, asOf: at, receivedAt: at, intervalMs: 5 * 60_000, asOfFromReceipt: true };
   };
-  app.get<{ Querystring: { hours?: string } }>('/api/news/top', async (req, reply) => {
+  app.get<{ Querystring: { hours?: string; filter?: string } }>('/api/news/top', async (req, reply) => {
     if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });
     const hours = Math.min(72, Math.max(3, Number(req.query.hours) || 24));
-    return { items: topNews(deps.news.recentItems(4000), Date.now(), hours), fresh: newsFresh(), archived: deps.news.archive.count() };
+    // TOP BON(v0.6): 채권 낱말이 든 헤드라인만으로 고르기
+    const bond = new RegExp(BOND_PATTERN, 'i');
+    const items = deps.news.recentItems(4000).filter((x) => req.query.filter !== 'BON' || bond.test(x.title));
+    return { items: topNews(items, Date.now(), hours), fresh: newsFresh(), archived: deps.news.archive.count() };
   });
   app.get<{ Querystring: { topic?: string } }>('/api/news/topic', async (req, reply) => {
     if (!deps.news) return reply.code(409).send({ error: '뉴스 기능을 쓸 수 없어요' });

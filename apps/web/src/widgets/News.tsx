@@ -2,7 +2,7 @@
 // 줄을 누르면 원문(기사·DART 공시 뷰어)을 브라우저로 열어요.
 
 import { useEffect, useState } from 'react';
-import type { NewsItem, NewsResponse } from '@bt/shared';
+import { BOND_PATTERN, type NewsItem, type NewsResponse } from '@bt/shared';
 import { api } from '../api';
 import { useNow } from '../hooks/useNow';
 import { useInstrument } from '../stores/instruments';
@@ -66,7 +66,10 @@ export function News({ panel }: { panel: PanelState }) {
   }, [key]);
   const cur = state?.key === key ? state : undefined;
   const data = cur?.data;
-  const items = (data?.items ?? []).filter((x) => tab === 'all' || tab === 'disclosure' || x.lang === tab);
+  // N BON(v0.6): 채권·금리 헤드라인만(공시는 빼요)
+  const bond = panel.args?.[0] === 'BON' && !isCn;
+  const bondRe = new RegExp(BOND_PATTERN, 'i');
+  const items = (data?.items ?? []).filter((x) => (tab === 'all' || tab === 'disclosure' || x.lang === tab) && (!bond || (x.kind === 'news' && bondRe.test(x.title))));
   const rss = data?.sources.filter((s) => s.kind === 'news') ?? [];
   const rssOk = rss.filter((s) => s.ok).length;
   const name = inst ? inst.nameKo || inst.nameEn || inst.code : '';
@@ -74,7 +77,7 @@ export function News({ panel }: { panel: PanelState }) {
     <>
       <TitleBar
         fn={isCn ? 'CN' : 'N'}
-        name={isCn ? '종목 뉴스' : '뉴스·공시'}
+        name={isCn ? '종목 뉴스' : bond ? '뉴스 · 채권' : '뉴스·공시'}
         sub={byInst ? name : isCn ? '종목이 필요해요(예: 005930 CN)' : undefined}
         fresh={data?.fresh}
         tools={

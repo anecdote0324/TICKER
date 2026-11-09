@@ -1117,6 +1117,8 @@ export class CommandEngine {
       const args = segs.filter((s) => s.slot === 'arg' && s.arg).map((s) => s.arg!);
       const exec: Execution = { kind: 'function', fn: fn.code, canonical: [fn.code, ...args].join(' '), notes };
       if (args.length > 0) exec.args = args;
+      // 별칭으로 열면 대표 기능의 탭을 고를 수 있게 실어요(STNI → NI 금리·채권)
+      if (r.fnSeg?.fnVia) exec.via = r.fnSeg.fnVia;
       if (r.security && !r.securityFromPanel) {
         exec.instrumentId = r.security.id;
         exec.setsSecurityOnly = true;

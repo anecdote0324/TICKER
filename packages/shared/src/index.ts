@@ -31,3 +31,5 @@ export * from './fx';
 export * from './money';
 export * from './centralbank';
 export * from './macro';
+export * from './cix';
+export * from './futures';

@@ -77,7 +77,7 @@ function fromSnapshot(snap: InstrumentSnapshot | undefined, part: string): Instr
 
 const snapDate = (snap: InstrumentSnapshot) => new Date(snap.builtAt).toISOString().slice(0, 10);
 
-async function loadMaster(dataDir: string, file: string, log: Logger): Promise<{ bytes: Uint8Array; asOf: string } | { error: string }> {
+export async function loadMaster(dataDir: string, file: string, log: Logger): Promise<{ bytes: Uint8Array; asOf: string } | { error: string }> {
   const dir = join(dataDir, 'masters');
   await mkdir(dir, { recursive: true });
   const path = join(dir, `${file}.zip`);
