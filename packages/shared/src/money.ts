@@ -3,8 +3,8 @@
 import type { Freshness } from './freshness';
 
 export type MoneySeriesId =
-  | 'KR_BASE' | 'KR_CALL' | 'KR_CD91' | 'KR_CP91' | 'KR_KTB3' | 'KR_KTB10' | 'KR_AA3' | 'KR_BBB3'
-  | 'US_FFU' | 'US_FFL' | 'US_EFFR' | 'US_SOFR' | 'US_TB3M' | 'US_UST2' | 'US_UST10'
+  | 'KR_BASE' | 'KR_CALL' | 'KR_KOFR' | 'KR_CD91' | 'KR_CP91' | 'KR_MSB91' | 'KR_MSB1' | 'KR_KTB3' | 'KR_KTB10' | 'KR_AA3' | 'KR_BBB3'
+  | 'US_FFU' | 'US_FFL' | 'US_EFFR' | 'US_SOFR' | 'US_TB3M' | 'US_UST1' | 'US_UST2' | 'US_UST10'
   | 'US_OAS_IG' | 'US_OAS_AAA' | 'US_OAS_BBB' | 'US_OAS_HY'
   | 'EU_ESTR';
 
@@ -22,8 +22,11 @@ export interface MoneySeriesDef {
 export const MONEY_SERIES: MoneySeriesDef[] = [
   { id: 'KR_BASE', name: '한국은행 기준금리', country: 'KR', source: 'ECOS', code: '722Y001/0101000', unit: '%' },
   { id: 'KR_CALL', name: '콜금리(1일)', country: 'KR', source: 'ECOS', code: '817Y002/010101000', unit: '%' },
+  { id: 'KR_KOFR', name: 'KOFR(무위험지표금리)', country: 'KR', source: 'ECOS', code: '817Y002/010901000', unit: '%' },
   { id: 'KR_CD91', name: 'CD 91일', country: 'KR', source: 'ECOS', code: '817Y002/010502000', unit: '%' },
   { id: 'KR_CP91', name: 'CP 91일', country: 'KR', source: 'ECOS', code: '817Y002/010503000', unit: '%' },
+  { id: 'KR_MSB91', name: '통안증권 91일', country: 'KR', source: 'ECOS', code: '817Y002/010400000', unit: '%' },
+  { id: 'KR_MSB1', name: '통안증권 1년', country: 'KR', source: 'ECOS', code: '817Y002/010400001', unit: '%' },
   { id: 'KR_KTB3', name: '국고채 3년', country: 'KR', source: 'ECOS', code: '817Y002/010200000', unit: '%' },
   { id: 'KR_KTB10', name: '국고채 10년', country: 'KR', source: 'ECOS', code: '817Y002/010210000', unit: '%' },
   { id: 'KR_AA3', name: '회사채 AA- 3년', country: 'KR', source: 'ECOS', code: '817Y002/010300000', unit: '%' },
@@ -33,6 +36,7 @@ export const MONEY_SERIES: MoneySeriesDef[] = [
   { id: 'US_EFFR', name: 'EFFR(실효 연방기금금리)', country: 'US', source: 'FRED', code: 'EFFR', unit: '%' },
   { id: 'US_SOFR', name: 'SOFR', country: 'US', source: 'FRED', code: 'SOFR', unit: '%' },
   { id: 'US_TB3M', name: '미국 단기국채 3개월', country: 'US', source: 'FRED', code: 'DTB3', unit: '%' },
+  { id: 'US_UST1', name: '미국채 1년', country: 'US', source: 'FRED', code: 'DGS1', unit: '%' },
   { id: 'US_UST2', name: '미국채 2년', country: 'US', source: 'FRED', code: 'DGS2', unit: '%' },
   { id: 'US_UST10', name: '미국채 10년', country: 'US', source: 'FRED', code: 'DGS10', unit: '%' },
   { id: 'US_OAS_IG', name: '미국 투자등급 회사채 OAS', country: 'US', source: 'FRED', code: 'BAMLC0A0CM', unit: '%p' },

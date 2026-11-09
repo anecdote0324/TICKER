@@ -26,6 +26,7 @@ import type { NoteStore } from './notes';
 import type { CalendarService } from './calendar';
 import type { FxService } from './fx';
 import type { MoneyService } from './money';
+import type { CentralBankService } from './centralbank';
 import { STATE_NAMES, type StateName, type Store } from './store';
 import { withTimeout, type RecordingLogger } from './util';
 
@@ -62,6 +63,7 @@ export interface AppDeps {
   fx?: FxService;
   /** v0.6 금리 시계열·국가부채 */
   money?: MoneyService;
+  centralBank?: CentralBankService;
 }
 
 /** 키를 암호화하거나 푸는 데 이보다 오래 걸리면 보안 저장소가 응답하지 않는 걸로 봐요 */
@@ -315,6 +317,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // ── v0.6 금리 시계열(BTMM·OIS·FICM)·국가부채(SOVM) ──
   app.get('/api/money', async (_req, reply) => (deps.money ? deps.money.get() : reply.code(503).send({ error: '금리 서비스가 준비되지 않았어요' })));
+  // ── v0.6 중앙은행(CENB·FOMC·DOTS·WIRP) ──
+  app.get('/api/centralbank', async (_req, reply) => (deps.centralBank ? deps.centralBank.get() : reply.code(503).send({ error: '중앙은행 서비스가 준비되지 않았어요' })));
   app.get('/api/sovereign', async (_req, reply) => (deps.money ? deps.money.sovereign() : reply.code(503).send({ error: '금리 서비스가 준비되지 않았어요' })));
 
   // ── v0.5 NOTE 메모 ──

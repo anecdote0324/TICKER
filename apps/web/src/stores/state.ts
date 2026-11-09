@@ -2,7 +2,7 @@
 // 서버(메인 프로세스)만 파일에 써요. 여러 창이 동시에 써서 기록이 사라지는 일을 막아요(05 §14.2).
 
 import { DEFAULT_CHART_PREFS, type ChartPrefs } from '../widgets/chartPrefs';
-import type { AlertsState, AssetClass, Holding } from '@bt/shared';
+import type { AlertsState, AssetClass, Holding, SovereignRating } from '@bt/shared';
 import { api } from '../api';
 import { createStore } from './store';
 
@@ -44,6 +44,8 @@ export interface AppState {
   chart: ChartPrefs;
   /** FAVE 즐겨찾기(v0.5): 명령 줄 */
   favorites: Favorite[];
+  /** CSDR 국가 신용등급(v0.6): 사용자가 고친 등급(나라 코드 → 등급) */
+  ratings: Record<string, SovereignRating>;
 }
 
 /** FAVE 즐겨찾기 한 줄: 커맨드 라인에 그대로 칠 수 있는 명령 */
@@ -77,11 +79,12 @@ const DEFAULT: AppState = {
   alerts: { rules: [], log: [] },
   chart: DEFAULT_CHART_PREFS,
   favorites: [],
+  ratings: {},
 };
 
 export const appState = createStore<AppState>(DEFAULT);
 
-const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites'];
+const KEYS: Array<keyof AppState> = ['history', 'usage', 'fnUsage', 'remembered', 'defaults', 'watchlists', 'workspace', 'workspaces', 'tips', 'aliases', 'portfolio', 'alerts', 'chart', 'favorites', 'ratings'];
 
 export async function loadAppState() {
   const next: AppState = { ...DEFAULT };

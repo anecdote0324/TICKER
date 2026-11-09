@@ -15,6 +15,7 @@ import { NoteStore } from './notes';
 import { CalendarService } from './calendar';
 import { FxService } from './fx';
 import { MoneyService } from './money';
+import { CentralBankService } from './centralbank';
 import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
@@ -113,6 +114,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const fx = new FxService(log, () => rates.ecosKeyValue);
   // v0.6 금리 시계열(BTMM·OIS·FICM)·국가부채(SOVM)
   const money = new MoneyService(opts.dataDir, log, () => rates.ecosKeyValue);
+  // v0.6 중앙은행: 정책금리(BIS)·회의 일정·성명·점도표(키 없음)
+  const centralBank = new CentralBankService(opts.dataDir, log);
   // FRED 크레딧 스프레드는 최근 3년만 줘서 지금부터 쌓아요(03 v0.3)
   eco.startSpreadArchive(hub.history);
   const extraKeys: ExtraKeys = {
@@ -237,6 +240,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     calendar,
     fx,
     money,
+    centralBank,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();

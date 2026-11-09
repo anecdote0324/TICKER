@@ -35,6 +35,7 @@ import { Aqr, Hp, Qr, Vap } from '../widgets/TradeViews';
 import { Fave } from '../widgets/Fave';
 import { Fixi, Frd, Fxca, Fxip, Wcrs } from '../widgets/FxViews';
 import { Btmm, Cmx, Ficm, Fwcm, Hsa, Ois, Sovm, Wb } from '../widgets/RatesViews';
+import { Cenb, Csdr, Dots, Fomc, Wirp } from '../widgets/CentralBankViews';
 import { Note } from '../widgets/Note';
 import { describeCommand } from '../stores/commands';
 import { addFavorite, removeFavorite } from '../stores/favorites';
@@ -216,6 +217,16 @@ function PanelContent({ p, bodyFocus }: { p: PanelState; bodyFocus: boolean }) {
       return <Hsa panel={p} />;
     case 'FICM':
       return <Ficm panel={p} />;
+    case 'CENB':
+      return <Cenb panel={p} />;
+    case 'FOMC':
+      return <Fomc panel={p} />;
+    case 'DOTS':
+      return <Dots panel={p} />;
+    case 'WIRP':
+      return <Wirp panel={p} />;
+    case 'CSDR':
+      return <Csdr panel={p} />;
     case 'FXIP':
       return <Fxip panel={p} />;
     case 'FXCA':

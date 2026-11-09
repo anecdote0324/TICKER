@@ -570,6 +570,15 @@ describe('GC 커브 인자(v0.6 일본·유로)', () => {
   });
 });
 
+describe('중앙은행(v0.6)', () => {
+  it('CENB·FOMC·DOTS·WIRP·CSDR와 별칭 FED·FOMS·FFIP', () => {
+    for (const fn of ['CENB', 'FOMC', 'DOTS', 'WIRP', 'CSDR']) expect(run(fn).plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn } });
+    expect(run('FED').plan).toMatchObject({ kind: 'execute', exec: { fn: 'CENB' } });
+    expect(run('FOMS').plan).toMatchObject({ kind: 'execute', exec: { fn: 'FOMC' } });
+    expect(run('FFIP').plan).toMatchObject({ kind: 'execute', exec: { fn: 'WIRP' } });
+  });
+});
+
 describe('FAVE·NOTE(v0.5)', () => {
   it('FAVE⏎은 즐겨찾기, NOTE는 종목 없이도·종목 뒤에도', () => {
     expect(run('FAVE').plan).toMatchObject({ kind: 'execute', exec: { kind: 'function', fn: 'FAVE' } });

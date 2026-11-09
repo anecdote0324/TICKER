@@ -83,6 +83,7 @@ export const NEWS_TOPICS: Array<{ code: string; label: string; pattern: string }
   { code: 'ma', label: 'M&A', pattern: '인수|합병|M&A|매각|경영권|공개매수|acquisition|acquire|merger|takeover|buyout' },
   { code: 'policy', label: '정책·관세', pattern: '정부|규제|정책|법안|관세|세제|tariff|regulation|policy|sanction' },
   { code: 'ipo', label: '공모·상장', pattern: '공모|상장|IPO|청약|listing' },
+  { code: 'ratings', label: '신용등급', pattern: '신용등급|등급 강등|등급 상향|등급 전망|무디스|피치 ?레이팅스|Moody|Fitch|downgrade|credit rating|sovereign rating' },
 ];
 
 /** FIRS 속보: 제목에 이 말이 있으면 속보로 봐요 */

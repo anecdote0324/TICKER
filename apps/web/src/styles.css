@@ -3222,3 +3222,106 @@ button {
   padding: 2px 0 10px;
   flex-wrap: wrap;
 }
+
+/* ── v0.6 중앙은행(CENB·FOMC·DOTS·WIRP·CSDR) ── */
+.cb-sub {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 10px 0 4px;
+}
+.cb-sub .btn {
+  margin-left: auto;
+}
+.cb-meet td {
+  white-space: nowrap;
+}
+.cb-meet-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 2px 0 8px;
+}
+.cb-chip {
+  border: 1px solid var(--line);
+  padding: 0 5px;
+  color: var(--label);
+  font-family: var(--mono);
+}
+.cb-chip.next {
+  color: var(--value);
+  border-color: var(--dim);
+}
+.cb-split {
+  display: grid;
+  grid-template-columns: minmax(240px, 2fr) 3fr;
+  gap: 12px;
+  align-items: start;
+}
+@container (max-width: 640px) {
+  .cb-split {
+    grid-template-columns: 1fr;
+  }
+}
+.cb-list td:last-child {
+  white-space: normal;
+}
+.flow-table tr.sel td {
+  background: color-mix(in srgb, var(--select) 55%, transparent);
+}
+.cb-kind {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.cb-text {
+  line-height: 1.55;
+  min-width: 0;
+}
+.cb-text-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  color: var(--name);
+}
+.cb-text p {
+  margin: 0 0 8px;
+  color: var(--value);
+}
+.dots-chart {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  height: auto;
+}
+.dots-axis {
+  fill: var(--label);
+  font-size: 10px;
+  font-family: var(--mono);
+}
+.cb-prev {
+  font-size: 0.9em;
+}
+.cb-open {
+  margin-top: 8px;
+}
+.csdr-cell {
+  cursor: text;
+}
+.csdr-cell input {
+  width: 5em;
+  background: var(--header);
+  color: var(--value);
+  border: 1px solid var(--accent);
+  font: inherit;
+}
+.cb-list td {
+  text-align: left;
+  vertical-align: top;
+}
+.cb-list td:first-child {
+  white-space: nowrap;
+}

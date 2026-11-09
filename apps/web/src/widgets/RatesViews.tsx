@@ -30,7 +30,7 @@ const fbp = (v: number | undefined) => (v === undefined || !Number.isFinite(v) ?
 const bpOf = (a: number | undefined, b: number | undefined) => (a === undefined || b === undefined ? undefined : (a - b) * 100);
 
 /** 1년치 작은 선 그래프 */
-function Spark({ values, w = 110, h = 22 }: { values: number[]; w?: number; h?: number }) {
+export function Spark({ values, w = 110, h = 22 }: { values: number[]; w?: number; h?: number }) {
   if (values.length < 2) return <span className="label">—</span>;
   const lo = Math.min(...values);
   const hi = Math.max(...values);
@@ -53,7 +53,7 @@ function useCurves() {
   return { res, curves };
 }
 
-function useMoney() {
+export function useMoney() {
   const res = usePoll<MoneySeriesResponse>('/api/money', POLL);
   const series = useMemo(() => new Map((res?.data?.series ?? []).map((s) => [s.id, s.obs])), [res?.data]);
   return { res, series };
@@ -100,7 +100,7 @@ function CurveButtons({ panel, value }: { panel: PanelState; value: CurveId }) {
 // ── BTMM 금리 종합 ──
 
 const BTMM_ROWS: Record<'KR' | 'US' | 'EU', Array<{ series?: MoneySeriesId; curve?: [CurveId, number]; label?: string }>> = {
-  KR: [{ series: 'KR_BASE' }, { series: 'KR_CALL' }, { series: 'KR_CD91' }, { series: 'KR_CP91' }, { curve: ['KTB', 1], label: '국고채 1년' }, { series: 'KR_KTB3' }, { curve: ['KTB', 5], label: '국고채 5년' }, { series: 'KR_KTB10' }, { curve: ['KTB', 30], label: '국고채 30년' }, { series: 'KR_AA3' }, { series: 'KR_BBB3' }],
+  KR: [{ series: 'KR_BASE' }, { series: 'KR_CALL' }, { series: 'KR_KOFR' }, { series: 'KR_CD91' }, { series: 'KR_CP91' }, { series: 'KR_MSB1' }, { curve: ['KTB', 1], label: '국고채 1년' }, { series: 'KR_KTB3' }, { curve: ['KTB', 5], label: '국고채 5년' }, { series: 'KR_KTB10' }, { curve: ['KTB', 30], label: '국고채 30년' }, { series: 'KR_AA3' }, { series: 'KR_BBB3' }],
   US: [{ series: 'US_FFU' }, { series: 'US_FFL' }, { series: 'US_EFFR' }, { series: 'US_SOFR' }, { series: 'US_TB3M' }, { curve: ['UST', 2], label: '미국채 2년' }, { curve: ['UST', 5], label: '미국채 5년' }, { curve: ['UST', 10], label: '미국채 10년' }, { curve: ['UST', 30], label: '미국채 30년' }],
   EU: [{ series: 'EU_ESTR' }, { curve: ['EUR', 2], label: '유로 AAA 2년' }, { curve: ['EUR', 10], label: '유로 AAA 10년' }, { curve: ['JGB', 2], label: '일본 국채 2년' }, { curve: ['JGB', 10], label: '일본 국채 10년' }, { curve: ['JGB', 30], label: '일본 국채 30년' }],
 };
@@ -180,6 +180,7 @@ const OIS_RATES: Array<{ id: MoneySeriesId; label: string; basis: 360 | 365 }> =
   { id: 'US_SOFR', label: 'SOFR(달러)', basis: 360 },
   { id: 'US_EFFR', label: 'EFFR(달러)', basis: 360 },
   { id: 'EU_ESTR', label: '€STR(유로)', basis: 360 },
+  { id: 'KR_KOFR', label: 'KOFR(원)', basis: 365 },
   { id: 'KR_CALL', label: '콜(원)', basis: 365 },
 ];
 
@@ -251,7 +252,7 @@ export function Ois({ panel }: { panel: PanelState }) {
           </table>
         </div>
       </div>
-      <div className="attr">일별 고시 금리를 기간 동안 복리로 계산해요(주말·휴일은 직전 고시 금리를 그 일수만큼). 실제 OIS 스왑 호가는 무료 데이터가 없어요 · SOFR·EFFR·€STR(FRED 키), 콜(ECOS 인증키). KOFR은 원천 확인 전이라 콜금리로 대신해요</div>
+      <div className="attr">일별 고시 금리를 기간 동안 복리로 계산해요(주말·휴일은 직전 고시 금리를 그 일수만큼). 실제 OIS 스왑 호가는 무료 데이터가 없어요 · SOFR·EFFR·€STR(FRED 키), KOFR·콜(ECOS 인증키, KOFR은 예탁결제원 공시 금리를 한국은행이 모은 값)</div>
     </>
   );
 }

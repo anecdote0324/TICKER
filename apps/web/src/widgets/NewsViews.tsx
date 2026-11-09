@@ -9,7 +9,7 @@ import { openLink, when } from './News';
 
 const FRESH_MS = 10 * 60_000;
 
-function Rows({ items, now, extra }: { items: NewsItem[]; now: number; extra?: (x: NewsItem) => string | undefined }) {
+export function Rows({ items, now, extra }: { items: NewsItem[]; now: number; extra?: (x: NewsItem) => string | undefined }) {
   return (
     <>
       {items.map((x) => (

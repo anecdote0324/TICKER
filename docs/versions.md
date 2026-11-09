@@ -220,18 +220,18 @@
 
 ## v0.6 금리·매크로·지수선물
 
-상태: 만드는 중(11/9 시작). 공용 영업일·휴장일 달력(한국·미국·영국·일본, 한국은 한국투자증권 휴장일로 맞춤), 외환 묶음(FXIP·FXCA·FRD·FIXI·WCRS), 금리 묶음(BTMM·USSW·OIS·WB·WBX·SOVM·CMX·FWCM·HSA·FICM, GC 일본·유로)을 만들었어요. 남은 일: 중앙은행, 매크로, 지수선물·CIX·채권 뉴스 필터.
+상태: 만드는 중(11/9 시작). 공용 영업일·휴장일 달력(한국·미국·영국·일본, 한국은 한국투자증권 휴장일로 맞춤), 외환 묶음(FXIP·FXCA·FRD·FIXI·WCRS), 금리 묶음(BTMM·USSW·OIS·WB·WBX·SOVM·CMX·FWCM·HSA·FICM, GC 일본·유로), 중앙은행 묶음(CENB·FOMC·DOTS·WIRP 근사·CSDR 근사)을 만들었어요. 남은 일: 매크로, 지수선물·CIX·채권 뉴스 필터.
 
 | 묶음 | 기능 |
 |---|---|
 | 금리 | BTMM 금리 종합(만듦), OIS 무위험지표금리(만듦), WB 세계 국채(만듦), WBX 국가 간 스프레드(만듦), SOVM 국채·국가부채(만듦), CMX 커브 매트릭스(만듦), FWCM 선도금리 매트릭스(만듦), HSA 커브 전략 모니터(만듦), FICM 크레딧 스프레드(만듦), GC 해외 커브(만듦: 일본·유로. 회사채 커브는 FICM으로 대신) |
-| 중앙은행 | CENB 중앙은행, FOMC FOMC 결과, DOTS 점도표, WIRP* 정책금리 경로 확률, CSDR* 국가 신용등급 |
+| 중앙은행 | CENB 중앙은행(만듦), FOMC FOMC 결과(만듦, 금통위 탭), DOTS 점도표(만듦), WIRP* 정책금리 경로(만듦, 시장 금리 − 정책금리 근사), CSDR* 국가 신용등급(만듦, 고쳐 쓰는 표와 등급 뉴스) |
 | 매크로 | ECOD 지표 상세, ECST 경제 통계, ECOF 지표 찾기, ECMX 세계 경제 매트릭스, IFMO 인플레이션 모니터, ECO 다국가 보기 |
 | 외환 | FXIP FX 홈(만듦), FXCA 환산 계산기(만듦), FRD 선물환 계산기(만듦), FIXI 공식 고시환율(만듦), WCRS 통화 순위(만듦, PPP 빼고) |
 | 지수선물 | WEIF 세계 지수선물(KOSPI200 주간·야간) |
 | 도구 | CIX 수식 티커, 채권 뉴스 필터(TOP BON·N BON·STNI) |
 
-새 데이터: ECB, 일본 재무성 CSV, 수출입은행 환율, IMF·OECD·World Bank, Treasury FiscalData, KIS 국내선물옵션·휴장일, KOSIS(v0.3에서 옮김).
+새 데이터: BIS 정책금리(만듦), 연준·한국은행·ECB·일본은행 일정·성명(만듦), ECB, 일본 재무성 CSV, 수출입은행 환율, IMF·OECD·World Bank, Treasury FiscalData, KIS 국내선물옵션·휴장일, KOSIS(v0.3에서 옮김).
 
 v0.3에서 옮긴 것(사용자 결정, 매크로를 한 번에): KOSIS 국내 통계(ECST와 ECO 한국 지표), ECO 한국 지표 발표 일정(한은·통계청 공표일정, 공용 영업일 달력과 함께), ECO 예상 칸 직접 입력(ECOD 지표 상세와 함께).
 
