@@ -2,7 +2,7 @@
 // 화면 탭은 새 창으로 떼어낼 수 있어요. 떼어낸 탭을 누르면 그 창을 앞으로 가져와요.
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { EXCHANGES, SESSION_LABEL, sessionState, zonedParts } from '@bt/shared';
+import { EXCHANGES, exchangeHoliday, SESSION_LABEL, sessionState, zonedParts } from '@bt/shared';
 import { useNow } from '../hooks/useNow';
 
 export interface ScreenBounds {
@@ -344,14 +344,17 @@ export function TopBar(props: {
           const ex = EXCHANGES[k];
           const p = zonedParts(now, ex.timeZone);
           const s = sessionState(ex, now);
+          // 휴장일(주말 아님)은 '마감' 대신 '휴장', 마우스를 올리면 휴장일 이름
+          const hol = exchangeHoliday(ex, now);
+          const holiday = hol && hol !== '주말' ? hol : undefined;
           return (
-            <span key={k}>
+            <span key={k} title={holiday ? `${ex.label} 휴장: ${holiday}` : undefined}>
               <span className="label">{ex.city} </span>
               <span style={{ color: 'var(--value-hi)' }}>
                 {pad(p.hour)}:{pad(p.minute)}
                 {i === 0 ? `:${pad(p.second)}` : ''}
               </span>{' '}
-              <span className={s === 'open' ? 'open' : 'label'}>{SESSION_LABEL[s]}</span>
+              <span className={s === 'open' ? 'open' : 'label'}>{holiday ? '휴장' : SESSION_LABEL[s]}</span>
             </span>
           );
         })}

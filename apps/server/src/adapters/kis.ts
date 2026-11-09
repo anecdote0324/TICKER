@@ -1426,6 +1426,28 @@ export class KisAdapter implements Adapter {
   }
 
   /**
+   * 공용 영업일 달력(v0.6): 국내휴장일조회(CTCA0903R, 공식 예제 domestic_stock/chk_holiday). 기준일부터 날마다 영업일·거래일·개장일·결제일 여부.
+   * 다음 쪽은 머리글 tr_cont M·F와 응답의 ctx_area_fk·ctx_area_nk로 이어 받아요. KIS가 하루 1회 호출을 권해요
+   */
+  async holidaysKr(from: string, maxPages = 6): Promise<KisRow[]> {
+    const rows: KisRow[] = [];
+    let fk = '';
+    let nk = '';
+    let trCont = '';
+    for (let page = 0; page < maxPages; page++) {
+      const out = { next: '' };
+      const r = (await this.get('/uapi/domestic-stock/v1/quotations/chk-holiday', 'CTCA0903R', { BASS_DT: from, CTX_AREA_FK: fk, CTX_AREA_NK: nk }, 2, { trCont, out })) as KisResponse & { ctx_area_fk?: string; ctx_area_nk?: string };
+      rows.push(...asRows(r.output));
+      if (out.next !== 'M' && out.next !== 'F') break;
+      fk = String(r.ctx_area_fk ?? '');
+      nk = String(r.ctx_area_nk ?? '');
+      trCont = 'N';
+    }
+    if (rows.length) this.sampleRows('CTCA0903R', from, `${rows.length}일`, rows, (x) => [x.bass_dt, x.bzdy_yn, x.opnd_yn]);
+    return rows;
+  }
+
+  /**
    * KWRN: 오늘 VI 발동 목록(변동성완화장치 현황 FHPST01390000, 공식 예제 inquire_vi_status: 분류 0 전체, 화면 20139, 시장 0 전체, 정렬 0 전체)
    */
   async viStatus(): Promise<ViRow[]> {

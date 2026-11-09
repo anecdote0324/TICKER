@@ -1,4 +1,6 @@
-// 시간대와 장 상태 계산. 휴장일은 v0.6 영업일 달력([08] §4.3)에서 다뤄요. 지금은 주말만 쉬는 날로 봐요.
+// 시간대와 장 상태 계산. 휴장일은 공용 영업일 달력(calendar.ts, v0.6)으로 판단해요.
+
+import { EXCHANGE_CALENDAR, holidayName, ymdOf } from './calendar';
 
 export interface ZonedParts {
   year: number;
@@ -155,9 +157,18 @@ export const EXCHANGES: Record<string, ExchangeHours> = {
   },
 };
 
+/** 그 거래소가 오늘(현지 날짜) 쉬는 날이면 이름('주말' 포함). 여는 날이면 undefined */
+export function exchangeHoliday(ex: ExchangeHours, now: number): string | undefined {
+  const p = zonedParts(now, ex.timeZone);
+  const cal = EXCHANGE_CALENDAR[ex.id];
+  if (!cal) return p.weekday === 0 || p.weekday === 6 ? '주말' : undefined;
+  return holidayName(cal, ymdOf(p.year, p.month, p.day));
+}
+
 export function sessionState(ex: ExchangeHours, now: number): SessionState {
   const p = zonedParts(now, ex.timeZone);
   if (p.weekday === 0 || p.weekday === 6) return 'closed';
+  if (exchangeHoliday(ex, now)) return 'closed';
   const min = p.hour * 60 + p.minute;
   if (ex.regular.some(([a, b]) => min >= a && min < b)) return 'open';
   if (ex.pre && min >= ex.pre[0] && min < ex.pre[1]) return 'pre';
@@ -166,15 +177,16 @@ export function sessionState(ex: ExchangeHours, now: number): SessionState {
 }
 
 /**
- * 가장 최근 정규장이 끝난 시각(주말은 건너뛰어요. 휴장일은 모르고, 서머타임이 바뀌는 날은 1시간 어긋날 수 있어요).
+ * 가장 최근 정규장이 끝난 시각(주말·휴장일은 건너뛰어요. 서머타임이 바뀌는 날은 1시간 어긋날 수 있어요).
  * 장이 끝난 뒤 받은 값의 기준 시각으로 써서 `마감 15:30`처럼 보여 줘요
  */
 export function lastRegularClose(ex: ExchangeHours, now: number): number {
   const closeMin = ex.regular[ex.regular.length - 1][1];
-  for (let back = 0; back < 8; back++) {
+  for (let back = 0; back < 15; back++) {
     const t = now - back * 86400_000;
     const p = zonedParts(t, ex.timeZone);
     if (p.weekday === 0 || p.weekday === 6) continue;
+    if (exchangeHoliday(ex, t)) continue;
     const closeAt = t - ((p.hour * 60 + p.minute - closeMin) * 60 + p.second) * 1000 - (t % 1000);
     if (closeAt <= now) return closeAt;
   }

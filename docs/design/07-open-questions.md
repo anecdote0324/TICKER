@@ -105,6 +105,7 @@
 - 미국 실적 발표 일정의 무료 소스와 약관. 없으면 SEC 8-K로 발표 뒤에 표시
 - 미국 ETF 운용사(State Street·Invesco)의 보유 내역 공개 약관 (IMAP 미국 지수 v0.3에서 이미 받아요, MEMB 미국 근사)
 - FRED 호출 한도, Atlanta Fed 정책금리 확률(MPT)의 접근 방식과 약관, FINRA TRACE 무료 범위, 미국 SDR 공개 데이터
+- 공용 영업일 달력: 국내휴장일조회가 한 번에 며칠까지 주는지(지금은 6쪽까지 받아요), 한국 음력 명절·선거일 표(2024~2030)가 실제 KRX 휴장일과 맞는지(키가 있으면 KIS 값이 먼저라 틀려도 덮여요), 일본 춘분·추분 근사식과 영국 특별 공휴일(왕실 행사)
 - 각국 정책금리(BIS 등), 영국·독일 금리 커브, 유럽 휴장일 소스, Treasury FiscalData, IMF·OECD·World Bank API 세부
 - 한국수출입은행 환율 API의 메뉴와 한도, 네이버 검색 API 하루 한도
 - CFTC COT 데이터셋 ID, USDA 농산물 현물, World Bank 월간 원자재 가격

@@ -12,6 +12,7 @@ import { buildApp } from './app';
 import { History } from './history';
 import { NewsService } from './news';
 import { NoteStore } from './notes';
+import { CalendarService } from './calendar';
 import { UsActivity } from './us-activity';
 import { Hub } from './hub';
 import { buildInstruments } from './instruments';
@@ -96,6 +97,9 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   // v0.5 NOTE 메모(notes.db)
   const notes = new NoteStore(join(opts.dataDir, 'notes.db'), log);
   // v0.4 지수·ETF·호가(MEMB·MOV·ETF·FFLO·BQ)
+  // v0.6 공용 영업일 달력: 한국 휴장일은 한국투자증권에서 하루 한 번(holidays-kr.json)
+  const calendar = new CalendarService(opts.dataDir, () => hub.kis, log);
+  void calendar.start();
   const market = new MarketService(
     opts.dataDir,
     () => hub.kis,
@@ -217,6 +221,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     eco,
     extraKeys,
     notes,
+    calendar,
   });
   await app.listen({ host: '127.0.0.1', port });
   const addr = app.server.address();
@@ -238,6 +243,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       hub.kis?.stop();
       news.stop();
       notes.close();
+      calendar.stop();
       await usActivity.flush();
       await app.close();
       // 실시간 구독을 끊은 뒤 남은 분봉을 저장해요(01 종료할 때)
