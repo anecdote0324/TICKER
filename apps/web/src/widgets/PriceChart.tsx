@@ -319,7 +319,10 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       ro.disconnect();
       crossListeners.delete(listener);
       chart.timeScale().unsubscribeSizeChange(onSize);
-      chart.remove();
+      // 봉 크기를 바꿔 차트를 새로 만들 때, 앞 차트가 이미 예약해 둔 그리기가 지운 뒤에 돌면 'Object is disposed' 오류가 나요.
+      // 앞 차트는 바로 숨기고, 그 그리기가 끝난 다음 프레임에 지워요
+      chart.chartElement().style.display = 'none';
+      requestAnimationFrame(() => chart.remove());
       chartRef.current = null;
     };
   }, [timeMode]);
@@ -633,12 +636,14 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     saveDrawings(drawingsRef.current.filter((d) => d.id !== id));
     setSelectedId((s) => (s === id ? null : s));
   };
+  // 그림은 종목마다 하나라 봉 크기(일·주·월·시간봉, GIP 1분봉)를 바꿔도 같은 그림을 시각·가격 그대로 보여 줘요.
+  // 일·주·월봉 ↔ 시간봉을 오가면 차트를 새로 만들어서(시간 눈금이 달라요) 새 그리기 층에 그림을 다시 넣어요
   useEffect(() => {
     drawRef.current?.setItems(drawings);
-  }, [drawings]);
+  }, [drawings, timeMode]);
   useEffect(() => {
     drawRef.current?.setSelected(selectedId);
-  }, [selectedId]);
+  }, [selectedId, timeMode]);
   // 이벤트 처리는 최신 값을 참조로 읽어요
   const drawingsRef = useRef(drawings);
   drawingsRef.current = drawings;
@@ -683,9 +688,18 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       return lo + (t - b[lo].t) / (b[hi].t - b[lo].t || 1);
     };
     const mapper: TimeMapper = {
+      // 차트의 logicalToCoordinate는 봉 자리(정수)만 맞게 줘서, 봉 사이(예: 주봉 위의 일봉 점, 일봉 위의 시간봉 점)는 앞뒤 봉 자리로 나눠 구해요
       toX: (t) => {
         const l = logicalOf(t);
-        return l === null ? null : chart.timeScale().logicalToCoordinate(l as Logical);
+        if (l === null || !Number.isFinite(l)) return null;
+        const ts = chart.timeScale();
+        const i = Math.floor(l);
+        const x0 = ts.logicalToCoordinate(i as Logical);
+        if (x0 === null) return null;
+        const f = l - i;
+        if (f < 1e-9) return x0;
+        const x1 = ts.logicalToCoordinate((i + 1) as Logical);
+        return x0 + f * ((x1 ?? x0 + ts.options().barSpacing) - x0);
       },
       fromX: (x) => {
         const l = chart.timeScale().coordinateToLogical(x);
@@ -704,7 +718,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   useEffect(() => {
     const el = boxRef.current;
     const chart = chartRef.current;
-    if (!el || !chart || intraday) return;
+    if (!el || !chart) return;
     const prim = () => drawRef.current;
     const local = (e: PointerEvent) => {
       const r = el.getBoundingClientRect();
@@ -722,7 +736,15 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
     let drag: { id: string; part: HitPart; start: ChartPoint; orig: Drawing; moved: boolean } | null = null;
     // 이 누름은 차트가 받지 않게(끌어서 옮기기·확대 막기)
     let swallow = false;
-    const lockChart = (on: boolean) => chart.applyOptions({ handleScroll: !on, handleScale: !on });
+    const lockChart = (on: boolean) => {
+      // 봉 크기를 바꿔 차트를 새로 만들면 앞 차트는 이미 지워져 있어요(지운 차트를 건드리면 다시 그리려다 오류가 나요)
+      if (chartRef.current !== chart) return;
+      try {
+        chart.applyOptions({ handleScroll: !on, handleScale: !on });
+      } catch {
+        // 지워진 차트
+      }
+    };
     const finishDraft = (d: Drawing) => {
       draft = null;
       setDrafting(false);
@@ -873,7 +895,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
       lockChart(false);
       prim()?.setDraft(null);
     };
-  }, [intraday, inst?.id, timeMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inst?.id, timeMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const selected = drawings.find((d) => d.id === selectedId);
 
   const resetScale = () => {
@@ -921,6 +943,11 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
   const empty = !!ready && ready.bars.length === 0;
   const name = inst ? (inst.nameKo ?? inst.nameEn ?? inst.code) : '';
   const fnCode = intraday ? 'GIP' : isG ? 'G' : 'GP';
+  const drawButton = (
+    <button className={drawMenu || drawMode ? 'on' : ''} title="그리기: 추세선·박스·수평선·피보나치, 그린 그림 목록(종목마다 기억해서 모든 봉 크기와 GIP에 같이 보여요)" aria-expanded={drawMenu} onClick={() => setDrawMenu((o) => !o)}>
+      그리기
+    </button>
+  );
   const tools = useMemo(
     () =>
       intraday ? (
@@ -938,6 +965,8 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
               {r}
             </button>
           ))}
+          <span style={{ width: 8 }} />
+          {drawButton}
         </>
       ) : (
         <>
@@ -961,9 +990,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
           <button className={menuOpen ? 'on' : ''} title={isG ? '표시 모드·보조지표·템플릿' : '표시 모드(캔들·바·선)와 보조지표'} aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>
             {isG ? '지표·템플릿' : '지표'}
           </button>
-          <button className={drawMenu || drawMode ? 'on' : ''} title="그리기: 추세선·박스·수평선·피보나치, 그린 그림 목록(종목마다 기억)" aria-expanded={drawMenu} onClick={() => setDrawMenu((o) => !o)}>
-            그리기
-          </button>
+          {drawButton}
         </>
       ),
     [interval, range, intraday, hourOk, panel.id, menuOpen, drawMenu, drawMode, isG], // eslint-disable-line react-hooks/exhaustive-deps
@@ -1071,7 +1098,7 @@ export function PriceChart({ panel, intraday }: { panel: PanelState; intraday: b
             </button>
           </div>
         )}
-        {drawMenu && !intraday && (
+        {drawMenu && (
           <div className="chart-menu chart-draw-menu" onMouseDown={(e) => e.stopPropagation()}>
             <div className="chart-draw-tools">
               {DRAW_TOOLS.map(([k, l, d]) => (
