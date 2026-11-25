@@ -10,6 +10,13 @@ export interface WatchGroup {
   id: string;
   name: string;
   ids: string[];
+  /** 트레이딩뷰 묶음(v0.6): 공유한 관심 목록 링크. 있으면 앱을 켤 때마다 이 목록과 같게 맞춰요 */
+  tvUrl?: string;
+  /** 트레이딩뷰 목록 이름, 마지막으로 맞춘 시각, 앱에서 찾지 못한 기호, 마지막 오류 */
+  tvName?: string;
+  syncedAt?: number;
+  unmatched?: string[];
+  syncError?: string;
 }
 
 /** 이름을 붙여 저장한 워크스페이스(data는 App의 SavedWorkspace) */

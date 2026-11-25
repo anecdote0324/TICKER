@@ -29,6 +29,7 @@ import type { MoneyService } from './money';
 import type { CentralBankService } from './centralbank';
 import type { MacroService } from './macro';
 import type { FuturesService } from './futures';
+import { fetchTvWatchlist } from './tradingview';
 import { STATE_NAMES, type StateName, type Store } from './store';
 import { withTimeout, type RecordingLogger } from './util';
 
@@ -330,6 +331,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get<{ Querystring: { q?: string } }>('/api/macro/search', async (req, reply) => (deps.macro ? deps.macro.search((req.query.q ?? '').slice(0, 100)) : noMacro(reply)));
   app.get('/api/macro/matrix', async (_req, reply) => (deps.macro ? deps.macro.matrix() : noMacro(reply)));
   app.get<{ Querystring: { url?: string } }>('/api/macro/kosis', async (req, reply) => (deps.macro ? deps.macro.kosis(req.query.url ?? '') : noMacro(reply)));
+  // ── MON 트레이딩뷰 묶음: 공유한 관심 목록 ──
+  app.get<{ Querystring: { url?: string } }>('/api/tradingview/watchlist', async (req) => fetchTvWatchlist(req.query.url ?? ''));
+
   // ── v0.6 WEIF 지수선물 ──
   app.get('/api/futures', async (_req, reply) => (deps.futures ? deps.futures.get() : reply.code(503).send({ error: '지수선물 서비스가 준비되지 않았어요' })));
   app.get<{ Querystring: { code?: string } }>('/api/futures/book', async (req, reply) => (deps.futures ? deps.futures.book((req.query.code ?? '').toUpperCase()) : reply.code(503).send({ error: '지수선물 서비스가 준비되지 않았어요' })));

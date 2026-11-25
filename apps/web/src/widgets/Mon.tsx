@@ -12,11 +12,15 @@ import { appState, updateState } from '../stores/state';
 import { showToast } from '../stores/ui';
 import { useStore } from '../stores/store';
 import { QuoteRow, TitleBar } from './common';
+import { removeTradingView, setTradingViewUrl, syncTradingView, TV_GROUP_ID } from '../stores/tradingview';
 
 export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolean }) {
   const groups = useStore(appState, (s) => s.watchlists);
   useStore(indexState, (s) => s.count);
-  const shown = panel.watchGroups ? groups.filter((g) => panel.watchGroups!.includes(g.id)) : groups;
+  // 트레이딩뷰 묶음은 묶음을 골라 둔 패널(기본 배치의 MON 등)에도 보여요
+  const shown = panel.watchGroups ? groups.filter((g) => panel.watchGroups!.includes(g.id) || g.id === TV_GROUP_ID) : groups;
+  const hasTv = groups.some((g) => g.id === TV_GROUP_ID);
+  const [tvEdit, setTvEdit] = useState(false);
   // 고른 탭은 패널에 기억해요(지운 묶음이면 전체로)
   const tab = panel.monTab && (panel.monTab === 'all' || shown.some((g) => g.id === panel.monTab)) ? panel.monTab : 'all';
   const setTab = (t: string) => patchPanel(panel.id, { monTab: t });
@@ -66,6 +70,11 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
                 {g.name}
               </button>
             ))}
+            {!hasTv && (
+              <button title="트레이딩뷰 관심 목록 공유 링크로 '트레이딩뷰' 묶음 만들기" onClick={() => setTvEdit(true)}>
+                + 트레이딩뷰
+              </button>
+            )}
           </>
         }
       />
@@ -96,14 +105,28 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
           <span style={{ width: 34 }} />
           <span className="col-spark" style={{ width: 52, textAlign: 'right' }}>추세</span>
         </div>
+        {tvEdit && !hasTv && <TvLinkRow onClose={() => setTvEdit(false)} />}
         {visible.map((g) => (
           <div key={g.id}>
             <div className="grp">
               <span style={{ flex: 1 }}>{g.name}</span>
-              <button className="icon-btn" title="종목 추가" aria-label={`${g.name}에 종목 추가`} onClick={() => setAdding(adding === g.id ? null : g.id)}>
-                +
-              </button>
+              {g.id === TV_GROUP_ID ? (
+                <>
+                  <TvStatus g={g} />
+                  <button className="icon-btn" title="지금 트레이딩뷰 목록과 맞추기" aria-label="트레이딩뷰 목록 다시 받기" onClick={() => void syncTradingView()}>
+                    ↻
+                  </button>
+                  <button className="icon-btn" title="링크 바꾸기·연결 끊기" aria-label="트레이딩뷰 링크 설정" onClick={() => setTvEdit((o) => !o)}>
+                    🔗
+                  </button>
+                </>
+              ) : (
+                <button className="icon-btn" title="종목 추가" aria-label={`${g.name}에 종목 추가`} onClick={() => setAdding(adding === g.id ? null : g.id)}>
+                  +
+                </button>
+              )}
             </div>
+            {g.id === TV_GROUP_ID && tvEdit && <TvLinkRow current={g.tvUrl} onClose={() => setTvEdit(false)} />}
             {adding === g.id && <AddRow onAdd={(id) => updateState('watchlists', (ws) => ws.map((x) => (x.id === g.id && !x.ids.includes(id) ? { ...x, ids: [...x.ids, id] } : x)))} onClose={() => setAdding(null)} />}
             {g.ids.map((id) => {
               const inst = getInstrument(id);
@@ -117,6 +140,7 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
                   onClick={() => pick(id)}
                   extra={undefined}
                   actions={
+                    g.id === TV_GROUP_ID ? undefined : (
                     <button
                       className="icon-btn"
                       title={`${g.name}에서 빼기 (Delete)`}
@@ -128,6 +152,7 @@ export function Mon({ panel, bodyFocus }: { panel: PanelState; bodyFocus: boolea
                     >
                       ✕
                     </button>
+                    )
                   }
                 />
               );
@@ -173,6 +198,58 @@ function AddRow({ onAdd, onClose }: { onAdd: (id: string) => void; onClose: () =
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** 트레이딩뷰 묶음 상태: 목록 이름·종목 수·맞춘 시각, 찾지 못한 기호, 오류 */
+function TvStatus({ g }: { g: { tvName?: string; ids: string[]; syncedAt?: number; unmatched?: string[]; syncError?: string } }) {
+  const at = g.syncedAt ? new Date(g.syncedAt) : undefined;
+  const hm = at ? `${String(at.getMonth() + 1).padStart(2, '0')}/${String(at.getDate()).padStart(2, '0')} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}` : '확인 전';
+  const miss = g.unmatched?.length ?? 0;
+  return (
+    <span className={`label tv-status ${g.syncError ? 'err' : ''}`} title={[g.syncError, miss ? `앱에서 찾지 못한 종목: ${g.unmatched!.join(', ')}` : ''].filter(Boolean).join('\n') || undefined}>
+      {g.syncError ? '받지 못함' : `${g.tvName ? `${g.tvName} · ` : ''}${g.ids.length}개${miss ? ` · 못 찾음 ${miss}` : ''} · ${hm}`}
+    </span>
+  );
+}
+
+/** 트레이딩뷰 링크 넣기·바꾸기·끊기 */
+function TvLinkRow({ current, onClose }: { current?: string; onClose: () => void }) {
+  const [v, setV] = useState(current ?? '');
+  const [err, setErr] = useState<string | undefined>();
+  const save = () => {
+    const e = setTradingViewUrl(v);
+    if (e) setErr(e);
+    else onClose();
+  };
+  return (
+    <div className="tv-link">
+      <input
+        autoFocus
+        value={v}
+        placeholder="트레이딩뷰 관심 목록 공유 링크 (https://kr.tradingview.com/watchlists/번호/)"
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') save();
+          if (e.key === 'Escape') onClose();
+        }}
+      />
+      <button className="btn" onClick={save}>
+        저장
+      </button>
+      {current && (
+        <button
+          className="btn"
+          onClick={() => {
+            removeTradingView();
+            onClose();
+          }}
+        >
+          연결 끊기
+        </button>
+      )}
+      {err && <div className="err">{err}</div>}
     </div>
   );
 }

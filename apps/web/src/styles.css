@@ -3518,3 +3518,34 @@ button {
 .chart-draw-color.on {
   border-color: var(--value) !important;
 }
+
+/* ── MON 트레이딩뷰 묶음 ── */
+.tv-status {
+  font-size: 11px;
+  margin-right: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-status.err {
+  color: var(--error);
+}
+.tv-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+}
+.tv-link input {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--header);
+  color: var(--value);
+  border: 1px solid var(--accent);
+  font: inherit;
+  padding: 2px 6px;
+}
+.tv-link .err {
+  width: 100%;
+  font-size: 11px;
+}

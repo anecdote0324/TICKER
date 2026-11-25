@@ -13,6 +13,7 @@ import { connectFeed } from './stores/feed';
 import { loadCapabilities, loadInstruments } from './stores/instruments';
 import { loadSettings } from './stores/settings';
 import { loadAppState } from './stores/state';
+import { syncTradingView, whenInstrumentsReady } from './stores/tradingview';
 import { startCalendarRefresh } from './stores/calendar';
 
 async function boot() {
@@ -23,7 +24,9 @@ async function boot() {
   await Promise.all([loadSettings(), loadAppState(), loadCapabilities()]);
   connectFeed();
   startCalendarRefresh();
+  // 트레이딩뷰 묶음은 종목 목록을 다 받은 뒤 맞춰요(미국 종목까지 찾을 수 있게)
   void loadInstruments();
+  void whenInstrumentsReady().then(() => syncTradingView());
   root.render(<App />);
 }
 

@@ -33,3 +33,4 @@ export * from './centralbank';
 export * from './macro';
 export * from './cix';
 export * from './futures';
+export * from './tradingview';
